@@ -1,0 +1,15 @@
+# Changes here will be overwritten by Copier. Do not edit by hand: run `copier update`.
+_commit: v1.0.2
+_src_path: gh:odvprogra/python-service-template
+author_name: Oscar David Valle Pereyra
+copyright_year: 2026
+description: 'Multi-tenant B2B quote-to-order API: transparent pricing engine, approval
+    workflow and full audit trail.'
+github_owner: odvprogra
+has_database: true
+has_web_api: true
+license: MIT
+package_name: pricewright
+project_name: Pricewright API
+project_slug: pricewright-api
+standards_ref: v1

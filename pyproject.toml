@@ -1,0 +1,161 @@
+[project]
+name = "pricewright-api"
+version = "0.1.0"
+description = "Multi-tenant B2B quote-to-order API: transparent pricing engine, approval workflow and full audit trail."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Oscar David Valle Pereyra" }]
+requires-python = ">=3.14"
+dependencies = [
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
+    "structlog>=26.1",
+    "fastapi>=0.142",
+    "uvicorn[standard]>=0.54",
+    "alembic>=1.20",
+    "asyncpg>=0.31",
+    "sqlalchemy[asyncio]>=2.1",
+]
+
+[project.scripts]
+pricewright-api = "pricewright.main:main"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.168",
+    "httpx>=0.28",
+    "import-linter>=2.15",
+    "mypy>=2.4",
+    "pre-commit>=4.6",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "pytest-cov>=7.1",
+    "ruff>=0.16",
+    "testcontainers[postgres]>=4.15",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+# The import package can be named differently from the distribution.
+[tool.uv.build-backend]
+module-name = "pricewright"
+
+# --- Lint and format (HANDBOOK §1, §6) -------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F",  # pycodestyle, pyflakes
+    "I",            # import order
+    "N",            # naming
+    "UP",           # modern syntax
+    "B",            # likely bugs
+    "A",            # shadowed builtins
+    "C4",           # comprehensions
+    "DTZ",          # naive datetimes (time is always UTC-aware)
+    "T20",          # print statements
+    "ERA",          # commented-out code
+    "S",            # security
+    "PT",           # pytest style
+    "RET", "SIM",   # simpler control flow
+    "ARG",          # unused arguments
+    "ASYNC",        # async pitfalls
+    "FAST",         # FastAPI conventions
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",  # assert is how pytest checks
+]
+
+# --- Types (ADR-0003 in engineering-standards) -----------------------------------------------------
+
+[tool.mypy]
+strict = true
+files = ["src", "tests", "migrations"]
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# --- Tests and coverage (HANDBOOK §7) --------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+filterwarnings = ["error"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: needs Docker (testcontainers); skip with -m 'not integration'"]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 80
+exclude_also = ["if TYPE_CHECKING:", "@overload", 'if __name__ == "__main__":']
+
+# --- Architecture (HANDBOOK §5; checked by tests/architecture) -----------------------------------
+
+[tool.importlinter]
+root_package = "pricewright"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Dependencies point inward"
+type = "layers"
+layers = [
+    "pricewright.main",
+    "pricewright.api | pricewright.infrastructure",
+    "pricewright.application",
+    "pricewright.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "The domain is pure Python"
+type = "forbidden"
+source_modules = ["pricewright.domain"]
+forbidden_modules = [
+    "pricewright.settings",
+    "pydantic_settings",
+    "structlog",
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "sqlalchemy",
+    "asyncpg",
+    "alembic",
+]
+
+# --- Migrations ----------------------------------------------------------------------------------
+
+[tool.alembic]
+script_location = "%(here)s/migrations"
+
+# New revisions are formatted and linted like the rest of the code.
+[[tool.alembic.post_write_hooks]]
+name = "ruff_fix"
+type = "module"
+module = "ruff"
+options = "check --fix REVISION_SCRIPT_FILENAME"
+
+[[tool.alembic.post_write_hooks]]
+name = "ruff_format"
+type = "module"
+module = "ruff"
+options = "format REVISION_SCRIPT_FILENAME"

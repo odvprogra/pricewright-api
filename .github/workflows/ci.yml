@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    uses: odvprogra/engineering-standards/.github/workflows/python-ci.yml@v1
+    secrets: inherit
+
+  security:
+    uses: odvprogra/engineering-standards/.github/workflows/security.yml@v1
+
+  docker:
+    uses: odvprogra/engineering-standards/.github/workflows/docker-build.yml@v1
+    with:
+      compose-file: docker-compose.yml # readiness needs PostgreSQL

@@ -1,0 +1,28 @@
+name: Feature request
+description: A new capability or a change in behavior.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who has the problem, and what does it cost them today? Describe it before any solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Observable conditions that make this done.
+      placeholder: |
+        - Given ..., when ..., then ...
+    validations:
+      required: true

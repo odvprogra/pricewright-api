@@ -1,0 +1,16 @@
+# Only what the image needs reaches the build context.
+.git
+.github
+.venv
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+coverage.xml
+htmlcov
+tests
+docs
+.env
+.env.*
+!.env.example
