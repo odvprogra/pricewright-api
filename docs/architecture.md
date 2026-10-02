@@ -4,11 +4,16 @@
 
 ## Context
 
-Who uses Pricewright API and which systems it talks to.
+Who uses Pricewright API and which systems it talks to. Every client depends on a released
+`openapi.json`, never on this repository's code or database
+([ADR-0002](adr/0002-separate-repos-with-a-versioned-openapi-contract.md)).
 
 ```mermaid
 flowchart LR
-    user([User or client system]) -->|HTTPS / JSON| service[Pricewright API]
+    staff([Sales reps, managers, admins]) --> web[pricewright-web<br/>Next.js]
+    web -->|HTTPS / JSON| service[Pricewright API]
+    mcp[erp-mcp-server<br/>MCP tools for LLMs] -->|HTTPS / JSON, API key| service
+    copilot[ops-copilot<br/>document intake] -->|HTTPS / JSON, API key| service
     service -->|SQL| db[(PostgreSQL)]
 ```
 

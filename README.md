@@ -1,47 +1,73 @@
 # Pricewright API
 
-> Multi-tenant B2B quote-to-order API: transparent pricing engine, approval workflow and full audit trail.
+> Multi-tenant B2B quote-to-order API: transparent pricing engine, approval workflow and full audit
+> trail.
 
 [![CI](https://github.com/odvprogra/pricewright-api/actions/workflows/ci.yml/badge.svg)](https://github.com/odvprogra/pricewright-api/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/odvprogra/pricewright-api/graph/badge.svg)](https://codecov.io/gh/odvprogra/pricewright-api)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](.python-version)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<!--
-README structure: HANDBOOK §11 (https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md).
-Replace every comment block; keep the section order.
--->
+> Pricewright and its demo tenants, Northfield Supply and Larkspur Tool Co., are fictional
+> companies.
 
 ## Demo
 
-<!-- Live URL and/or a GIF. Demo credentials if there are any. -->
+Not deployed yet. A live demo with seeded data and demo credentials comes with M8; until then,
+[run it locally](#run-it-locally) and use the interactive API docs at `http://localhost:8000/docs`.
 
 ## The problem
 
-<!-- Business context in 3–5 sentences: who has the problem and what it costs them today. -->
+B2B distributors quote prices by hand in spreadsheets. Discounts are inconsistent from one sales rep
+to the next, margins leak, large discounts get approved over chat with no trace, and a sent quote
+can't be tied to the order that came out of it. Pricewright centralizes quoting: a pricing engine
+that explains every price, an approval workflow for discounts that need one, and an audit trail from
+the first quote to the order.
 
 ## What it does
 
-<!-- Key features as a short list. -->
+Pricewright is built in milestones; this table shows what works today. The full scope is in the
+[product brief](docs/brief.md).
+
+| Capability                                                                               | Milestone | Status      |
+| ---------------------------------------------------------------------------------------- | --------- | ----------- |
+| Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI  | M0        | In progress |
+| Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation | M1        | Next        |
+| Catalog and customers with cursor pagination and audit events                            | M2        |             |
+| Pricing engine: price waterfall with a per-line breakdown of every rule applied          | M3        |             |
+| Quotes with revisions, expiration, approvals and optimistic locking                      | M4        |             |
+| Idempotent conversion of accepted quotes into orders                                     | M6        |             |
+| Transactional outbox, worker, quote PDFs and email notifications                         | M5        |             |
+
+The web app lives in a separate repository, `pricewright-web` (from M7). It consumes this API the
+same way every other client does: through a released `openapi.json`.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    client([Client]) --> api[HTTP API]
-    api --> app[Application<br/>use cases]
-    app --> domain[Domain<br/>business rules]
-    app --> infra[Infrastructure<br/>adapters]
+    web([pricewright-web]) -->|REST| api
+    mcp([erp-mcp-server]) -->|REST| api
+    copilot([ops-copilot]) -->|REST| api
+    subgraph service[pricewright-api]
+        api[HTTP API] --> app[Application<br/>use cases]
+        app --> domain[Domain<br/>business rules]
+        app --> infra[Infrastructure<br/>adapters]
+    end
     infra --> db[(PostgreSQL)]
 ```
 
 Hexagonal-lite: dependencies point inward, the domain is pure Python, and an architecture test
-enforces both. Details in [docs/architecture.md](docs/architecture.md).
+enforces both. Clients never read the code or the database: each one pins a release of this API and
+generates its client from the `openapi.json` attached to it. Details in
+[docs/architecture.md](docs/architecture.md).
 
 ## Key decisions
 
-| Decision | Why |
-| --- | --- |
-| [ADR-0001](docs/adr/0001-record-architecture-decisions.md) Hexagonal-lite, decisions recorded as ADRs | Business rules testable without infrastructure; reasons survive the people who made them |
+| Decision                                                                                                 | Why                                                                                      |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [ADR-0001](docs/adr/0001-record-architecture-decisions.md) Hexagonal-lite, decisions recorded as ADRs    | Business rules testable without infrastructure; reasons survive the people who made them |
+| [ADR-0002](docs/adr/0002-separate-repos-with-a-versioned-openapi-contract.md) Versioned OpenAPI contract | Every client, the web app included, depends on a released, immutable spec                |
 
 ## Run it locally
 
@@ -57,15 +83,15 @@ Configuration comes from environment variables; [.env.example](.env.example) doc
 
 ## Testing strategy
 
-| Level | Location | What it covers |
-| --- | --- | --- |
-| Unit | `tests/unit` | Domain rules and application use cases, no I/O |
-| Architecture | `tests/architecture` | Import contracts: dependencies point inward, the domain is pure |
-| Integration | `tests/integration` | Adapters against a real PostgreSQL (testcontainers); migrations reversible and in sync |
-| API | `tests/e2e` | HTTP behavior: Problem Details, request IDs, health, OpenAPI drift |
+| Level        | Location             | What it covers                                                                         |
+| ------------ | -------------------- | -------------------------------------------------------------------------------------- |
+| Unit         | `tests/unit`         | Domain rules and application use cases, no I/O                                         |
+| Architecture | `tests/architecture` | Import contracts: dependencies point inward, the domain is pure                        |
+| Integration  | `tests/integration`  | Adapters against a real PostgreSQL (testcontainers); migrations reversible and in sync |
+| API          | `tests/e2e`          | HTTP behavior: Problem Details, request IDs, health, OpenAPI drift                     |
 
-`just test` runs everything with coverage (gate: 80% overall, 95% on the domain in CI).
-Integration tests need Docker; `just test -m "not integration"` skips them.
+`just test` runs everything with coverage (gate: 80% overall, 95% on the domain in CI). Integration
+tests need Docker; `just test -m "not integration"` skips them.
 
 ## Project structure
 
@@ -79,12 +105,18 @@ src/pricewright/
 └── main.py          # composition root
 tests/               # unit, architecture, integration, e2e
 migrations/          # Alembic
-docs/                # architecture and ADRs
+docs/                # product brief, architecture and ADRs
 ```
 
 ## Trade-offs & what I'd do next
 
-<!-- Honest limitations and next steps. The strongest signal of judgment in the whole README. -->
+- **Only the baseline exists.** M0 sets up the service, CI and the release pipeline; business
+  features start with M1 (tenancy, auth and roles).
+- **No breaking-change check yet.** The spec has no business endpoints to protect; the oasdiff check
+  against the latest release arrives with the first ones in M2.
+- **Deliberately out of scope:** invoicing, inventory, taxes beyond a flat rate per tenant,
+  payments, multi-currency conversion and SSO. Each is a product of its own; the integration points
+  would be the order snapshot and the outbox events.
 
 ## License
 
