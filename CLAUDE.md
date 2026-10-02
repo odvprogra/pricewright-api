@@ -22,7 +22,7 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **M0 — Scaffold**.
+- Work one milestone at a time. Current milestone: **M1 — Tenancy + auth + RBAC**.
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.
@@ -58,9 +58,18 @@ Read first: `main.py`, `api/app.py`, `api/problems.py`, `settings.py`, `infrastr
 See `docs/adr/`. Do not contradict an accepted ADR; propose a new one that supersedes it. The
 expected ADRs and their milestones are listed in the brief (§9).
 
+## Releases
+
+- release-please keeps a release PR open on `main`; merging it tags the version and publishes an
+  immutable GitHub release with `openapi.json` attached (`.github/workflows/release.yml`).
+- Never bump versions or edit `CHANGELOG.md` by hand: the release PR updates `pyproject.toml`,
+  `uv.lock`, `openapi.json` and the changelog together.
+- A breaking API change needs a `!` in its Conventional Commit (`feat!:`) so the version reflects
+  it.
+
 ## Current status
 
-- Done: M0 — generated from python-service-template v1.0.2; ruleset on `main`; brief, README and
-  ADR-0002
-- In progress: M0 — release pipeline (release-please, immutable releases with `openapi.json`)
+- Done: M0 — generated from python-service-template v1.0.2; ruleset on `main`; brief, README,
+  ADR-0002; release pipeline with immutable releases
+- In progress: —
 - Next: M1 — tenancy, auth and RBAC, including service accounts with scoped API keys
