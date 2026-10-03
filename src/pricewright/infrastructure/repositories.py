@@ -124,6 +124,13 @@ class SqlAlchemyUserRepository:
         )
         return None if record is None else _to_user(record)
 
+    async def list(self, *, after: UUID | None, limit: int) -> list[User]:
+        query = select(UserRecord).where(UserRecord.tenant_id == self._scope.tenant_id)
+        if after is not None:
+            query = query.where(UserRecord.id > after)
+        records = await self._session.scalars(query.order_by(UserRecord.id).limit(limit))
+        return [_to_user(record) for record in records]
+
     async def save(self, user: User) -> None:
         result = await self._session.execute(
             update(UserRecord)

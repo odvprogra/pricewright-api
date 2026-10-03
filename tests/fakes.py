@@ -69,6 +69,13 @@ class FakeUserRepository:
             return None
         return copy.deepcopy(user)  # like the adapter: changes need save()
 
+    async def list(self, *, after: UUID | None, limit: int) -> list[User]:
+        owned = sorted(
+            (user for user in self._users.values() if user.tenant_id == self._uow.tenant_id),
+            key=lambda user: user.id,
+        )
+        return copy.deepcopy([user for user in owned if after is None or user.id > after][:limit])
+
     async def save(self, user: User) -> None:
         stored = self._users.get(user.id)
         if stored is None or stored.tenant_id != self._uow.tenant_id:

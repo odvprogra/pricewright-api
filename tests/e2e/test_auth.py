@@ -99,6 +99,8 @@ async def test_me_returns_the_signed_in_user(client: httpx.AsyncClient, avery: U
         "email": "avery@northfield.example",
         "full_name": "Avery Admin",
         "role": "admin",
+        "is_active": True,
+        "locked": False,
     }
 
 
