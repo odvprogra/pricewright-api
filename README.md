@@ -71,6 +71,7 @@ generates its client from the `openapi.json` attached to it. Details in
 | [ADR-0006](docs/adr/0006-shared-schema-multi-tenancy.md) Shared-schema multi-tenancy                              | Cheapest model to run; isolation enforced by scoped repositories, composite keys and tests |
 | [ADR-0007](docs/adr/0007-authentication-for-users-and-service-accounts.md) Authentication without an external IdP | Standards-based passwords and tokens, and a demo that runs with `docker compose up`        |
 | [ADR-0011](docs/adr/0011-repository-and-unit-of-work-ports.md) Repository and Unit of Work ports                  | Use cases stay framework-free and testable with fakes; atomic operations are explicit      |
+| [ADR-0012](docs/adr/0012-optimistic-concurrency-with-etag-and-if-match.md) ETag + `If-Match`                      | No lost updates: a stale edit is a 412, a missing `If-Match` a 428                         |
 
 ## Run it locally
 

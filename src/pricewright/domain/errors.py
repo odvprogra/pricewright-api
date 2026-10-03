@@ -19,3 +19,9 @@ class ConflictError(DomainError):
 
 class RuleViolationError(DomainError):
     code = "rule_violation"
+
+
+class StaleVersionError(DomainError):
+    """The caller changed an old version: someone else saved first (optimistic concurrency)."""
+
+    code = "stale_version"

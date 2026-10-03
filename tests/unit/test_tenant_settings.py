@@ -1,12 +1,13 @@
+import copy
 import uuid
 from decimal import Decimal
 
 import pytest
 
 from pricewright.application.ports import UnitOfWork
-from pricewright.application.tenants import get_tenant
-from pricewright.domain.auth import Principal
-from pricewright.domain.errors import NotFoundError
+from pricewright.application.tenants import TenantChanges, change_tenant, get_tenant
+from pricewright.domain.auth import PermissionDeniedError, Principal
+from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role
 from tests.fakes import FakeUnitOfWork, InMemoryDatabase
@@ -40,3 +41,51 @@ async def test_get_tenant_of_a_tenant_that_no_longer_exists_is_not_found() -> No
         await get_tenant(
             Principal(uuid.uuid7(), uuid.uuid7(), Role.ADMIN), unit_of_work=unit_of_work
         )
+
+
+async def change(
+    database: InMemoryDatabase, role: Role, changes: TenantChanges, version: int = 1
+) -> Tenant:
+    def unit_of_work() -> UnitOfWork:
+        return FakeUnitOfWork(database)
+
+    return await change_tenant(
+        Principal(NORTHFIELD.id, uuid.uuid7(), role),
+        changes,
+        expected_version=version,
+        unit_of_work=unit_of_work,
+    )
+
+
+async def test_change_tenant_by_an_admin_saves_a_new_version() -> None:
+    database = InMemoryDatabase(tenants={NORTHFIELD.id: copy.deepcopy(NORTHFIELD)})
+
+    changed = await change(database, Role.ADMIN, TenantChanges(tax_rate=Decimal("0.08")))
+
+    assert changed.version == 2
+    assert database.tenants[NORTHFIELD.id].settings.tax_rate == Decimal("0.08")
+
+
+@pytest.mark.parametrize("role", [Role.SALES_REP, Role.SALES_MANAGER])
+async def test_change_tenant_by_a_non_admin_is_denied(role: Role) -> None:
+    database = InMemoryDatabase(tenants={NORTHFIELD.id: copy.deepcopy(NORTHFIELD)})
+
+    with pytest.raises(PermissionDeniedError):
+        await change(database, role, TenantChanges(name="Hijacked"))
+
+    assert database.tenants[NORTHFIELD.id].name == "Northfield Supply"
+
+
+async def test_change_tenant_based_on_an_old_version_is_rejected() -> None:
+    database = InMemoryDatabase(tenants={NORTHFIELD.id: copy.deepcopy(NORTHFIELD)})
+    await change(database, Role.ADMIN, TenantChanges(name="First edit"))
+
+    with pytest.raises(StaleVersionError):
+        await change(database, Role.ADMIN, TenantChanges(name="Second edit"), version=1)
+
+    assert database.tenants[NORTHFIELD.id].name == "First edit"
+
+
+async def test_change_tenant_that_no_longer_exists_is_not_found() -> None:
+    with pytest.raises(NotFoundError):
+        await change(InMemoryDatabase(), Role.ADMIN, TenantChanges(name="Ghost"))

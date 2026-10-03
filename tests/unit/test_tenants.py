@@ -60,3 +60,33 @@ def test_tenant_register_trims_the_name_and_assigns_a_uuid7() -> None:
 def test_tenant_register_rejects_blank_or_too_long_name(name: str) -> None:
     with pytest.raises(InvalidTenantError, match="name"):
         Tenant.register(name=name, settings=TenantSettings(currency="USD", tax_rate=Decimal(0)))
+
+
+def northfield() -> Tenant:
+    return Tenant.register(
+        name="Northfield Supply", settings=TenantSettings(currency="USD", tax_rate=Decimal("0.07"))
+    )
+
+
+def test_tenant_change_renames_and_adjusts_rates_but_keeps_the_currency() -> None:
+    tenant = northfield()
+
+    tenant.change(name=" Northfield ", tax_rate=Decimal("0.0725"))
+
+    assert (tenant.name, tenant.settings) == (
+        "Northfield",
+        TenantSettings(currency="USD", tax_rate=Decimal("0.0725")),
+    )
+    assert tenant.version == 1  # the repository counts saved versions
+
+
+def test_tenant_change_rejects_invalid_values_and_changes_nothing() -> None:
+    tenant = northfield()
+
+    with pytest.raises(InvalidTenantError, match="approval_threshold"):
+        tenant.change(name="Renamed", approval_threshold=Decimal(2))
+
+    assert (tenant.name, tenant.settings.approval_threshold) == (
+        "Northfield Supply",
+        DEFAULT_APPROVAL_THRESHOLD,
+    )

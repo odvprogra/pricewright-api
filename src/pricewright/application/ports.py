@@ -21,6 +21,13 @@ class TenantRepository(Protocol):
 
     async def get(self, tenant_id: UUID) -> Tenant | None: ...
 
+    async def save(self, tenant: Tenant) -> None:
+        """Store changes and bump ``tenant.version``, atomically.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``tenant.version``.
+        """
+        ...
+
 
 class UserRepository(Protocol):
     """Users of the unit of work's tenant only (ADR-0006)."""

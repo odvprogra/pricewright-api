@@ -22,7 +22,7 @@ from pricewright.application.ports import (
     UserRepository,
 )
 from pricewright.domain.auth import AuthenticationError, Principal
-from pricewright.domain.errors import ConflictError
+from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
@@ -43,7 +43,14 @@ class FakeTenantRepository:
         self._tenants[tenant.id] = tenant
 
     async def get(self, tenant_id: UUID) -> Tenant | None:
-        return self._tenants.get(tenant_id)
+        return copy.deepcopy(self._tenants.get(tenant_id))
+
+    async def save(self, tenant: Tenant) -> None:
+        stored = self._tenants.get(tenant.id)
+        if stored is None or stored.version != tenant.version:
+            raise StaleVersionError("the tenant was changed by someone else; reload it")
+        tenant.version += 1
+        self._tenants[tenant.id] = copy.deepcopy(tenant)
 
 
 class FakeUserRepository:

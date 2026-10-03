@@ -150,7 +150,8 @@ Rows are in execution order; milestone numbers are stable IDs referenced by othe
 - A rep builds a quote with 5 lines; the UI shows a per-line breakdown of which rules applied.
 - A 20% discount triggers approval; the manager approves from the inbox; the rep receives an email
   with the PDF.
-- Two concurrent edits on the same quote → the second gets 409.
+- Two concurrent edits on the same quote → the second gets 412 Precondition Failed
+  ([ADR-0012](adr/0012-optimistic-concurrency-with-etag-and-if-match.md)).
 - Retrying "convert to order" with the same `Idempotency-Key` returns the same order, never two.
 - A Larkspur user cannot access any Northfield resource (404, not 403, to avoid leaking existence —
   ADR).
@@ -185,6 +186,7 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0009 | 404 vs 403 for cross-tenant access                                                                                          | M1        |
 | 0010 | Supplier price change proposals                                                                                             | M11       |
 | 0011 | [Repository and Unit of Work ports](adr/0011-repository-and-unit-of-work-ports.md) (handbook §5: every pattern gets an ADR) | M1        |
+| 0012 | [Optimistic concurrency with ETag and If-Match](adr/0012-optimistic-concurrency-with-etag-and-if-match.md)                  | M1        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 

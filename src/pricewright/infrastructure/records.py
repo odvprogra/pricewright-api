@@ -43,6 +43,7 @@ class TenantRecord(Base):
             "approval_threshold >= 0 AND approval_threshold <= 1",
             name="approval_threshold_in_range",
         ),
+        CheckConstraint("version >= 1", name="version_positive"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
@@ -50,6 +51,7 @@ class TenantRecord(Base):
     currency: Mapped[str] = mapped_column(CHAR(3))
     tax_rate: Mapped[Decimal] = mapped_column(_RATE)
     approval_threshold: Mapped[Decimal] = mapped_column(_RATE)
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
