@@ -48,17 +48,45 @@ class TenantSettings:
         )
 
 
+def _valid_name(name: str) -> str:
+    name = name.strip()
+    if not name or len(name) > MAX_NAME_LENGTH:
+        raise InvalidTenantError(f"name must have 1 to {MAX_NAME_LENGTH} characters")
+    return name
+
+
 @dataclass(slots=True)
 class Tenant:
-    """A distributor company. Every business record belongs to exactly one tenant."""
+    """A distributor company. Every business record belongs to exactly one tenant.
+
+    ``version`` counts saved changes; the repository bumps it (optimistic concurrency, ADR-0012).
+    """
 
     id: uuid.UUID
     name: str
     settings: TenantSettings
+    version: int = 1
 
     @classmethod
     def register(cls, *, name: str, settings: TenantSettings) -> Tenant:
-        name = name.strip()
-        if not name or len(name) > MAX_NAME_LENGTH:
-            raise InvalidTenantError(f"name must have 1 to {MAX_NAME_LENGTH} characters")
-        return cls(id=uuid.uuid7(), name=name, settings=settings)
+        return cls(id=uuid.uuid7(), name=_valid_name(name), settings=settings)
+
+    def change(
+        self,
+        *,
+        name: str | None = None,
+        tax_rate: Decimal | None = None,
+        approval_threshold: Decimal | None = None,
+    ) -> None:
+        """Rename or adjust rates. The currency is fixed: every stored price is in it."""
+        settings = TenantSettings(
+            currency=self.settings.currency,
+            tax_rate=self.settings.tax_rate if tax_rate is None else tax_rate,
+            approval_threshold=(
+                self.settings.approval_threshold
+                if approval_threshold is None
+                else approval_threshold
+            ),
+        )
+        self.name = self.name if name is None else _valid_name(name)
+        self.settings = settings

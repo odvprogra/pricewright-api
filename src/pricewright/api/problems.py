@@ -19,6 +19,7 @@ from pricewright.domain.errors import (
     DomainError,
     NotFoundError,
     RuleViolationError,
+    StaleVersionError,
 )
 
 PROBLEM_JSON = "application/problem+json"
@@ -29,6 +30,7 @@ DOMAIN_ERROR_STATUS: dict[type[DomainError], HTTPStatus] = {
     NotFoundError: HTTPStatus.NOT_FOUND,
     ConflictError: HTTPStatus.CONFLICT,
     RuleViolationError: HTTPStatus.UNPROCESSABLE_CONTENT,
+    StaleVersionError: HTTPStatus.PRECONDITION_FAILED,  # RFC 9110 §13.1.1
 }
 
 

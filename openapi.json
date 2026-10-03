@@ -64,6 +64,55 @@
         "title": "Role",
         "type": "string"
       },
+      "TenantPatch": {
+        "additionalProperties": false,
+        "description": "Only the fields sent change. The currency cannot: every stored price is in it.",
+        "properties": {
+          "approval_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Threshold"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tax_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Rate"
+          }
+        },
+        "title": "TenantPatch",
+        "type": "object"
+      },
       "TenantResponse": {
         "properties": {
           "approval_threshold": {
@@ -91,6 +140,11 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tax Rate",
             "type": "string"
+          },
+          "version": {
+            "description": "Also sent as the ETag; send it back in If-Match to update.",
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
@@ -98,7 +152,8 @@
           "name",
           "currency",
           "tax_rate",
-          "approval_threshold"
+          "approval_threshold",
+          "version"
         ],
         "title": "TenantResponse",
         "type": "object"
@@ -398,6 +453,80 @@
           }
         ],
         "summary": "The signed-in user's tenant and its settings",
+        "tags": [
+          "tenant"
+        ]
+      },
+      "patch": {
+        "operationId": "update_tenant_api_v1_tenant_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid access token"
+          },
+          "403": {
+            "description": "Only admins change the tenant (`tenant:manage`)"
+          },
+          "412": {
+            "description": "If-Match is stale: someone else changed the tenant; reload it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "428": {
+            "description": "If-Match is required"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change the tenant's name or rates (admins)",
         "tags": [
           "tenant"
         ]

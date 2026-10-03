@@ -44,6 +44,7 @@ async def test_tenant_returns_the_settings_with_rates_as_strings(
         "currency": "USD",
         "tax_rate": "0.0725",
         "approval_threshold": "0.15",
+        "version": 1,
     }
 
 
@@ -51,3 +52,75 @@ async def test_tenant_without_a_token_is_a_401(client: httpx.AsyncClient) -> Non
     response = await client.get("/api/v1/tenant")
 
     assert response.status_code == 401
+
+
+async def test_tenant_sends_its_version_as_an_etag(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/v1/tenant", headers=bearer(Role.SALES_REP))
+
+    assert response.headers["etag"] == '"1"'
+    assert response.json()["version"] == 1
+
+
+async def patch(
+    client: httpx.AsyncClient,
+    body: dict[str, object],
+    *,
+    role: Role = Role.ADMIN,
+    if_match: str | None = '"1"',
+) -> httpx.Response:
+    headers = bearer(role) | ({"If-Match": if_match} if if_match is not None else {})
+    return await client.patch("/api/v1/tenant", json=body, headers=headers)
+
+
+async def test_admin_changes_the_tenant_with_the_current_etag(client: httpx.AsyncClient) -> None:
+    response = await patch(client, {"tax_rate": "0.08", "name": "Northfield"})
+
+    assert response.status_code == 200
+    assert response.headers["etag"] == '"2"'
+    assert response.json() | {"id": None} == {
+        "id": None,
+        "name": "Northfield",
+        "currency": "USD",
+        "tax_rate": "0.08",
+        "approval_threshold": "0.15",
+        "version": 2,
+    }
+
+
+async def test_a_second_change_with_the_old_etag_is_a_412(client: httpx.AsyncClient) -> None:
+    await patch(client, {"name": "First edit"})
+
+    response = await patch(client, {"name": "Second edit"})
+
+    assert response.status_code == 412
+    assert response.json()["code"] == "stale_version"
+
+
+@pytest.mark.parametrize("if_match", [None, "*"])
+async def test_changing_the_tenant_without_an_etag_is_a_428(
+    client: httpx.AsyncClient, if_match: str | None
+) -> None:
+    response = await patch(client, {"name": "Unconditional"}, if_match=if_match)
+
+    assert response.status_code == 428
+    assert response.json()["code"] == "precondition_required"
+
+
+async def test_a_sales_manager_cannot_change_the_tenant(client: httpx.AsyncClient) -> None:
+    response = await patch(client, {"name": "Hijacked"}, role=Role.SALES_MANAGER)
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "permission_denied"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"currency": "EUR"}, {"tax_rate": "1.5"}],
+    ids=["empty", "currency", "out-of-range"],
+)
+async def test_invalid_changes_are_a_422(
+    client: httpx.AsyncClient, body: dict[str, object]
+) -> None:
+    response = await patch(client, body)
+
+    assert response.status_code == 422

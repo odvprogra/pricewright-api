@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role, User
@@ -42,6 +43,7 @@ class SqlAlchemyTenantRepository:
                 currency=tenant.settings.currency,
                 tax_rate=tenant.settings.tax_rate,
                 approval_threshold=tenant.settings.approval_threshold,
+                version=tenant.version,
             )
         )
 
@@ -57,7 +59,25 @@ class SqlAlchemyTenantRepository:
                 tax_rate=record.tax_rate,
                 approval_threshold=record.approval_threshold,
             ),
+            version=record.version,
         )
+
+    async def save(self, tenant: Tenant) -> None:
+        # Compare-and-set in one statement: of two concurrent saves, the second matches no row.
+        new_version = await self._session.scalar(
+            update(TenantRecord)
+            .where(TenantRecord.id == tenant.id, TenantRecord.version == tenant.version)
+            .values(
+                name=tenant.name,
+                tax_rate=tenant.settings.tax_rate,
+                approval_threshold=tenant.settings.approval_threshold,
+                version=TenantRecord.version + 1,
+            )
+            .returning(TenantRecord.version)
+        )
+        if new_version is None:
+            raise StaleVersionError("the tenant was changed by someone else; reload it")
+        tenant.version = new_version
 
 
 def _to_user(record: UserRecord) -> User:
