@@ -1,43 +1,18 @@
 """Users are reachable only through their tenant's unit of work (ADR-0006)."""
 
 import uuid
-from decimal import Decimal
 
 import pytest
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pricewright.domain.errors import ConflictError
-from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role, User
 from pricewright.infrastructure.records import UserRecord
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
+from tests.integration.data import Sessions, register
 
 pytestmark = pytest.mark.integration
-
-type Sessions = async_sessionmaker[AsyncSession]
-
-
-async def register(sessions: Sessions, name: str, *emails: str) -> tuple[Tenant, list[User]]:
-    tenant = Tenant.register(name=name, settings=TenantSettings("USD", Decimal("0.07")))
-    users = [
-        User.create(
-            tenant_id=tenant.id,
-            email=email,
-            full_name=email.split("@")[0],
-            role=Role.SALES_REP,
-            password_hash="hash",
-        )
-        for email in emails
-    ]
-    async with SqlAlchemyUnitOfWork(sessions) as uow:
-        uow.bind_tenant(tenant.id)
-        await uow.tenants.add(tenant)
-        for user in users:
-            await uow.users.add(user)
-        await uow.commit()
-    return tenant, users
 
 
 async def test_user_repository_returns_users_of_the_bound_tenant(

@@ -1,0 +1,11 @@
+# gitleaks configuration: the default rules plus Pricewright's own token formats (ADR-0007), so a
+# leaked Pricewright credential fails CI like any other secret.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "pricewright-refresh-token"
+description = "Pricewright refresh token"
+regex = '''\bpwr_[A-Za-z0-9_-]{43}\b'''
+keywords = ["pwr_"]

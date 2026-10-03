@@ -5,11 +5,13 @@ Adapters in ``infrastructure`` implement them; tests use in-memory fakes.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
 from pricewright.domain.auth import Principal
+from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
 
@@ -32,10 +34,27 @@ class UserRepository(Protocol):
         ...
 
 
+class RefreshTokenRepository(Protocol):
+    """Refresh tokens of the unit of work's tenant only (ADR-0006)."""
+
+    async def add(self, token: RefreshToken) -> None: ...
+
+    async def claim(self, token_id: UUID, now: datetime) -> bool:
+        """Mark the token used, atomically: False if it was already used or revoked.
+
+        Two requests presenting the same token can never both succeed.
+        """
+        ...
+
+    async def revoke_family(self, family_id: UUID, now: datetime) -> None: ...
+
+
 class IdentityLookup(Protocol):
     """The only cross-tenant reads: finding who is signing in before their tenant is known."""
 
     async def user_by_email(self, email: str) -> User | None: ...
+
+    async def refresh_token_by_digest(self, token_digest: str) -> RefreshToken | None: ...
 
 
 class PasswordHasher(Protocol):
@@ -72,12 +91,13 @@ class AccessTokens(Protocol):
 class UnitOfWork(Protocol):
     """One atomic business operation: changes are saved by ``commit`` or discarded on exit.
 
-    Tenant-owned repositories (``users``) work only after ``bind_tenant``, and a unit of work can
-    never be bound to a second tenant (ADR-0006).
+    Tenant-owned repositories (``users``, ``refresh_tokens``) work only after ``bind_tenant``, and
+    a unit of work can never be bound to a second tenant (ADR-0006).
     """
 
     tenants: TenantRepository
     users: UserRepository
+    refresh_tokens: RefreshTokenRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...
@@ -96,3 +116,6 @@ class UnitOfWork(Protocol):
 
 type UnitOfWorkFactory = Callable[[], UnitOfWork]
 """Opens a fresh unit of work; use cases open one per business operation."""
+
+type Clock = Callable[[], datetime]
+"""The current time, timezone-aware UTC."""

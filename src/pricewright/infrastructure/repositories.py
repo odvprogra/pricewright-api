@@ -1,13 +1,15 @@
 """SQLAlchemy implementations of the repository ports (ADR-0011)."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role, User
-from pricewright.infrastructure.records import TenantRecord, UserRecord
+from pricewright.infrastructure.records import RefreshTokenRecord, TenantRecord, UserRecord
 
 
 class TenantScope:
@@ -119,6 +121,69 @@ class SqlAlchemyUserRepository:
             raise RuntimeError("only an existing user of the unit of work's tenant can be saved")
 
 
+def _to_refresh_token(record: RefreshTokenRecord) -> RefreshToken:
+    return RefreshToken(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        user_id=record.user_id,
+        family_id=record.family_id,
+        token_digest=record.token_digest,
+        expires_at=record.expires_at,
+        family_expires_at=record.family_expires_at,
+        used_at=record.used_at,
+        revoked_at=record.revoked_at,
+    )
+
+
+class SqlAlchemyRefreshTokenRepository:
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    async def add(self, token: RefreshToken) -> None:
+        if token.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("a refresh token can only be added to the unit of work's tenant")
+        self._session.add(
+            RefreshTokenRecord(
+                id=token.id,
+                tenant_id=token.tenant_id,
+                user_id=token.user_id,
+                family_id=token.family_id,
+                token_digest=token.token_digest,
+                expires_at=token.expires_at,
+                family_expires_at=token.family_expires_at,
+                used_at=token.used_at,
+                revoked_at=token.revoked_at,
+            )
+        )
+
+    async def claim(self, token_id: UUID, now: datetime) -> bool:
+        # One conditional UPDATE: of two concurrent claims, the second matches no row.
+        claimed = await self._session.scalar(
+            update(RefreshTokenRecord)
+            .where(
+                RefreshTokenRecord.tenant_id == self._scope.tenant_id,
+                RefreshTokenRecord.id == token_id,
+                RefreshTokenRecord.used_at.is_(None),
+                RefreshTokenRecord.revoked_at.is_(None),
+            )
+            .values(used_at=now)
+            .returning(RefreshTokenRecord.id)
+        )
+        return claimed is not None
+
+    async def revoke_family(self, family_id: UUID, now: datetime) -> None:
+        await self._session.execute(
+            update(RefreshTokenRecord)
+            .where(
+                RefreshTokenRecord.tenant_id == self._scope.tenant_id,
+                RefreshTokenRecord.family_id == family_id,
+                RefreshTokenRecord.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+
+
 class SqlAlchemyIdentityLookup:
     """Cross-tenant by design, and only for authentication (ADR-0006)."""
 
@@ -128,3 +193,9 @@ class SqlAlchemyIdentityLookup:
     async def user_by_email(self, email: str) -> User | None:
         record = await self._session.scalar(select(UserRecord).where(UserRecord.email == email))
         return None if record is None else _to_user(record)
+
+    async def refresh_token_by_digest(self, token_digest: str) -> RefreshToken | None:
+        record = await self._session.scalar(
+            select(RefreshTokenRecord).where(RefreshTokenRecord.token_digest == token_digest)
+        )
+        return None if record is None else _to_refresh_token(record)
