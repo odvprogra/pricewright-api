@@ -11,6 +11,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import pricewright.infrastructure.records  # noqa: F401 - registers the tables in Base.metadata
 from pricewright.infrastructure.database import Base
 from pricewright.infrastructure.logging import configure_logging
 from pricewright.settings import LogFormat, Settings
