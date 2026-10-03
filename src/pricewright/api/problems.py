@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.exceptions import HTTPException
 
-from pricewright.domain.auth import AuthenticationError
+from pricewright.domain.auth import AuthenticationError, PermissionDeniedError
 from pricewright.domain.errors import (
     ConflictError,
     DomainError,
@@ -25,6 +25,7 @@ PROBLEM_JSON = "application/problem+json"
 
 DOMAIN_ERROR_STATUS: dict[type[DomainError], HTTPStatus] = {
     AuthenticationError: HTTPStatus.UNAUTHORIZED,
+    PermissionDeniedError: HTTPStatus.FORBIDDEN,
     NotFoundError: HTTPStatus.NOT_FOUND,
     ConflictError: HTTPStatus.CONFLICT,
     RuleViolationError: HTTPStatus.UNPROCESSABLE_CONTENT,
