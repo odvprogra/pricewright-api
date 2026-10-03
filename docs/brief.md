@@ -115,7 +115,9 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
   with scoped API keys. Kept minimal; an ADR documents why there is no external IdP.
 - **Transactional outbox**: domain events written in the same transaction as the state change; a
   worker relays them using `SELECT ... FOR UPDATE SKIP LOCKED`. Consumers: PDF generation, email
-  (Mailpit in dev), audit projections. No Redis or broker — justified in an ADR.
+  (Mailpit in dev). No Redis or broker — justified in an ADR. Audit events do not wait for it: they
+  are written in the same transaction as the change
+  ([ADR-0013](adr/0013-append-only-audit-events-in-the-same-transaction.md)).
 - PDF generation of quotes (WeasyPrint or similar) in the worker.
 - `pricewright-web` (separate repo, from M7): Next.js; its API client is generated from a pinned
   `openapi.json` release asset of `pricewright-api`, the same way `erp-mcp-server` and `ops-copilot`

@@ -24,15 +24,19 @@ from sqlalchemy import (
     text,
     true,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from pricewright.domain.audit import ActorType, AuditValue
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
 from pricewright.infrastructure.database import Base
 
 _UUIDV7 = text("uuidv7()")
 _RATE = Numeric(5, 4)
 _ROLES = ", ".join(f"'{role}'" for role in Role)
+_ACTOR_TYPES = ", ".join(f"'{actor_type}'" for actor_type in ActorType)
+# The API middleware accepts request IDs of up to 128 characters.
+_REQUEST_ID_LENGTH = 128
 
 
 class TenantRecord(Base):
@@ -144,3 +148,30 @@ class ApiKeyRecord(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuditEventRecord(Base):
+    """Append-only: a trigger rejects UPDATE and DELETE (migration ``add_audit_events``).
+
+    Actor and resource ids have no foreign keys: they point to different tables, and the history
+    must outlive what it describes.
+    """
+
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),  # also the tenant's timeline, newest first
+        Index(None, "tenant_id", "resource_type", "resource_id", "id"),  # a resource's history
+        Index(None, "tenant_id", "actor_id", "id"),  # what someone did
+        CheckConstraint(f"actor_type IN ({_ACTOR_TYPES})", name="actor_type_is_known"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    actor_type: Mapped[str] = mapped_column(String(20))
+    actor_id: Mapped[uuid.UUID]
+    action: Mapped[str] = mapped_column(String(50))
+    resource_type: Mapped[str] = mapped_column(String(30))
+    resource_id: Mapped[uuid.UUID]
+    changes: Mapped[dict[str, list[AuditValue]]] = mapped_column(JSONB)
+    request_id: Mapped[str | None] = mapped_column(String(_REQUEST_ID_LENGTH))

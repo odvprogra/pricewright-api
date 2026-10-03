@@ -6,14 +6,18 @@ from uuid import UUID
 from sqlalchemy import case, literal, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricewright.application.ports import AuditEventFilter
+from pricewright.domain.audit import ActorType, AuditAction, AuditEvent
 from pricewright.domain.auth import Permission
 from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import MAX_FAILED_LOGINS, Role, User
+from pricewright.infrastructure.logging import current_request_id
 from pricewright.infrastructure.records import (
     ApiKeyRecord,
+    AuditEventRecord,
     RefreshTokenRecord,
     ServiceAccountRecord,
     TenantRecord,
@@ -372,6 +376,65 @@ class SqlAlchemyApiKeyRepository:
             .where(ApiKeyRecord.tenant_id == self._scope.tenant_id, ApiKeyRecord.id == key.id)
             .values(last_used_at=key.last_used_at, revoked_at=key.revoked_at)
         )
+
+
+def _to_audit_event(record: AuditEventRecord) -> AuditEvent:
+    return AuditEvent(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        occurred_at=record.occurred_at,
+        actor_type=ActorType(record.actor_type),
+        actor_id=record.actor_id,
+        action=AuditAction(record.action),
+        resource_id=record.resource_id,
+        changes={name: (before, after) for name, (before, after) in record.changes.items()},
+        request_id=record.request_id,
+    )
+
+
+class SqlAlchemyAuditEventRepository:
+    """Inserts and reads only: the table rejects updates and deletes (ADR-0013)."""
+
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    async def add(self, event: AuditEvent) -> None:
+        if event.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("an audit event can only be added to the unit of work's tenant")
+        self._session.add(
+            AuditEventRecord(
+                id=event.id,
+                tenant_id=event.tenant_id,
+                occurred_at=event.occurred_at,
+                actor_type=event.actor_type.value,
+                actor_id=event.actor_id,
+                action=event.action.value,
+                resource_type=event.resource_type,
+                resource_id=event.resource_id,
+                changes={name: list(values) for name, values in event.changes.items()},
+                request_id=event.request_id or current_request_id(),
+            )
+        )
+
+    async def page(
+        self, where: AuditEventFilter, *, before: UUID | None, limit: int
+    ) -> list[AuditEvent]:
+        query = select(AuditEventRecord).where(AuditEventRecord.tenant_id == self._scope.tenant_id)
+        if where.resource_type is not None:
+            query = query.where(AuditEventRecord.resource_type == where.resource_type)
+        if where.resource_id is not None:
+            query = query.where(AuditEventRecord.resource_id == where.resource_id)
+        if where.actor_id is not None:
+            query = query.where(AuditEventRecord.actor_id == where.actor_id)
+        if where.action is not None:
+            query = query.where(AuditEventRecord.action == where.action.value)
+        if before is not None:
+            query = query.where(AuditEventRecord.id < before)
+        records = await self._session.scalars(
+            query.order_by(AuditEventRecord.id.desc()).limit(limit)
+        )
+        return [_to_audit_event(record) for record in records]
 
 
 class SqlAlchemyIdentityLookup:

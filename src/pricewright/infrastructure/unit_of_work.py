@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pricewright.application.ports import (
     ApiKeyRepository,
+    AuditEventRepository,
     IdentityLookup,
     RefreshTokenRepository,
     ServiceAccountRepository,
@@ -18,6 +19,7 @@ from pricewright.application.ports import (
 from pricewright.domain.errors import ConflictError
 from pricewright.infrastructure.repositories import (
     SqlAlchemyApiKeyRepository,
+    SqlAlchemyAuditEventRepository,
     SqlAlchemyIdentityLookup,
     SqlAlchemyRefreshTokenRepository,
     SqlAlchemyServiceAccountRepository,
@@ -37,6 +39,7 @@ class SqlAlchemyUnitOfWork:
     refresh_tokens: RefreshTokenRepository
     service_accounts: ServiceAccountRepository
     api_keys: ApiKeyRepository
+    audit_events: AuditEventRepository
     identities: IdentityLookup
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -51,6 +54,7 @@ class SqlAlchemyUnitOfWork:
         self.refresh_tokens = SqlAlchemyRefreshTokenRepository(self._session, self._scope)
         self.service_accounts = SqlAlchemyServiceAccountRepository(self._session, self._scope)
         self.api_keys = SqlAlchemyApiKeyRepository(self._session, self._scope)
+        self.audit_events = SqlAlchemyAuditEventRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
         return self
 

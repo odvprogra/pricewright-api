@@ -44,3 +44,9 @@ def configure_logging(level: str, *, json: bool, stream: TextIO | None = None) -
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(level)
+
+
+def current_request_id() -> str | None:
+    """The request ID the API middleware bound to this context, if any."""
+    request_id = structlog.contextvars.get_contextvars().get("request_id")
+    return request_id if isinstance(request_id, str) else None
