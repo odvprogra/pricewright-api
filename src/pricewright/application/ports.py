@@ -3,6 +3,7 @@
 Adapters in ``infrastructure`` implement them; tests use in-memory fakes.
 """
 
+from collections.abc import Callable
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
@@ -64,3 +65,7 @@ class UnitOfWork(Protocol):
     def bind_tenant(self, tenant_id: UUID) -> None: ...
 
     async def commit(self) -> None: ...
+
+
+type UnitOfWorkFactory = Callable[[], UnitOfWork]
+"""Opens a fresh unit of work; use cases open one per business operation."""

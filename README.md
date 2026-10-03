@@ -82,6 +82,13 @@ just dev     # PostgreSQL in Docker + migrations, then the API on http://localho
 just check   # lint, types and tests: what CI runs
 ```
 
+Tenants are onboarded by an operator. With the database up, create one and its first admin (the
+password is prompted for, or read from standard input with `--password-stdin`):
+
+```sh
+uv run pricewright-admin create-tenant --name "Northfield Supply" --currency USD --tax-rate 0.0725 \n  --admin-email avery@northfield.example --admin-name "Avery Admin"
+```
+
 Configuration comes from environment variables; [.env.example](.env.example) documents them.
 
 ## Testing strategy
