@@ -13,7 +13,7 @@ dependencies = [
     "structlog>=26.1",
     "fastapi>=0.142",
     "uvicorn[standard]>=0.54",
-    "alembic>=1.20",
+    "alembic[tz]>=1.20",  # tz: tzdata, so the UTC file names also work on Windows
     "asyncpg>=0.31",
     "sqlalchemy[asyncio]>=2.1",
 ]
@@ -146,6 +146,10 @@ forbidden_modules = [
 
 [tool.alembic]
 script_location = "%(here)s/migrations"
+# Files sort by creation time, like Rails migrations: 2026_10_03_1448-<revision>_<slug>.py.
+# The order Alembic applies them in still comes from each file's down_revision.
+file_template = "%%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s"
+timezone = "UTC"
 
 # New revisions are formatted and linted like the rest of the code.
 [[tool.alembic.post_write_hooks]]

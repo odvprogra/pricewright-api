@@ -9,12 +9,14 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-# Deterministic constraint names keep Alembic autogenerate output stable and reviewable.
+# Deterministic constraint names keep Alembic autogenerate output stable and reviewable. They list
+# every column, so composite keys get distinct names; names over PostgreSQL's 63 characters are
+# shortened by SQLAlchemy with a stable hash suffix.
 NAMING_CONVENTION = {
-    "ix": "ix_%(column_0_label)s",
-    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ix": "ix_%(column_0_N_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_N_name)s",
     "ck": "ck_%(table_name)s_%(constraint_name)s",
-    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_N_name)s_%(referred_table_name)s",
     "pk": "pk_%(table_name)s",
 }
 
