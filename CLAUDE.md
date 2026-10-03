@@ -37,6 +37,7 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 just setup | just dev | just check | just test | just lint | just typecheck | just fmt
 just migrate | just migration "<message>"
 just openapi
+uv run pricewright-admin create-tenant --help   # operator commands (src/pricewright/cli.py)
 ```
 
 `just check` must pass before a task is considered done.

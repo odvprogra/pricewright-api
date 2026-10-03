@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 pricewright-api = "pricewright.main:main"
+pricewright-admin = "pricewright.main:admin"
 
 [dependency-groups]
 dev = [
@@ -123,7 +124,7 @@ name = "Dependencies point inward"
 type = "layers"
 layers = [
     "pricewright.main",
-    "pricewright.api | pricewright.infrastructure",
+    "pricewright.api | pricewright.cli | pricewright.infrastructure",
     "pricewright.application",
     "pricewright.domain",
 ]
