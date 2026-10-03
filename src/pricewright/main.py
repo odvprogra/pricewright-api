@@ -15,6 +15,7 @@ from pricewright import __version__, cli
 from pricewright.api.app import create_app
 from pricewright.api.dependencies import Services
 from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
+from pricewright.infrastructure.clock import utc_now
 from pricewright.infrastructure.database import create_engine, create_session_factory, ping
 from pricewright.infrastructure.logging import configure_logging
 from pricewright.infrastructure.passwords import Argon2PasswordHasher
@@ -42,6 +43,7 @@ def build_app(settings: Settings) -> FastAPI:
         access_tokens=JwtAccessTokens(
             settings.jwt_secret.get_secret_value(), settings.access_token_ttl
         ),
+        clock=utc_now,
     )
     return create_app(
         title=settings.service_name,
