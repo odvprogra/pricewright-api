@@ -635,7 +635,7 @@
     },
     "securitySchemes": {
       "HTTPBearer": {
-        "description": "An access token from `POST /api/v1/auth/login`",
+        "description": "An access token from `POST /api/v1/auth/login`, or a service account's API key.",
         "scheme": "bearer",
         "type": "http"
       }

@@ -10,6 +10,9 @@ from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 
 type Sessions = async_sessionmaker[AsyncSession]
 
+ADMIN_EMAIL = "avery@northfield.example"
+ADMIN_PASSWORD = "northfield admin passphrase"
+
 
 async def register(sessions: Sessions, name: str, *emails: str) -> tuple[Tenant, list[User]]:
     """A tenant with one sales rep per email."""
