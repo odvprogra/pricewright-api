@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from pricewright.api.app import create_app
 from pricewright.api.health import ReadinessCheck
+from tests.fakes import fake_services
 
 
 async def _ok() -> None:
@@ -19,7 +20,7 @@ async def _down() -> None:
 @pytest.fixture
 def app(request: pytest.FixtureRequest) -> FastAPI:
     checks: dict[str, ReadinessCheck] = getattr(request, "param", {})
-    return create_app(title="test", readiness_checks=checks)
+    return create_app(title="test", services=fake_services(), readiness_checks=checks)
 
 
 async def test_live_is_ok_without_checking_dependencies(client: httpx.AsyncClient) -> None:

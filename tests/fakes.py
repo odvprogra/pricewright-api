@@ -11,10 +11,12 @@ from types import TracebackType
 from typing import Self
 from uuid import UUID
 
+from pricewright.api.dependencies import Services
 from pricewright.application.ports import (
     IdentityLookup,
     IssuedToken,
     TenantRepository,
+    UnitOfWork,
     UserRepository,
 )
 from pricewright.domain.auth import AuthenticationError, Principal
@@ -160,3 +162,17 @@ class FakeAccessTokens:
             return Principal(uuid.UUID(tenant_id), uuid.UUID(user_id), Role(role))
         except ValueError as error:
             raise AuthenticationError("invalid access token") from error
+
+
+def fake_services(database: InMemoryDatabase | None = None) -> Services:
+    """API services backed by the fakes: an app that runs without infrastructure."""
+    shared = database if database is not None else InMemoryDatabase()
+
+    def unit_of_work() -> UnitOfWork:
+        return FakeUnitOfWork(shared)
+
+    return Services(
+        unit_of_work=unit_of_work,
+        hasher=FakePasswordHasher(),
+        access_tokens=FakeAccessTokens(),
+    )

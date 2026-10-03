@@ -64,3 +64,13 @@ async def _find(identities: IdentityLookup, raw_email: str) -> User | None:
     except RuleViolationError:
         return None  # a malformed email cannot belong to anyone
     return await identities.user_by_email(email)
+
+
+async def current_user(principal: Principal, *, unit_of_work: UnitOfWorkFactory) -> User:
+    """The signed-in user, as stored now: a deactivated or deleted user is no longer signed in."""
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        user = await uow.users.get(principal.user_id)
+    if user is None or not user.can_sign_in:
+        raise AuthenticationError("the account behind this token can no longer sign in")
+    return user

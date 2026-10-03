@@ -29,15 +29,15 @@ the first quote to the order.
 Pricewright is built in milestones; this table shows what works today. The full scope is in the
 [product brief](docs/brief.md).
 
-| Capability                                                                               | Milestone | Status |
-| ---------------------------------------------------------------------------------------- | --------- | ------ |
-| Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI  | M0        | Done   |
-| Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation | M1        | Next   |
-| Catalog and customers with cursor pagination and audit events                            | M2        |        |
-| Pricing engine: price waterfall with a per-line breakdown of every rule applied          | M3        |        |
-| Quotes with revisions, expiration, approvals and optimistic locking                      | M4        |        |
-| Idempotent conversion of accepted quotes into orders                                     | M6        |        |
-| Transactional outbox, worker, quote PDFs and email notifications                         | M5        |        |
+| Capability                                                                               | Milestone | Status      |
+| ---------------------------------------------------------------------------------------- | --------- | ----------- |
+| Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI  | M0        | Done        |
+| Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation | M1        | In progress |
+| Catalog and customers with cursor pagination and audit events                            | M2        |             |
+| Pricing engine: price waterfall with a per-line breakdown of every rule applied          | M3        |             |
+| Quotes with revisions, expiration, approvals and optimistic locking                      | M4        |             |
+| Idempotent conversion of accepted quotes into orders                                     | M6        |             |
+| Transactional outbox, worker, quote PDFs and email notifications                         | M5        |             |
 
 The web app lives in a separate repository, `pricewright-web` (from M7). It consumes this API the
 same way every other client does: through a released `openapi.json`.
@@ -88,6 +88,9 @@ password is prompted for, or read from standard input with `--password-stdin`):
 ```sh
 uv run pricewright-admin create-tenant --name "Northfield Supply" --currency USD --tax-rate 0.0725 \n  --admin-email avery@northfield.example --admin-name "Avery Admin"
 ```
+
+Then sign in at `POST /api/v1/auth/login` and paste the `access_token` into **Authorize** in the
+interactive docs; `GET /api/v1/me` shows who you are.
 
 Configuration comes from environment variables; [.env.example](.env.example) documents them.
 

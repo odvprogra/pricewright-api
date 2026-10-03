@@ -12,6 +12,7 @@ from pricewright.domain.errors import (
     NotFoundError,
     RuleViolationError,
 )
+from tests.fakes import fake_services
 
 NOT_FOUND_ID = 404
 CONFLICT_ID = 409
@@ -22,7 +23,7 @@ CRASH_ID = 500
 
 @pytest.fixture
 def app() -> FastAPI:
-    app = create_app(title="test")
+    app = create_app(title="test", services=fake_services())
 
     @app.get("/orders/{order_id}")
     async def get_order(order_id: int) -> dict[str, int]:

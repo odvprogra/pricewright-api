@@ -1,4 +1,5 @@
 from pricewright.api.app import create_app
+from tests.fakes import fake_services
 
 
 async def test_shutdown_hooks_run_when_the_app_stops() -> None:
@@ -7,7 +8,7 @@ async def test_shutdown_hooks_run_when_the_app_stops() -> None:
     async def close_pool() -> None:
         stopped.append("pool")
 
-    app = create_app(title="test", on_shutdown=[close_pool])
+    app = create_app(title="test", services=fake_services(), on_shutdown=[close_pool])
 
     async with app.router.lifespan_context(app):
         assert stopped == []
