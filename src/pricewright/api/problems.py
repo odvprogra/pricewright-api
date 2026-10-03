@@ -1,11 +1,12 @@
 """RFC 9457 Problem Details: one error format for every failure the API returns (HANDBOOK §8).
 
 ``type`` stays ``about:blank`` (so ``title`` is the HTTP status phrase); ``code`` is the stable,
-machine-readable identifier clients branch on.
+machine-readable identifier clients branch on. The OpenAPI document describes every error response
+the same way, so generated clients get the real error type.
 """
 
 from http import HTTPStatus
-from typing import cast
+from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -42,6 +43,8 @@ class FieldError(BaseModel):
 
 
 class Problem(BaseModel):
+    """An RFC 9457 problem: ``code`` identifies it; ``errors`` lists the invalid fields."""
+
     model_config = ConfigDict(frozen=True)
 
     type: str = "about:blank"
@@ -121,8 +124,43 @@ async def _http_error(request: Request, exc: Exception) -> JSONResponse:
     return response
 
 
+_SCHEMA_REF = "#/components/schemas/{model}"
+# FastAPI documents its default 422 with these; they no longer describe any response.
+_FASTAPI_VALIDATION_SCHEMAS = ("HTTPValidationError", "ValidationError")
+
+
+def _is_error(status: str) -> bool:
+    return status == "default" or status[0] in "45"
+
+
+def _document_problems(spec: dict[str, Any]) -> None:
+    """Describe every error response as Problem Details. Idempotent: FastAPI caches the spec."""
+    schemas = spec.setdefault("components", {}).setdefault("schemas", {})
+    problem = Problem.model_json_schema(ref_template=_SCHEMA_REF, mode="serialization")
+    schemas.update(problem.pop("$defs", {}))
+    schemas[Problem.__name__] = problem
+    content = {PROBLEM_JSON: {"schema": {"$ref": _SCHEMA_REF.format(model=Problem.__name__)}}}
+    for path_item in spec.get("paths", {}).values():
+        for operation in path_item.values():
+            for status, response in operation.get("responses", {}).items():
+                if _is_error(status):
+                    response["content"] = content
+    for name in _FASTAPI_VALIDATION_SCHEMAS:
+        schemas.pop(name, None)
+
+
 def register_problem_handlers(app: FastAPI) -> None:
-    """Map domain, validation and HTTP errors to Problem Details responses."""
+    """Map domain, validation and HTTP errors to Problem Details responses, and document them."""
     app.add_exception_handler(DomainError, _domain_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(HTTPException, _http_error)
+    generate_spec = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        spec = generate_spec()
+        _document_problems(spec)
+        return spec
+
+    # Replacing the method is FastAPI's documented way to extend the spec:
+    # https://fastapi.tiangolo.com/how-to/extending-openapi/
+    app.openapi = openapi  # type: ignore[method-assign]

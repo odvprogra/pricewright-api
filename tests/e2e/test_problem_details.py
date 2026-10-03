@@ -27,7 +27,7 @@ CRASH_ID = 500
 def app() -> FastAPI:
     app = create_app(title="test", services=fake_services())
 
-    @app.get("/orders/{order_id}")
+    @app.get("/orders/{order_id}", responses={404: {"description": "No such order"}})
     async def get_order(order_id: int) -> dict[str, int]:
         if order_id == FORBIDDEN_ID:
             raise PermissionDeniedError("this action needs the orders:manage permission")
@@ -107,3 +107,28 @@ async def test_unhandled_error_is_a_generic_500_without_internals(
     assert response.json()["code"] == "internal_error"
     assert "secret" not in response.text
     assert response.headers["x-request-id"]
+
+
+def test_openapi_documents_every_error_as_problem_details(app: FastAPI) -> None:
+    spec = app.openapi()
+
+    responses = spec["paths"]["/orders/{order_id}"]["get"]["responses"]
+    problem = {PROBLEM_JSON: {"schema": {"$ref": "#/components/schemas/Problem"}}}
+    assert responses["404"]["content"] == problem
+    assert responses["422"]["content"] == problem  # FastAPI's default validation error
+    assert "application/json" in responses["200"]["content"]
+    schemas = spec["components"]["schemas"]
+    assert {"Problem", "FieldError"} <= schemas.keys()
+    assert "HTTPValidationError" not in schemas
+
+
+def test_openapi_documents_routes_added_after_the_first_render(app: FastAPI) -> None:
+    app.openapi()
+
+    @app.delete("/orders/{order_id}", status_code=HTTPStatus.NO_CONTENT)
+    async def delete_order(order_id: int) -> None: ...
+
+    responses = app.openapi()["paths"]["/orders/{order_id}"]["delete"]["responses"]
+    assert responses["422"]["content"] == {
+        PROBLEM_JSON: {"schema": {"$ref": "#/components/schemas/Problem"}}
+    }
