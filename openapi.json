@@ -64,6 +64,45 @@
         "title": "Role",
         "type": "string"
       },
+      "TenantResponse": {
+        "properties": {
+          "approval_threshold": {
+            "description": "Quotes whose total discount exceeds it need a manager's approval.",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Approval Threshold",
+            "type": "string"
+          },
+          "currency": {
+            "description": "ISO 4217 code; every price of the tenant is in it.",
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tax_rate": {
+            "description": "Flat tax rate applied to quotes, e.g. 0.0725.",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tax Rate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "currency",
+          "tax_rate",
+          "approval_threshold"
+        ],
+        "title": "TenantResponse",
+        "type": "object"
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -332,6 +371,35 @@
         "summary": "The signed-in user",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/api/v1/tenant": {
+      "get": {
+        "operationId": "read_tenant_api_v1_tenant_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid access token"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The signed-in user's tenant and its settings",
+        "tags": [
+          "tenant"
         ]
       }
     },

@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from pricewright.api.app import create_app
 from pricewright.api.problems import PROBLEM_JSON
+from pricewright.domain.auth import PermissionDeniedError
 from pricewright.domain.errors import (
     ConflictError,
     DomainError,
@@ -14,6 +15,7 @@ from pricewright.domain.errors import (
 )
 from tests.fakes import fake_services
 
+FORBIDDEN_ID = 403
 NOT_FOUND_ID = 404
 CONFLICT_ID = 409
 RULE_ID = 422
@@ -27,6 +29,8 @@ def app() -> FastAPI:
 
     @app.get("/orders/{order_id}")
     async def get_order(order_id: int) -> dict[str, int]:
+        if order_id == FORBIDDEN_ID:
+            raise PermissionDeniedError("this action needs the orders:manage permission")
         if order_id == NOT_FOUND_ID:
             raise NotFoundError(f"Order {order_id} does not exist.")
         if order_id == CONFLICT_ID:
@@ -45,6 +49,7 @@ def app() -> FastAPI:
 @pytest.mark.parametrize(
     ("order_id", "status", "code"),
     [
+        (FORBIDDEN_ID, HTTPStatus.FORBIDDEN, "permission_denied"),
         (NOT_FOUND_ID, HTTPStatus.NOT_FOUND, "not_found"),
         (CONFLICT_ID, HTTPStatus.CONFLICT, "conflict"),
         (RULE_ID, HTTPStatus.UNPROCESSABLE_CONTENT, "rule_violation"),
