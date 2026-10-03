@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from pricewright.application.ports import UnitOfWorkFactory
+from pricewright.application.audit import record, tenant_fields
+from pricewright.application.ports import Clock, UnitOfWorkFactory
+from pricewright.domain.audit import AuditAction, changed
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.tenants import Tenant
@@ -34,6 +36,7 @@ async def change_tenant(
     *,
     expected_version: int,
     unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
 ) -> Tenant:
     """Apply the changes if the tenant is still at ``expected_version`` (ADR-0012)."""
     principal.require(Permission.TENANT_MANAGE)
@@ -44,11 +47,20 @@ async def change_tenant(
             raise NotFoundError("the tenant no longer exists")
         if tenant.version != expected_version:
             raise StaleVersionError("the tenant was changed by someone else; reload it")
+        before = tenant_fields(tenant)
         tenant.change(
             name=changes.name,
             tax_rate=changes.tax_rate,
             approval_threshold=changes.approval_threshold,
         )
         await uow.tenants.save(tenant)
+        await record(
+            uow,
+            principal,
+            AuditAction.TENANT_UPDATED,
+            tenant.id,
+            changed(before, tenant_fields(tenant)),
+            now=clock(),
+        )
         await uow.commit()
     return tenant

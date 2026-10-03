@@ -4,8 +4,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
+from pricewright.application.audit import api_key_fields, record, service_account_fields
 from pricewright.application.pagination import Page
 from pricewright.application.ports import Clock, UnitOfWork, UnitOfWorkFactory
+from pricewright.domain.audit import AuditAction, changed, created
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError
 from pricewright.domain.service_accounts import (
@@ -30,12 +32,21 @@ async def create_service_account(
     name: str,
     scopes: frozenset[Permission],
     unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
 ) -> ServiceAccount:
     principal.require(Permission.SERVICE_ACCOUNTS_MANAGE)
     account = ServiceAccount.create(tenant_id=principal.tenant_id, name=name, scopes=scopes)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
         await uow.service_accounts.add(account)
+        await record(
+            uow,
+            principal,
+            AuditAction.SERVICE_ACCOUNT_CREATED,
+            account.id,
+            created(service_account_fields(account)),
+            now=clock(),
+        )
         await uow.commit()  # a duplicate name in the tenant is a ConflictError
     return account
 
@@ -79,8 +90,11 @@ async def issue_api_key(
             raise TooManyApiKeysError(
                 f"a service account has at most {MAX_ACTIVE_KEYS} active keys; revoke one first"
             )
-        key = ApiKey.issue(account, key=secret, now=clock(), expires_at=expires_at)
+        now = clock()
+        key = ApiKey.issue(account, key=secret, now=now, expires_at=expires_at)
         await uow.api_keys.add(key)
+        changes = created(api_key_fields(key))
+        await record(uow, principal, AuditAction.API_KEY_ISSUED, key.id, changes, now=now)
         await uow.commit()
     return IssuedApiKey(key=key, secret=secret)
 
@@ -111,8 +125,12 @@ async def revoke_api_key(
         key = await uow.api_keys.get(key_id)
         if key is None or key.service_account_id != account_id:
             raise NotFoundError("no such API key")
-        key.revoke(clock())
+        now = clock()
+        before = api_key_fields(key)
+        key.revoke(now)
         await uow.api_keys.save(key)
+        changes = changed(before, api_key_fields(key))
+        await record(uow, principal, AuditAction.API_KEY_REVOKED, key.id, changes, now=now)
         await uow.commit()
 
 

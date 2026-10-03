@@ -6,11 +6,12 @@ import pytest
 
 from pricewright.application.ports import UnitOfWork
 from pricewright.application.tenants import TenantChanges, change_tenant, get_tenant
+from pricewright.domain.audit import ActorType, AuditAction
 from pricewright.domain.auth import PermissionDeniedError, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role
-from tests.fakes import FakeUnitOfWork, InMemoryDatabase
+from tests.fakes import FakeClock, FakeUnitOfWork, InMemoryDatabase
 
 NORTHFIELD = Tenant.register(
     name="Northfield Supply", settings=TenantSettings("USD", Decimal("0.0725"))
@@ -44,16 +45,21 @@ async def test_get_tenant_of_a_tenant_that_no_longer_exists_is_not_found() -> No
 
 
 async def change(
-    database: InMemoryDatabase, role: Role, changes: TenantChanges, version: int = 1
+    database: InMemoryDatabase,
+    role: Role,
+    changes: TenantChanges,
+    version: int = 1,
+    principal: Principal | None = None,
 ) -> Tenant:
     def unit_of_work() -> UnitOfWork:
         return FakeUnitOfWork(database)
 
     return await change_tenant(
-        Principal(NORTHFIELD.id, uuid.uuid7(), role),
+        principal or Principal(NORTHFIELD.id, uuid.uuid7(), role),
         changes,
         expected_version=version,
         unit_of_work=unit_of_work,
+        clock=FakeClock(),
     )
 
 
@@ -84,8 +90,35 @@ async def test_change_tenant_based_on_an_old_version_is_rejected() -> None:
         await change(database, Role.ADMIN, TenantChanges(name="Second edit"), version=1)
 
     assert database.tenants[NORTHFIELD.id].name == "First edit"
+    assert len(database.audit_events) == 1  # the rejected edit left no event
 
 
 async def test_change_tenant_that_no_longer_exists_is_not_found() -> None:
     with pytest.raises(NotFoundError):
         await change(InMemoryDatabase(), Role.ADMIN, TenantChanges(name="Ghost"))
+
+
+async def test_change_tenant_records_who_changed_which_settings() -> None:
+    database = InMemoryDatabase(tenants={NORTHFIELD.id: copy.deepcopy(NORTHFIELD)})
+    admin = Principal(NORTHFIELD.id, uuid.uuid7(), Role.ADMIN)
+
+    await change(
+        database,
+        Role.ADMIN,
+        TenantChanges(name="Northfield Supply", tax_rate=Decimal("0.08")),
+        principal=admin,
+    )
+
+    [event] = database.audit_events.values()
+    assert event.action is AuditAction.TENANT_UPDATED
+    assert (event.actor_type, event.actor_id) == (ActorType.USER, admin.subject_id)
+    assert event.resource_id == NORTHFIELD.id
+    assert event.changes == {"tax_rate": ("0.0725", "0.08")}  # the unchanged name is left out
+
+
+async def test_change_tenant_that_changes_nothing_records_no_event() -> None:
+    database = InMemoryDatabase(tenants={NORTHFIELD.id: copy.deepcopy(NORTHFIELD)})
+
+    await change(database, Role.ADMIN, TenantChanges(name="Northfield Supply"))
+
+    assert database.audit_events == {}

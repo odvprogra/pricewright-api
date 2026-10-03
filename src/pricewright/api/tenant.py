@@ -92,6 +92,7 @@ async def update_tenant(
         ),
         expected_version=expected_version(if_match),
         unit_of_work=services.unit_of_work,
+        clock=services.clock,
     )
     response.headers["ETag"] = etag(tenant.version)
     return TenantResponse.of(tenant)

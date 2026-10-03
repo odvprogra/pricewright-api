@@ -50,8 +50,8 @@ def test_audit_action_names_its_resource_before_the_verb(action: AuditAction) ->
     assert verb.endswith("ed")  # past tense: it already happened
 
 
-def test_created_changes_start_every_field_from_nothing() -> None:
-    assert created({"name": "ops-copilot", "is_active": True}) == {
+def test_created_changes_start_every_set_field_from_nothing() -> None:
+    assert created({"name": "ops-copilot", "is_active": True, "expires_at": None}) == {
         "name": (None, "ops-copilot"),
         "is_active": (None, True),
     }

@@ -140,6 +140,7 @@ async def add_user(
         ),
         unit_of_work=services.unit_of_work,
         hasher=services.hasher,
+        clock=services.clock,
     )
     response.headers["Location"] = f"{router.prefix}/{user.id}"
     response.headers["ETag"] = etag(user.version)
@@ -171,6 +172,7 @@ async def update_user(
         UserChanges(full_name=body.full_name, role=body.role, is_active=body.is_active),
         expected_version=expected_version(if_match),
         unit_of_work=services.unit_of_work,
+        clock=services.clock,
     )
     response.headers["ETag"] = etag(user.version)
     return UserResponse.of(user)
@@ -184,6 +186,8 @@ async def update_user(
 async def unlock(
     user_id: UUID, principal: PrincipalDep, services: ServicesDep, response: Response
 ) -> UserResponse:
-    user = await unlock_user(principal, user_id, unit_of_work=services.unit_of_work)
+    user = await unlock_user(
+        principal, user_id, unit_of_work=services.unit_of_work, clock=services.clock
+    )
     response.headers["ETag"] = etag(user.version)
     return UserResponse.of(user)
