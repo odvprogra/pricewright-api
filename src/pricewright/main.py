@@ -9,23 +9,43 @@ from pathlib import Path
 import structlog
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from pricewright import __version__, cli
 from pricewright.api.app import create_app
-from pricewright.application.ports import UnitOfWork
+from pricewright.api.dependencies import Services
+from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
 from pricewright.infrastructure.database import create_engine, create_session_factory, ping
 from pricewright.infrastructure.logging import configure_logging
 from pricewright.infrastructure.passwords import Argon2PasswordHasher
+from pricewright.infrastructure.tokens import JwtAccessTokens
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from pricewright.settings import LogFormat, Settings
+
+
+def units_of_work(engine: AsyncEngine) -> UnitOfWorkFactory:
+    sessions = create_session_factory(engine)
+
+    def unit_of_work() -> UnitOfWork:
+        return SqlAlchemyUnitOfWork(sessions)
+
+    return unit_of_work
 
 
 def build_app(settings: Settings) -> FastAPI:
     """Wire the application for the given settings."""
     configure_logging(settings.log_level, json=settings.log_format is LogFormat.JSON)
     engine = create_engine(settings.database_url.get_secret_value())
+    services = Services(
+        unit_of_work=units_of_work(engine),
+        hasher=Argon2PasswordHasher(),
+        access_tokens=JwtAccessTokens(
+            settings.jwt_secret.get_secret_value(), settings.access_token_ttl
+        ),
+    )
     return create_app(
         title=settings.service_name,
+        services=services,
         readiness_checks={"database": partial(ping, engine)},
         on_shutdown=[engine.dispose],
     )
@@ -67,15 +87,10 @@ def admin() -> None:
 
     async def run() -> int:
         engine = create_engine(settings.database_url.get_secret_value())
-        sessions = create_session_factory(engine)
-
-        def unit_of_work() -> UnitOfWork:
-            return SqlAlchemyUnitOfWork(sessions)
-
         try:
             return await cli.run(
                 sys.argv[1:],
-                unit_of_work=unit_of_work,
+                unit_of_work=units_of_work(engine),
                 hasher=Argon2PasswordHasher(),
                 console=cli.Console(stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr),
             )

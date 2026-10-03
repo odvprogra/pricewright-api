@@ -5,11 +5,12 @@ import pytest
 from fastapi import FastAPI
 
 from pricewright.api.app import create_app
+from tests.fakes import fake_services
 
 
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app(title="test")
+    return create_app(title="test", services=fake_services())
 
 
 @pytest.fixture

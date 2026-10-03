@@ -9,7 +9,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from pricewright import __version__
-from pricewright.api import health
+from pricewright.api import auth, health, me
+from pricewright.api.dependencies import Services
 from pricewright.api.health import ReadinessCheck
 from pricewright.api.middleware import RequestContextMiddleware
 from pricewright.api.problems import register_problem_handlers
@@ -20,6 +21,7 @@ type ShutdownHook = Callable[[], Awaitable[None]]
 def create_app(
     *,
     title: str,
+    services: Services,
     readiness_checks: Mapping[str, ReadinessCheck] | None = None,
     on_shutdown: Sequence[ShutdownHook] = (),
 ) -> FastAPI:
@@ -30,8 +32,11 @@ def create_app(
             await hook()
 
     app = FastAPI(title=title, version=__version__, lifespan=lifespan)
+    app.state.services = services
     app.state.readiness_checks = dict(readiness_checks or {})
     app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(me.router)
     register_problem_handlers(app)
     app.add_middleware(RequestContextMiddleware)
     return app

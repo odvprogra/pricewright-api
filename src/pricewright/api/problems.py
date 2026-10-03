@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.exceptions import HTTPException
 
+from pricewright.domain.auth import AuthenticationError
 from pricewright.domain.errors import (
     ConflictError,
     DomainError,
@@ -23,6 +24,7 @@ from pricewright.domain.errors import (
 PROBLEM_JSON = "application/problem+json"
 
 DOMAIN_ERROR_STATUS: dict[type[DomainError], HTTPStatus] = {
+    AuthenticationError: HTTPStatus.UNAUTHORIZED,
     NotFoundError: HTTPStatus.NOT_FOUND,
     ConflictError: HTTPStatus.CONFLICT,
     RuleViolationError: HTTPStatus.UNPROCESSABLE_CONTENT,
@@ -81,9 +83,13 @@ def _status_for(error: DomainError) -> HTTPStatus:
 
 async def _domain_error(request: Request, exc: Exception) -> JSONResponse:
     error = cast(DomainError, exc)
-    return problem_response(
-        _status_for(error), code=error.code, instance=request.url.path, detail=str(error) or None
+    status = _status_for(error)
+    response = problem_response(
+        status, code=error.code, instance=request.url.path, detail=str(error) or None
     )
+    if status is HTTPStatus.UNAUTHORIZED:
+        response.headers["WWW-Authenticate"] = "Bearer"  # RFC 6750 §3
+    return response
 
 
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
