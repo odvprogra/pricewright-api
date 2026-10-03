@@ -10,6 +10,7 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from pricewright.domain.audit import AuditAction, AuditEvent
 from pricewright.domain.auth import Principal
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -108,6 +109,28 @@ class ApiKeyRepository(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class AuditEventFilter:
+    """Which audit events to list; a field left as ``None`` matches every event."""
+
+    resource_type: str | None = None
+    resource_id: UUID | None = None
+    actor_id: UUID | None = None
+    action: AuditAction | None = None
+
+
+class AuditEventRepository(Protocol):
+    """Audit events of the unit of work's tenant only (ADR-0006); append-only (ADR-0013)."""
+
+    async def add(self, event: AuditEvent) -> None: ...
+
+    async def page(
+        self, where: AuditEventFilter, *, before: UUID | None, limit: int
+    ) -> list[AuditEvent]:
+        """Newest first: up to ``limit`` matching events older than ``before`` (keyset on id)."""
+        ...
+
+
 class IdentityLookup(Protocol):
     """The only cross-tenant reads: finding who is signing in before their tenant is known."""
 
@@ -161,6 +184,7 @@ class UnitOfWork(Protocol):
     refresh_tokens: RefreshTokenRepository
     service_accounts: ServiceAccountRepository
     api_keys: ApiKeyRepository
+    audit_events: AuditEventRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...

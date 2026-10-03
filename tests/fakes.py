@@ -5,6 +5,7 @@ tenant scoping, explicit commits and unique emails.
 """
 
 import copy
+import dataclasses
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,8 @@ from uuid import UUID
 from pricewright.api.dependencies import Services
 from pricewright.application.ports import (
     ApiKeyRepository,
+    AuditEventFilter,
+    AuditEventRepository,
     IdentityLookup,
     IssuedToken,
     RefreshTokenRepository,
@@ -23,12 +26,14 @@ from pricewright.application.ports import (
     UnitOfWork,
     UserRepository,
 )
+from pricewright.domain.audit import AuditEvent
 from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
+from pricewright.infrastructure.logging import current_request_id
 
 
 @dataclass
@@ -38,6 +43,7 @@ class InMemoryDatabase:
     refresh_tokens: dict[UUID, RefreshToken] = field(default_factory=dict)
     service_accounts: dict[UUID, ServiceAccount] = field(default_factory=dict)
     api_keys: dict[UUID, ApiKey] = field(default_factory=dict)
+    audit_events: dict[UUID, AuditEvent] = field(default_factory=dict)
 
 
 class FakeTenantRepository:
@@ -192,6 +198,34 @@ class FakeApiKeyRepository:
             stored.last_used_at, stored.revoked_at = key.last_used_at, key.revoked_at
 
 
+class FakeAuditEventRepository:
+    def __init__(self, events: dict[UUID, AuditEvent], uow: FakeUnitOfWork) -> None:
+        self._events = events
+        self._uow = uow
+
+    async def add(self, event: AuditEvent) -> None:
+        if event.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("an audit event can only be added to the unit of work's tenant")
+        request_id = event.request_id or current_request_id()
+        self._events[event.id] = dataclasses.replace(event, request_id=request_id)
+
+    async def page(
+        self, where: AuditEventFilter, *, before: UUID | None, limit: int
+    ) -> list[AuditEvent]:
+        def matches(event: AuditEvent) -> bool:
+            return (
+                event.tenant_id == self._uow.tenant_id
+                and where.resource_type in {None, event.resource_type}
+                and where.resource_id in {None, event.resource_id}
+                and where.actor_id in {None, event.actor_id}
+                and where.action in {None, event.action}
+                and (before is None or event.id < before)
+            )
+
+        newest_first = sorted(self._events.values(), key=lambda event: event.id, reverse=True)
+        return [event for event in newest_first if matches(event)][:limit]
+
+
 class FakeIdentityLookup:
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -218,6 +252,7 @@ class FakeUnitOfWork:
     refresh_tokens: RefreshTokenRepository
     service_accounts: ServiceAccountRepository
     api_keys: ApiKeyRepository
+    audit_events: AuditEventRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -231,6 +266,7 @@ class FakeUnitOfWork:
         self.refresh_tokens = FakeRefreshTokenRepository(self._staged.refresh_tokens, self)
         self.service_accounts = FakeServiceAccountRepository(self._staged.service_accounts, self)
         self.api_keys = FakeApiKeyRepository(self._staged.api_keys, self)
+        self.audit_events = FakeAuditEventRepository(self._staged.audit_events, self)
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
@@ -264,6 +300,7 @@ class FakeUnitOfWork:
         self._database.refresh_tokens = copy.deepcopy(self._staged.refresh_tokens)
         self._database.service_accounts = copy.deepcopy(self._staged.service_accounts)
         self._database.api_keys = copy.deepcopy(self._staged.api_keys)
+        self._database.audit_events = copy.deepcopy(self._staged.audit_events)
 
 
 class FakePasswordHasher:
