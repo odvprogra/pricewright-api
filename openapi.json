@@ -1,6 +1,95 @@
 {
   "components": {
     "schemas": {
+      "ApiKeyList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiKeyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ApiKeyList",
+        "type": "object"
+      },
+      "ApiKeyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional expiry, with a time zone. Omit for a key that lasts.",
+            "title": "Expires At"
+          }
+        },
+        "title": "ApiKeyRequest",
+        "type": "object"
+      },
+      "ApiKeyResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "hint": {
+            "description": "The key's first characters, to tell keys apart.",
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Updated at most once an hour.",
+            "title": "Last Used At"
+          }
+        },
+        "required": [
+          "id",
+          "hint",
+          "created_at",
+          "expires_at",
+          "last_used_at"
+        ],
+        "title": "ApiKeyResponse",
+        "type": "object"
+      },
       "CreateUserRequest": {
         "additionalProperties": false,
         "properties": {
@@ -51,6 +140,65 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IssuedApiKeyResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "hint": {
+            "description": "The key's first characters, to tell keys apart.",
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "description": "Send it as `Authorization: Bearer <key>`. Shown once: it is not stored.",
+            "title": "Key",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Updated at most once an hour.",
+            "title": "Last Used At"
+          }
+        },
+        "required": [
+          "id",
+          "hint",
+          "created_at",
+          "expires_at",
+          "last_used_at",
+          "key"
+        ],
+        "title": "IssuedApiKeyResponse",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -76,6 +224,17 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "Permission": {
+        "description": "``resource:action``. New permissions arrive with the features that need them.",
+        "enum": [
+          "tenant:read",
+          "tenant:manage",
+          "users:manage",
+          "service_accounts:manage"
+        ],
+        "title": "Permission",
+        "type": "string"
+      },
       "RefreshTokenRequest": {
         "properties": {
           "refresh_token": {
@@ -100,6 +259,93 @@
         ],
         "title": "Role",
         "type": "string"
+      },
+      "ServiceAccountPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceAccountResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ServiceAccountPage",
+        "type": "object"
+      },
+      "ServiceAccountRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "examples": [
+              "erp-mcp-server"
+            ],
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "Permissions the account acts with; never administrative ones.",
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "scopes"
+        ],
+        "title": "ServiceAccountRequest",
+        "type": "object"
+      },
+      "ServiceAccountResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scopes",
+          "is_active"
+        ],
+        "title": "ServiceAccountResponse",
+        "type": "object"
       },
       "TenantPatch": {
         "additionalProperties": false,
@@ -549,6 +795,377 @@
         "summary": "The signed-in user",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/api/v1/service-accounts": {
+      "get": {
+        "operationId": "read_service_accounts_api_v1_service_accounts_get",
+        "parameters": [
+          {
+            "description": "Page size, 1 to 100.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Page size, 1 to 100.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "`next_cursor` from the previous page; omit for the first.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page; omit for the first.",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Only admins manage service accounts (`service_accounts:manage`)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The tenant's service accounts, oldest first",
+        "tags": [
+          "service accounts"
+        ]
+      },
+      "post": {
+        "operationId": "add_service_account_api_v1_service_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Only admins manage service accounts (`service_accounts:manage`)"
+          },
+          "409": {
+            "description": "The tenant already has an account with that name"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add a service account",
+        "tags": [
+          "service accounts"
+        ]
+      }
+    },
+    "/api/v1/service-accounts/{account_id}": {
+      "get": {
+        "operationId": "read_service_account_api_v1_service_accounts__account_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Only admins manage service accounts (`service_accounts:manage`)"
+          },
+          "404": {
+            "description": "No such service account or key in this tenant (ADR-0009)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One service account",
+        "tags": [
+          "service accounts"
+        ]
+      }
+    },
+    "/api/v1/service-accounts/{account_id}/keys": {
+      "get": {
+        "operationId": "read_api_keys_api_v1_service_accounts__account_id__keys_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Only admins manage service accounts (`service_accounts:manage`)"
+          },
+          "404": {
+            "description": "No such service account or key in this tenant (ADR-0009)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The account's active API keys (never the keys themselves)",
+        "tags": [
+          "service accounts"
+        ]
+      },
+      "post": {
+        "operationId": "add_api_key_api_v1_service_accounts__account_id__keys_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedApiKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Only admins manage service accounts (`service_accounts:manage`)"
+          },
+          "404": {
+            "description": "No such service account or key in this tenant (ADR-0009)"
+          },
+          "409": {
+            "description": "The account already has two active keys; revoke one first"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Issue an API key (shown once)",
+        "tags": [
+          "service accounts"
+        ]
+      }
+    },
+    "/api/v1/service-accounts/{account_id}/keys/{key_id}": {
+      "delete": {
+        "operationId": "delete_api_key_api_v1_service_accounts__account_id__keys__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "description": "Only admins manage service accounts (`service_accounts:manage`)"
+          },
+          "404": {
+            "description": "No such service account or key in this tenant (ADR-0009)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke an API key for good",
+        "tags": [
+          "service accounts"
         ]
       }
     },

@@ -83,7 +83,9 @@ class ServiceAccountRepository(Protocol):
 
     async def add(self, account: ServiceAccount) -> None: ...
 
-    async def get(self, account_id: UUID) -> ServiceAccount | None: ...
+    async def get(self, account_id: UUID, *, lock: bool = False) -> ServiceAccount | None:
+        """With ``lock``, the account stays locked until commit (serializes key issuance)."""
+        ...
 
     async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
         """Up to ``limit`` accounts ordered by id, starting after ``after``."""

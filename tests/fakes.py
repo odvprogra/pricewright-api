@@ -147,7 +147,8 @@ class FakeServiceAccountRepository:
             raise RuntimeError("a service account can only be added to the unit of work's tenant")
         self._accounts[account.id] = account
 
-    async def get(self, account_id: UUID) -> ServiceAccount | None:
+    async def get(self, account_id: UUID, *, lock: bool = False) -> ServiceAccount | None:
+        del lock  # one fake unit of work at a time: there is nothing to lock against
         account = self._accounts.get(account_id)
         if account is None or account.tenant_id != self._uow.tenant_id:
             return None
@@ -253,8 +254,10 @@ class FakeUnitOfWork:
         self._tenant_id = tenant_id
 
     async def commit(self) -> None:
+        # The same unique constraints as the database: emails, and account names per tenant.
         emails = [user.email for user in self._staged.users.values()]
-        if len(emails) != len(set(emails)):
+        names = [(a.tenant_id, a.name) for a in self._staged.service_accounts.values()]
+        if len(emails) != len(set(emails)) or len(names) != len(set(names)):
             raise ConflictError("the change conflicts with an existing record")
         self._database.tenants = copy.deepcopy(self._staged.tenants)
         self._database.users = copy.deepcopy(self._staged.users)
