@@ -97,10 +97,11 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
    - Invalid transitions raise a domain error → 409 Problem Details.
 
 5. Converting to an order is **idempotent** (`Idempotency-Key`) and snapshots prices and tax.
-6. Totals: line totals rounded to 2 decimals with `ROUND_HALF_EVEN`; net subtotal = sum of rounded
-   lines; tax = flat tenant `tax_rate` applied once to the net subtotal, rounded the same way; total
-   = net subtotal + tax. Orders snapshot the tax rate and amounts. Property-based tests prove totals
-   always reconcile.
+6. Totals: line totals rounded to the currency's minor units (2 decimals for USD) half up, ties away
+   from zero (`ROUND_HALF_UP`, [ADR-0003](adr/0003-money-as-an-exact-decimal-with-its-currency.md));
+   net subtotal = sum of rounded lines; tax = flat tenant `tax_rate` applied once to the net
+   subtotal, rounded the same way; total = net subtotal + tax. Orders snapshot the tax rate and
+   amounts. Property-based tests prove totals always reconcile.
 7. Tenant isolation: no API call can ever read or write another tenant's data. Tested explicitly.
 
 ## 5. Architecture
