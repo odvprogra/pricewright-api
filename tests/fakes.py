@@ -7,6 +7,7 @@ tenant scoping, explicit commits and unique emails.
 import copy
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from types import TracebackType
 from typing import Self
 from uuid import UUID
@@ -15,12 +16,14 @@ from pricewright.api.dependencies import Services
 from pricewright.application.ports import (
     IdentityLookup,
     IssuedToken,
+    RefreshTokenRepository,
     TenantRepository,
     UnitOfWork,
     UserRepository,
 )
 from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.errors import ConflictError
+from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
 
@@ -29,6 +32,7 @@ from pricewright.domain.users import Role, User
 class InMemoryDatabase:
     tenants: dict[UUID, Tenant] = field(default_factory=dict)
     users: dict[UUID, User] = field(default_factory=dict)
+    refresh_tokens: dict[UUID, RefreshToken] = field(default_factory=dict)
 
 
 class FakeTenantRepository:
@@ -65,13 +69,44 @@ class FakeUserRepository:
         self._users[user.id] = copy.deepcopy(user)
 
 
+class FakeRefreshTokenRepository:
+    def __init__(self, tokens: dict[UUID, RefreshToken], uow: FakeUnitOfWork) -> None:
+        self._tokens = tokens
+        self._uow = uow
+
+    def _owned(self) -> list[RefreshToken]:
+        return [token for token in self._tokens.values() if token.tenant_id == self._uow.tenant_id]
+
+    async def add(self, token: RefreshToken) -> None:
+        if token.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("a refresh token can only be added to the unit of work's tenant")
+        self._tokens[token.id] = token
+
+    async def claim(self, token_id: UUID, now: datetime) -> bool:
+        token = next((token for token in self._owned() if token.id == token_id), None)
+        if token is None or token.used_at is not None or token.revoked_at is not None:
+            return False
+        token.used_at = now
+        return True
+
+    async def revoke_family(self, family_id: UUID, now: datetime) -> None:
+        for token in self._owned():
+            if token.family_id == family_id and token.revoked_at is None:
+                token.revoked_at = now
+
+
 class FakeIdentityLookup:
-    def __init__(self, users: dict[UUID, User]) -> None:
-        self._users = users
+    def __init__(self, database: InMemoryDatabase) -> None:
+        self._database = database
 
     async def user_by_email(self, email: str) -> User | None:
-        user = next((user for user in self._users.values() if user.email == email), None)
-        return copy.deepcopy(user)
+        users = self._database.users.values()
+        return copy.deepcopy(next((user for user in users if user.email == email), None))
+
+    async def refresh_token_by_digest(self, token_digest: str) -> RefreshToken | None:
+        tokens = self._database.refresh_tokens.values()
+        found = next((token for token in tokens if token.token_digest == token_digest), None)
+        return copy.deepcopy(found)
 
 
 class FakeUnitOfWork:
@@ -79,6 +114,7 @@ class FakeUnitOfWork:
 
     tenants: TenantRepository
     users: UserRepository
+    refresh_tokens: RefreshTokenRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -89,7 +125,8 @@ class FakeUnitOfWork:
         self._staged = copy.deepcopy(self._database)
         self.tenants = FakeTenantRepository(self._staged.tenants)
         self.users = FakeUserRepository(self._staged.users, self)
-        self.identities = FakeIdentityLookup(self._staged.users)
+        self.refresh_tokens = FakeRefreshTokenRepository(self._staged.refresh_tokens, self)
+        self.identities = FakeIdentityLookup(self._staged)
         return self
 
     async def __aexit__(
@@ -117,6 +154,7 @@ class FakeUnitOfWork:
             raise ConflictError("the change conflicts with an existing record")
         self._database.tenants = copy.deepcopy(self._staged.tenants)
         self._database.users = copy.deepcopy(self._staged.users)
+        self._database.refresh_tokens = copy.deepcopy(self._staged.refresh_tokens)
 
 
 class FakePasswordHasher:

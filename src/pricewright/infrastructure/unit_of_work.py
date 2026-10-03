@@ -7,10 +7,16 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from pricewright.application.ports import IdentityLookup, TenantRepository, UserRepository
+from pricewright.application.ports import (
+    IdentityLookup,
+    RefreshTokenRepository,
+    TenantRepository,
+    UserRepository,
+)
 from pricewright.domain.errors import ConflictError
 from pricewright.infrastructure.repositories import (
     SqlAlchemyIdentityLookup,
+    SqlAlchemyRefreshTokenRepository,
     SqlAlchemyTenantRepository,
     SqlAlchemyUserRepository,
     TenantScope,
@@ -24,6 +30,7 @@ class SqlAlchemyUnitOfWork:
 
     tenants: TenantRepository
     users: UserRepository
+    refresh_tokens: RefreshTokenRepository
     identities: IdentityLookup
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -35,6 +42,7 @@ class SqlAlchemyUnitOfWork:
         self._session = self._session_factory()
         self.tenants = SqlAlchemyTenantRepository(self._session)
         self.users = SqlAlchemyUserRepository(self._session, self._scope)
+        self.refresh_tokens = SqlAlchemyRefreshTokenRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
         return self
 
