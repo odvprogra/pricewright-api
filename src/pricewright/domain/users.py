@@ -46,6 +46,13 @@ def normalize_email(raw: str) -> str:
     return email
 
 
+def normalize_full_name(raw: str) -> str:
+    full_name = raw.strip()
+    if not full_name or len(full_name) > MAX_NAME_LENGTH:
+        raise InvalidUserError(f"full_name must have 1 to {MAX_NAME_LENGTH} characters")
+    return full_name
+
+
 def canonical_password(raw: str) -> str:
     """NFKC-normalize (NIST SP 800-63B-4 §3.1.1.2), so equivalent input always hashes the same."""
     return unicodedata.normalize("NFKC", raw)
@@ -96,14 +103,11 @@ class User:
         role: Role,
         password_hash: str,
     ) -> User:
-        full_name = full_name.strip()
-        if not full_name or len(full_name) > MAX_NAME_LENGTH:
-            raise InvalidUserError(f"full_name must have 1 to {MAX_NAME_LENGTH} characters")
         return cls(
             id=uuid.uuid7(),
             tenant_id=tenant_id,
             email=normalize_email(email),
-            full_name=full_name,
+            full_name=normalize_full_name(full_name),
             role=role,
             password_hash=password_hash,
         )
