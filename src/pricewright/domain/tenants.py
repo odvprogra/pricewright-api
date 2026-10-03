@@ -1,17 +1,16 @@
 """Tenants: the distributor companies that use Pricewright, and the settings pricing depends on."""
 
-import re
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 
 from pricewright.domain.errors import RuleViolationError
+from pricewright.domain.money import CURRENCY_CODE
 
 DEFAULT_APPROVAL_THRESHOLD = Decimal("0.15")
 # Rates are stored as NUMERIC(5, 4): 0.0725 is 7.25%. More places would be rounded silently.
 RATE_DECIMAL_PLACES = 4
 MAX_NAME_LENGTH = 200
-_CURRENCY_CODE = re.compile(r"[A-Z]{3}")
 
 
 class InvalidTenantError(RuleViolationError):
@@ -36,7 +35,7 @@ class TenantSettings:
     approval_threshold: Decimal = DEFAULT_APPROVAL_THRESHOLD
 
     def __post_init__(self) -> None:
-        if not _CURRENCY_CODE.fullmatch(self.currency):
+        if not CURRENCY_CODE.fullmatch(self.currency):
             raise InvalidTenantError("currency must be an ISO 4217 code such as USD")
         _require_rate(self.tax_rate, "tax_rate", low=Decimal(0), high=Decimal(1), high_ok=False)
         _require_rate(
