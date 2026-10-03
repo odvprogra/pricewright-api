@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from pricewright import __version__
-from pricewright.api import auth, health, me, tenant, users
+from pricewright.api import auth, health, me, service_accounts, tenant, users
 from pricewright.api.dependencies import Services
 from pricewright.api.health import ReadinessCheck
 from pricewright.api.middleware import RequestContextMiddleware
@@ -39,6 +39,7 @@ def create_app(
     app.include_router(me.router)
     app.include_router(tenant.router)
     app.include_router(users.router)
+    app.include_router(service_accounts.router)
     register_problem_handlers(app)
     app.add_middleware(RequestContextMiddleware)
     return app

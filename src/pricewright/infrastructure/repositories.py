@@ -292,13 +292,12 @@ class SqlAlchemyServiceAccountRepository:
             )
         )
 
-    async def get(self, account_id: UUID) -> ServiceAccount | None:
-        record = await self._session.scalar(
-            select(ServiceAccountRecord).where(
-                ServiceAccountRecord.tenant_id == self._scope.tenant_id,
-                ServiceAccountRecord.id == account_id,
-            )
+    async def get(self, account_id: UUID, *, lock: bool = False) -> ServiceAccount | None:
+        query = select(ServiceAccountRecord).where(
+            ServiceAccountRecord.tenant_id == self._scope.tenant_id,
+            ServiceAccountRecord.id == account_id,
         )
+        record = await self._session.scalar(query.with_for_update() if lock else query)
         return None if record is None else _to_service_account(record)
 
     async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
