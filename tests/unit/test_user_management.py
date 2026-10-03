@@ -4,12 +4,12 @@ from decimal import Decimal
 import pytest
 
 from pricewright.application.ports import UnitOfWork
-from pricewright.application.users import get_user, list_users
+from pricewright.application.users import NewUser, create_user, get_user, list_users
 from pricewright.domain.auth import PermissionDeniedError, Principal
 from pricewright.domain.errors import NotFoundError
 from pricewright.domain.tenants import Tenant, TenantSettings
-from pricewright.domain.users import Role, User
-from tests.fakes import FakeUnitOfWork, InMemoryDatabase
+from pricewright.domain.users import EmailAlreadyRegisteredError, Role, User, WeakPasswordError
+from tests.fakes import FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
 
 
 class Fixture:
@@ -91,3 +91,78 @@ async def test_get_user_finds_users_of_the_callers_tenant_only() -> None:
         await get_user(caller(fixture.larkspur), rep.id, unit_of_work=fixture.unit_of_work)
     with pytest.raises(NotFoundError):
         await get_user(caller(fixture.northfield), uuid.uuid7(), unit_of_work=fixture.unit_of_work)
+
+
+BLAIR = NewUser(
+    email="Blair@Northfield.Example",
+    full_name="Blair Manager",
+    role=Role.SALES_MANAGER,
+    password="blair's initial passphrase",
+)
+
+
+async def test_create_user_adds_a_user_to_the_callers_tenant() -> None:
+    fixture = Fixture(reps=0)
+
+    blair = await create_user(
+        caller(fixture.northfield),
+        BLAIR,
+        unit_of_work=fixture.unit_of_work,
+        hasher=FakePasswordHasher(),
+    )
+
+    stored = fixture.database.users[blair.id]
+    assert (stored.tenant_id, stored.email, stored.role) == (
+        fixture.northfield.id,
+        "blair@northfield.example",
+        Role.SALES_MANAGER,
+    )
+    assert stored.password_hash == FakePasswordHasher.PREFIX + BLAIR.password
+
+
+async def test_create_user_refuses_an_email_registered_in_any_tenant() -> None:
+    fixture = Fixture(reps=1)
+    taken = NewUser(
+        email="REP0@northfield.example", full_name="Copy", role=Role.SALES_REP, password="x" * 20
+    )
+
+    with pytest.raises(EmailAlreadyRegisteredError):
+        await create_user(
+            caller(fixture.larkspur),
+            taken,
+            unit_of_work=fixture.unit_of_work,
+            hasher=FakePasswordHasher(),
+        )
+
+
+async def test_create_user_with_a_weak_password_saves_nothing() -> None:
+    fixture = Fixture(reps=0)
+    weak = NewUser(
+        email="weak@northfield.example", full_name="Weak", role=Role.SALES_REP, password="short"
+    )
+
+    with pytest.raises(WeakPasswordError):
+        await create_user(
+            caller(fixture.northfield),
+            weak,
+            unit_of_work=fixture.unit_of_work,
+            hasher=FakePasswordHasher(),
+        )
+
+    assert fixture.database.users == {}
+
+
+async def test_only_admins_create_users() -> None:
+    fixture = Fixture(reps=0)
+
+    with pytest.raises(PermissionDeniedError):
+        await create_user(
+            caller(fixture.northfield, Role.SALES_MANAGER),
+            BLAIR,
+            unit_of_work=fixture.unit_of_work,
+            hasher=FakePasswordHasher(),
+        )
+
+
+def test_new_user_never_shows_the_password() -> None:
+    assert BLAIR.password not in repr(BLAIR)

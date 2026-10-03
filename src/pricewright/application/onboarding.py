@@ -5,14 +5,9 @@ from decimal import Decimal
 from uuid import UUID
 
 from pricewright.application.ports import PasswordHasher, UnitOfWorkFactory
+from pricewright.application.users import NewUser, ensure_email_is_free, prepare_user
 from pricewright.domain.tenants import DEFAULT_APPROVAL_THRESHOLD, Tenant, TenantSettings
-from pricewright.domain.users import (
-    EmailAlreadyRegisteredError,
-    Role,
-    User,
-    normalize_email,
-    normalize_password,
-)
+from pricewright.domain.users import Role
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,19 +39,19 @@ async def register_tenant(
             approval_threshold=command.approval_threshold,
         ),
     )
-    email = normalize_email(command.admin_email)
-    password = normalize_password(command.admin_password)
-    admin = User.create(
-        tenant_id=tenant.id,
-        email=email,
-        full_name=command.admin_full_name,
-        role=Role.ADMIN,
-        password_hash=await hasher.hash(password),
+    admin = await prepare_user(
+        tenant.id,
+        NewUser(
+            email=command.admin_email,
+            full_name=command.admin_full_name,
+            role=Role.ADMIN,
+            password=command.admin_password,
+        ),
+        hasher,
     )
 
     async with unit_of_work() as uow:
-        if await uow.identities.user_by_email(email) is not None:
-            raise EmailAlreadyRegisteredError(f"{email} is already registered")
+        await ensure_email_is_free(uow, admin.email)
         uow.bind_tenant(tenant.id)
         await uow.tenants.add(tenant)
         await uow.users.add(admin)

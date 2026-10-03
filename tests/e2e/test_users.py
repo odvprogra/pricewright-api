@@ -91,3 +91,56 @@ async def test_a_sales_rep_cannot_list_users(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/v1/users", headers=bearer(NORTHFIELD, Role.SALES_REP))
 
     assert response.status_code == 403
+
+
+BLAIR = {
+    "email": "blair@northfield.example",
+    "full_name": "Blair Manager",
+    "role": "sales_manager",
+    "password": "blair's initial passphrase",
+}
+
+
+async def test_an_admin_adds_a_user_who_can_then_sign_in(client: httpx.AsyncClient) -> None:
+    created = await client.post("/api/v1/users", json=BLAIR, headers=bearer(NORTHFIELD))
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": BLAIR["email"], "password": BLAIR["password"]}
+    )
+
+    assert created.status_code == 201
+    assert created.headers["location"] == f"/api/v1/users/{created.json()['id']}"
+    assert created.json()["role"] == "sales_manager"
+    assert "password" not in created.text
+    assert login.status_code == 200
+
+
+async def test_adding_an_email_registered_in_any_tenant_is_a_409(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/v1/users", json=BLAIR | {"email": REPS[0].email}, headers=bearer(LARKSPUR)
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "email_already_registered"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"role": "owner"}, {"email": "not-an-email"}, {"password": "short"}, {"tenant_id": "x"}],
+    ids=["role", "email", "password", "extra-field"],
+)
+async def test_adding_an_invalid_user_is_a_422(
+    client: httpx.AsyncClient, changes: dict[str, str]
+) -> None:
+    response = await client.post("/api/v1/users", json=BLAIR | changes, headers=bearer(NORTHFIELD))
+
+    assert response.status_code == 422
+
+
+async def test_a_sales_manager_cannot_add_users(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/users", json=BLAIR, headers=bearer(NORTHFIELD, Role.SALES_MANAGER)
+    )
+
+    assert response.status_code == 403
