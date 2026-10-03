@@ -75,6 +75,7 @@ generates its client from the `openapi.json` attached to it. Details in
 | [ADR-0011](docs/adr/0011-repository-and-unit-of-work-ports.md) Repository and Unit of Work ports                    | Use cases stay framework-free and testable with fakes; atomic operations are explicit      |
 | [ADR-0012](docs/adr/0012-optimistic-concurrency-with-etag-and-if-match.md) ETag + `If-Match`                        | No lost updates: a stale edit is a 412, a missing `If-Match` a 428                         |
 | [ADR-0013](docs/adr/0013-append-only-audit-events-in-the-same-transaction.md) Append-only audit events              | Every change commits with its actor, before/after values and request ID, or not at all     |
+| [ADR-0015](docs/adr/0015-open-ended-values-in-responses.md) Open-ended values in responses                          | Growing value sets (audit actions, scopes) never break generated clients                   |
 
 ## Run it locally
 

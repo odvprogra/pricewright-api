@@ -404,8 +404,12 @@
             "type": "string"
           },
           "scopes": {
+            "description": "New scopes may appear; handle unknown ones.",
             "items": {
-              "$ref": "#/components/schemas/Permission"
+              "examples": [
+                "tenant:read"
+              ],
+              "type": "string"
             },
             "title": "Scopes",
             "type": "array"

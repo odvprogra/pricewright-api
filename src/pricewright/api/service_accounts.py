@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from http import HTTPStatus
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Response
@@ -17,7 +18,7 @@ from pricewright.application.service_accounts import (
     list_service_accounts,
     revoke_api_key,
 )
-from pricewright.domain.auth import Permission
+from pricewright.domain.auth import GRANTABLE_SCOPES, Permission
 from pricewright.domain.service_accounts import MAX_NAME_LENGTH, ApiKey, ServiceAccount
 
 router = APIRouter(prefix="/api/v1/service-accounts", tags=["service accounts"])
@@ -40,12 +41,16 @@ class ServiceAccountRequest(BaseModel):
     )
 
 
+# Open-ended (ADR-0015): permissions are added as the API grows.
+Scope = Annotated[str, Field(examples=sorted(GRANTABLE_SCOPES))]
+
+
 class ServiceAccountResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: UUID
     name: str
-    scopes: list[Permission]
+    scopes: list[Scope] = Field(description="New scopes may appear; handle unknown ones.")
     is_active: bool
 
     @classmethod
