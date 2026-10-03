@@ -154,7 +154,7 @@ Rows are in execution order; milestone numbers are stable IDs referenced by othe
   ([ADR-0012](adr/0012-optimistic-concurrency-with-etag-and-if-match.md)).
 - Retrying "convert to order" with the same `Idempotency-Key` returns the same order, never two.
 - A Larkspur user cannot access any Northfield resource (404, not 403, to avoid leaking existence —
-  ADR).
+  [ADR-0009](adr/0009-not-found-for-other-tenants-resources.md)).
 - Usability test: at least 4 of 5 participants complete "build a 5-line quote and submit it" without
   help. The SUS score is reported in the README together with the changes the test caused.
 - Critical journeys pass with zero axe violations and can be completed by keyboard only.
@@ -183,7 +183,7 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                            | M1        |
 | 0007 | [Authentication for users and service accounts](adr/0007-authentication-for-users-and-service-accounts.md)                  | M1        |
 | 0008 | Transactional outbox without a broker                                                                                       | M5        |
-| 0009 | 404 vs 403 for cross-tenant access                                                                                          | M1        |
+| 0009 | [404 for another tenant's resources, 403 for missing permissions](adr/0009-not-found-for-other-tenants-resources.md)        | M1        |
 | 0010 | Supplier price change proposals                                                                                             | M11       |
 | 0011 | [Repository and Unit of Work ports](adr/0011-repository-and-unit-of-work-ports.md) (handbook §5: every pattern gets an ADR) | M1        |
 | 0012 | [Optimistic concurrency with ETag and If-Match](adr/0012-optimistic-concurrency-with-etag-and-if-match.md)                  | M1        |

@@ -36,6 +36,10 @@ class UserRepository(Protocol):
 
     async def get(self, user_id: UUID) -> User | None: ...
 
+    async def list(self, *, after: UUID | None, limit: int) -> list[User]:
+        """Up to ``limit`` users ordered by id, starting after ``after`` (keyset pagination)."""
+        ...
+
     async def save(self, user: User) -> None:
         """Store changes to a user loaded from this repository."""
         ...

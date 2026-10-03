@@ -154,3 +154,18 @@ async def test_user_repository_cannot_save_a_user_of_another_tenant(
 
         with pytest.raises(RuntimeError, match="existing user of the unit of work's tenant"):
             await uow.users.save(avery)
+
+
+async def test_user_repository_lists_the_tenants_users_in_id_order(
+    session_factory: Sessions,
+) -> None:
+    emails = [f"rep{number}@northfield.example" for number in range(3)]
+    northfield, users = await register(session_factory, "Northfield", *emails)
+    await register(session_factory, "Larkspur", "robin@larkspur.example")
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+        first = await uow.users.list(after=None, limit=2)
+        rest = await uow.users.list(after=first[-1].id, limit=2)
+
+    assert first + rest == sorted(users, key=lambda user: user.id)

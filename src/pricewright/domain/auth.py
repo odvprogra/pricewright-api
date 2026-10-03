@@ -30,9 +30,10 @@ class Permission(StrEnum):
 
     TENANT_READ = "tenant:read"
     TENANT_MANAGE = "tenant:manage"
+    USERS_MANAGE = "users:manage"
 
 
-# Brief §2: reps and managers see the tenant's settings; only admins change them.
+# Brief §2: reps and managers see the tenant's settings; only admins change them and manage users.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
     Role.SALES_REP: frozenset({Permission.TENANT_READ}),
     Role.SALES_MANAGER: frozenset({Permission.TENANT_READ}),
