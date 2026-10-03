@@ -11,6 +11,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from pricewright.domain.auth import Principal
+from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
@@ -77,12 +78,42 @@ class RefreshTokenRepository(Protocol):
     async def revoke_family(self, family_id: UUID, now: datetime) -> None: ...
 
 
+class ServiceAccountRepository(Protocol):
+    """Service accounts of the unit of work's tenant only (ADR-0006)."""
+
+    async def add(self, account: ServiceAccount) -> None: ...
+
+    async def get(self, account_id: UUID) -> ServiceAccount | None: ...
+
+    async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
+        """Up to ``limit`` accounts ordered by id, starting after ``after``."""
+        ...
+
+
+class ApiKeyRepository(Protocol):
+    """API keys of the unit of work's tenant only (ADR-0006)."""
+
+    async def add(self, key: ApiKey) -> None: ...
+
+    async def get(self, key_id: UUID) -> ApiKey | None: ...
+
+    async def active_for(self, account_id: UUID) -> list[ApiKey]:
+        """The account's keys that are not revoked, oldest first."""
+        ...
+
+    async def save(self, key: ApiKey) -> None:
+        """Store the key's last use and revocation."""
+        ...
+
+
 class IdentityLookup(Protocol):
     """The only cross-tenant reads: finding who is signing in before their tenant is known."""
 
     async def user_by_email(self, email: str) -> User | None: ...
 
     async def refresh_token_by_digest(self, token_digest: str) -> RefreshToken | None: ...
+
+    async def api_key_by_digest(self, key_digest: str) -> ApiKey | None: ...
 
 
 class PasswordHasher(Protocol):
@@ -119,13 +150,15 @@ class AccessTokens(Protocol):
 class UnitOfWork(Protocol):
     """One atomic business operation: changes are saved by ``commit`` or discarded on exit.
 
-    Tenant-owned repositories (``users``, ``refresh_tokens``) work only after ``bind_tenant``, and
-    a unit of work can never be bound to a second tenant (ADR-0006).
+    Tenant-owned repositories (all but ``tenants`` and ``identities``) work only after
+    ``bind_tenant``, and a unit of work can never be bound to a second tenant (ADR-0006).
     """
 
     tenants: TenantRepository
     users: UserRepository
     refresh_tokens: RefreshTokenRepository
+    service_accounts: ServiceAccountRepository
+    api_keys: ApiKeyRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...

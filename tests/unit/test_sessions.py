@@ -1,12 +1,12 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from pricewright.domain.digests import digest
 from pricewright.domain.sessions import (
     ABSOLUTE_LIFETIME,
     IDLE_LIFETIME,
     REFRESH_PREFIX,
     RefreshToken,
-    digest,
     new_refresh_token,
 )
 

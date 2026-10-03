@@ -9,3 +9,9 @@ id = "pricewright-refresh-token"
 description = "Pricewright refresh token"
 regex = '''\bpwr_[A-Za-z0-9_-]{43}\b'''
 keywords = ["pwr_"]
+
+[[rules]]
+id = "pricewright-api-key"
+description = "Pricewright service account API key"
+regex = '''\bpwk_[0-9A-Za-z]{46}\b'''
+keywords = ["pwk_"]

@@ -24,6 +24,7 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
@@ -105,3 +106,41 @@ class RefreshTokenRecord(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ServiceAccountRecord(Base):
+    __tablename__ = "service_accounts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),  # target of the API keys' composite foreign key
+        UniqueConstraint("tenant_id", "name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    name: Mapped[str] = mapped_column(String(100))
+    scopes: Mapped[list[str]] = mapped_column(ARRAY(String(50)))
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ApiKeyRecord(Base):
+    __tablename__ = "api_keys"
+    __table_args__ = (
+        # Composite: a key can only belong to a service account of its own tenant (ADR-0006).
+        ForeignKeyConstraint(
+            ["tenant_id", "service_account_id"],
+            ["service_accounts.tenant_id", "service_accounts.id"],
+            ondelete="CASCADE",
+        ),
+        Index(None, "tenant_id", "service_account_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    service_account_id: Mapped[uuid.UUID]
+    key_digest: Mapped[str] = mapped_column(CHAR(64), unique=True)
+    hint: Mapped[str] = mapped_column(String(8))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

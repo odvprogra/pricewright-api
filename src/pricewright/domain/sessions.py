@@ -5,11 +5,12 @@ A family starts at login. Every refresh uses up the presented token and issues i
 (RFC 9700 §4.14.2). A session ends after 14 days unused or 30 days in total, whichever comes first.
 """
 
-import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+from pricewright.domain.digests import digest
 
 IDLE_LIFETIME = timedelta(days=14)
 ABSOLUTE_LIFETIME = timedelta(days=30)
@@ -19,11 +20,6 @@ REFRESH_PREFIX = "pwr_"
 
 def new_refresh_token() -> str:
     return REFRESH_PREFIX + secrets.token_urlsafe(32)
-
-
-def digest(token: str) -> str:
-    """Tokens are stored as SHA-256 digests: 256 random bits need no slow hash."""
-    return hashlib.sha256(token.encode()).hexdigest()
 
 
 @dataclass(slots=True)

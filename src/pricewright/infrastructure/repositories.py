@@ -6,11 +6,19 @@ from uuid import UUID
 from sqlalchemy import case, literal, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricewright.domain.auth import Permission
 from pricewright.domain.errors import StaleVersionError
+from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import MAX_FAILED_LOGINS, Role, User
-from pricewright.infrastructure.records import RefreshTokenRecord, TenantRecord, UserRecord
+from pricewright.infrastructure.records import (
+    ApiKeyRecord,
+    RefreshTokenRecord,
+    ServiceAccountRecord,
+    TenantRecord,
+    UserRecord,
+)
 
 
 class TenantScope:
@@ -256,6 +264,117 @@ class SqlAlchemyRefreshTokenRepository:
         )
 
 
+def _to_service_account(record: ServiceAccountRecord) -> ServiceAccount:
+    return ServiceAccount(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        name=record.name,
+        scopes=frozenset(Permission(scope) for scope in record.scopes),
+        is_active=record.is_active,
+    )
+
+
+class SqlAlchemyServiceAccountRepository:
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    async def add(self, account: ServiceAccount) -> None:
+        if account.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("a service account can only be added to the unit of work's tenant")
+        self._session.add(
+            ServiceAccountRecord(
+                id=account.id,
+                tenant_id=account.tenant_id,
+                name=account.name,
+                scopes=sorted(account.scopes),
+                is_active=account.is_active,
+            )
+        )
+
+    async def get(self, account_id: UUID) -> ServiceAccount | None:
+        record = await self._session.scalar(
+            select(ServiceAccountRecord).where(
+                ServiceAccountRecord.tenant_id == self._scope.tenant_id,
+                ServiceAccountRecord.id == account_id,
+            )
+        )
+        return None if record is None else _to_service_account(record)
+
+    async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
+        query = select(ServiceAccountRecord).where(
+            ServiceAccountRecord.tenant_id == self._scope.tenant_id
+        )
+        if after is not None:
+            query = query.where(ServiceAccountRecord.id > after)
+        records = await self._session.scalars(query.order_by(ServiceAccountRecord.id).limit(limit))
+        return [_to_service_account(record) for record in records]
+
+
+def _to_api_key(record: ApiKeyRecord) -> ApiKey:
+    return ApiKey(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        service_account_id=record.service_account_id,
+        key_digest=record.key_digest,
+        hint=record.hint,
+        created_at=record.created_at,
+        expires_at=record.expires_at,
+        last_used_at=record.last_used_at,
+        revoked_at=record.revoked_at,
+    )
+
+
+class SqlAlchemyApiKeyRepository:
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    async def add(self, key: ApiKey) -> None:
+        if key.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("an API key can only be added to the unit of work's tenant")
+        self._session.add(
+            ApiKeyRecord(
+                id=key.id,
+                tenant_id=key.tenant_id,
+                service_account_id=key.service_account_id,
+                key_digest=key.key_digest,
+                hint=key.hint,
+                created_at=key.created_at,
+                expires_at=key.expires_at,
+                last_used_at=key.last_used_at,
+                revoked_at=key.revoked_at,
+            )
+        )
+
+    async def get(self, key_id: UUID) -> ApiKey | None:
+        record = await self._session.scalar(
+            select(ApiKeyRecord).where(
+                ApiKeyRecord.tenant_id == self._scope.tenant_id, ApiKeyRecord.id == key_id
+            )
+        )
+        return None if record is None else _to_api_key(record)
+
+    async def active_for(self, account_id: UUID) -> list[ApiKey]:
+        records = await self._session.scalars(
+            select(ApiKeyRecord)
+            .where(
+                ApiKeyRecord.tenant_id == self._scope.tenant_id,
+                ApiKeyRecord.service_account_id == account_id,
+                ApiKeyRecord.revoked_at.is_(None),
+            )
+            .order_by(ApiKeyRecord.id)
+        )
+        return [_to_api_key(record) for record in records]
+
+    async def save(self, key: ApiKey) -> None:
+        await self._session.execute(
+            update(ApiKeyRecord)
+            .where(ApiKeyRecord.tenant_id == self._scope.tenant_id, ApiKeyRecord.id == key.id)
+            .values(last_used_at=key.last_used_at, revoked_at=key.revoked_at)
+        )
+
+
 class SqlAlchemyIdentityLookup:
     """Cross-tenant by design, and only for authentication (ADR-0006)."""
 
@@ -271,3 +390,9 @@ class SqlAlchemyIdentityLookup:
             select(RefreshTokenRecord).where(RefreshTokenRecord.token_digest == token_digest)
         )
         return None if record is None else _to_refresh_token(record)
+
+    async def api_key_by_digest(self, key_digest: str) -> ApiKey | None:
+        record = await self._session.scalar(
+            select(ApiKeyRecord).where(ApiKeyRecord.key_digest == key_digest)
+        )
+        return None if record is None else _to_api_key(record)

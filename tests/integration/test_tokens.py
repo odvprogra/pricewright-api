@@ -14,7 +14,7 @@ from pricewright.infrastructure.tokens import AUDIENCE, ISSUER, JwtAccessTokens
 
 SECRET = secrets.token_urlsafe(32)  # generated, so no secret-looking literal is committed
 TTL = timedelta(minutes=15)
-PRINCIPAL = Principal(tenant_id=uuid.uuid7(), user_id=uuid.uuid7(), role=Role.ADMIN)
+PRINCIPAL = Principal(tenant_id=uuid.uuid7(), subject_id=uuid.uuid7(), role=Role.ADMIN)
 
 
 def forged(claims: dict[str, object], *, secret: str = SECRET, typ: str = "at+jwt") -> str:
@@ -22,7 +22,7 @@ def forged(claims: dict[str, object], *, secret: str = SECRET, typ: str = "at+jw
     base: dict[str, object] = {
         "iss": ISSUER,
         "aud": AUDIENCE,
-        "sub": str(PRINCIPAL.user_id),
+        "sub": str(PRINCIPAL.subject_id),
         "tid": str(PRINCIPAL.tenant_id),
         "role": "admin",
         "iat": now,
@@ -70,7 +70,7 @@ def test_access_tokens_reject_tokens_they_must_not_trust(token: str) -> None:
 
 def test_access_tokens_reject_unsigned_tokens() -> None:
     unsigned = jwt.encode(
-        {"sub": str(PRINCIPAL.user_id)}, key=None, algorithm="none", headers={"typ": "at+jwt"}
+        {"sub": str(PRINCIPAL.subject_id)}, key=None, algorithm="none", headers={"typ": "at+jwt"}
     )
 
     with pytest.raises(AuthenticationError):
@@ -82,7 +82,7 @@ def test_access_tokens_reject_a_token_missing_a_required_claim() -> None:
         {
             "iss": ISSUER,
             "aud": AUDIENCE,
-            "sub": str(PRINCIPAL.user_id),
+            "sub": str(PRINCIPAL.subject_id),
             "exp": datetime.now(UTC) + TTL,
         },
         SECRET,
@@ -92,3 +92,10 @@ def test_access_tokens_reject_a_token_missing_a_required_claim() -> None:
 
     with pytest.raises(AuthenticationError):
         JwtAccessTokens(SECRET, TTL).read(token)
+
+
+def test_access_tokens_are_never_issued_to_service_accounts() -> None:
+    service_account = Principal(tenant_id=uuid.uuid7(), subject_id=uuid.uuid7())
+
+    with pytest.raises(ValueError, match="API keys"):
+        JwtAccessTokens(SECRET, TTL).issue(service_account)
