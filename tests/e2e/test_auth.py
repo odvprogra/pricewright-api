@@ -56,6 +56,7 @@ async def test_login_returns_a_bearer_token_that_is_never_cached(
     assert body["token_type"] == "Bearer"
     assert body["expires_in"] == FakeAccessTokens.EXPIRES_IN
     assert body["access_token"].startswith("token:")
+    assert body["refresh_token"].startswith("pwr_")
     assert response.headers["cache-control"] == "no-store"
 
 
@@ -125,3 +126,38 @@ async def test_me_after_the_account_is_deactivated_is_a_401(
     response = await client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 401
+
+
+async def test_refresh_returns_a_new_pair_and_the_old_refresh_token_stops_working(
+    client: httpx.AsyncClient,
+) -> None:
+    first = (await log_in(client)).json()
+
+    refreshed = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}
+    )
+    replayed = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]}
+    )
+
+    assert refreshed.status_code == 200
+    assert refreshed.headers["cache-control"] == "no-store"
+    assert refreshed.json()["refresh_token"] != first["refresh_token"]
+    assert replayed.status_code == 401
+    assert replayed.json()["detail"] == "invalid refresh token"
+
+
+async def test_logout_ends_the_session(client: httpx.AsyncClient) -> None:
+    refresh_token = (await log_in(client)).json()["refresh_token"]
+
+    logout = await client.post("/api/v1/auth/logout", json={"refresh_token": refresh_token})
+    refresh = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+
+    assert logout.status_code == 204
+    assert refresh.status_code == 401
+
+
+async def test_logout_with_an_unknown_token_still_succeeds(client: httpx.AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/logout", json={"refresh_token": "pwr_unknown"})
+
+    assert response.status_code == 204

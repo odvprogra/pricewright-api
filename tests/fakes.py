@@ -7,7 +7,7 @@ tenant scoping, explicit commits and unique emails.
 import copy
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Self
 from uuid import UUID
@@ -183,6 +183,19 @@ class FakePasswordHasher:
         return not password_hash.startswith(self.PREFIX)
 
 
+class FakeClock:
+    """A clock that only moves when the test says so."""
+
+    def __init__(self, now: datetime = datetime(2026, 10, 3, 12, tzinfo=UTC)) -> None:
+        self.now = now
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, delta: timedelta) -> None:
+        self.now += delta
+
+
 class FakeAccessTokens:
     """Tokens are ``token:<tenant>:<user>:<role>``; anything else is rejected."""
 
@@ -202,7 +215,9 @@ class FakeAccessTokens:
             raise AuthenticationError("invalid access token") from error
 
 
-def fake_services(database: InMemoryDatabase | None = None) -> Services:
+def fake_services(
+    database: InMemoryDatabase | None = None, clock: FakeClock | None = None
+) -> Services:
     """API services backed by the fakes: an app that runs without infrastructure."""
     shared = database if database is not None else InMemoryDatabase()
 
@@ -213,4 +228,5 @@ def fake_services(database: InMemoryDatabase | None = None) -> Services:
         unit_of_work=unit_of_work,
         hasher=FakePasswordHasher(),
         access_tokens=FakeAccessTokens(),
+        clock=clock if clock is not None else FakeClock(),
     )

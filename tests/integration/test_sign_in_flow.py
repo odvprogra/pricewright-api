@@ -48,7 +48,7 @@ async def app(migrated_database_url: str) -> AsyncIterator[FastAPI]:
 
 
 @pytest.mark.usefixtures("session_factory")  # empties the tables afterwards
-async def test_sign_in_then_read_the_signed_in_user(app: FastAPI) -> None:
+async def test_sign_in_refresh_and_detect_a_replayed_refresh_token(app: FastAPI) -> None:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -58,8 +58,17 @@ async def test_sign_in_then_read_the_signed_in_user(app: FastAPI) -> None:
         )
         token = login.json()["access_token"]
         me = await client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+        first_refresh = login.json()["refresh_token"]
+        refreshed = await client.post("/api/v1/auth/refresh", json={"refresh_token": first_refresh})
+        replayed = await client.post("/api/v1/auth/refresh", json={"refresh_token": first_refresh})
+        after_reuse = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": refreshed.json()["refresh_token"]}
+        )
 
     assert login.status_code == 200
     assert me.status_code == 200
     assert me.json()["email"] == "avery@northfield.example"
     assert me.json()["role"] == "admin"
+    assert refreshed.status_code == 200
+    assert replayed.status_code == 401  # reuse detected: the whole session ends
+    assert after_reuse.status_code == 401

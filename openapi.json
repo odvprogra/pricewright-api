@@ -39,6 +39,22 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "RefreshTokenRequest": {
+        "properties": {
+          "refresh_token": {
+            "format": "password",
+            "maxLength": 100,
+            "title": "Refresh Token",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshTokenRequest",
+        "type": "object"
+      },
       "Role": {
         "enum": [
           "sales_rep",
@@ -59,6 +75,11 @@
             "title": "Expires In",
             "type": "integer"
           },
+          "refresh_token": {
+            "description": "Single use: trade it at `/auth/refresh` for a new pair. Reusing one ends the session.",
+            "title": "Refresh Token",
+            "type": "string"
+          },
           "token_type": {
             "const": "Bearer",
             "default": "Bearer",
@@ -68,7 +89,8 @@
         },
         "required": [
           "access_token",
-          "expires_in"
+          "expires_in",
+          "refresh_token"
         ],
         "title": "TokenResponse",
         "type": "object"
@@ -201,6 +223,84 @@
           }
         },
         "summary": "Sign in with an email and a password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End the session a refresh token belongs to",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unknown, expired, revoked or reused refresh token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trade a refresh token for a new access and refresh token",
         "tags": [
           "auth"
         ]

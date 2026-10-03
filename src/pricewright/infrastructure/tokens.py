@@ -6,23 +6,20 @@ audience and the explicit type, so no other kind of JWT can pass as an access to
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 import jwt
 
 from pricewright.application.ports import IssuedToken
 from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.users import Role
+from pricewright.infrastructure.clock import utc_now
 
 ALGORITHM = "HS256"
 TYP_HEADER = "at+jwt"
 ISSUER = "pricewright-api"
 AUDIENCE = "pricewright-api"
 _REQUIRED_CLAIMS = ["iss", "aud", "sub", "tid", "role", "iat", "exp", "jti"]
-
-
-def utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 class JwtAccessTokens:

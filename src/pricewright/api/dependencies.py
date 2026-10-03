@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from pricewright.application.ports import AccessTokens, PasswordHasher, UnitOfWorkFactory
+from pricewright.application.ports import AccessTokens, Clock, PasswordHasher, UnitOfWorkFactory
 from pricewright.domain.auth import AuthenticationError, Principal
 
 
@@ -17,6 +17,7 @@ class Services:
     unit_of_work: UnitOfWorkFactory
     hasher: PasswordHasher
     access_tokens: AccessTokens
+    clock: Clock
 
 
 def get_services(request: Request) -> Services:
