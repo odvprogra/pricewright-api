@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from pricewright.api.app import create_app
-from pricewright.domain.auth import Principal
+from pricewright.domain.auth import GRANTABLE_SCOPES, Principal
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role
 from tests.fakes import FakeAccessTokens, InMemoryDatabase, fake_services
@@ -146,3 +146,11 @@ async def test_a_sales_manager_cannot_manage_service_accounts(client: httpx.Asyn
     response = await client.get("/api/v1/service-accounts", headers=bearer(role=Role.SALES_MANAGER))
 
     assert response.status_code == 403
+
+
+def test_scopes_are_documented_as_open_ended_values() -> None:
+    spec = create_app(title="test", services=fake_services()).openapi()
+
+    scope = spec["components"]["schemas"]["ServiceAccountResponse"]["properties"]["scopes"]["items"]
+    assert "enum" not in scope  # a new permission must not break generated clients (ADR-0015)
+    assert set(scope["examples"]) == GRANTABLE_SCOPES
