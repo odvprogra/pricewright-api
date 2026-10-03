@@ -1,7 +1,10 @@
+import secrets
+from datetime import timedelta
+
 import pytest
 from pydantic import ValidationError
 
-from pricewright.settings import Environment, LogFormat, Settings
+from pricewright.settings import MIN_JWT_SECRET_LENGTH, Environment, LogFormat, Settings
 
 
 def test_settings_without_environment_uses_deployable_defaults(
@@ -20,6 +23,7 @@ def test_settings_without_environment_uses_deployable_defaults(
 def test_settings_reads_values_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
+    monkeypatch.setenv("JWT_SECRET", secrets.token_urlsafe(32))
 
     settings = Settings(_env_file=None)
 
@@ -62,3 +66,40 @@ def test_settings_never_expose_the_database_password(monkeypatch: pytest.MonkeyP
 
     assert "s3cret" not in repr(settings)
     assert "s3cret" not in str(settings.model_dump())
+
+
+def test_settings_generate_a_jwt_secret_per_process_locally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+
+    first, second = Settings(_env_file=None), Settings(_env_file=None)
+
+    assert len(first.jwt_secret.get_secret_value()) >= MIN_JWT_SECRET_LENGTH
+    assert first.jwt_secret != second.jwt_secret
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_settings_require_a_jwt_secret_when_deployed(
+    monkeypatch: pytest.MonkeyPatch, environment: str
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+
+    with pytest.raises(ValidationError, match="JWT_SECRET is required"):
+        Settings(_env_file=None)
+
+
+def test_settings_reject_a_short_jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JWT_SECRET", "x" * (MIN_JWT_SECRET_LENGTH - 1))
+
+    with pytest.raises(ValidationError, match="jwt_secret"):
+        Settings(_env_file=None)
+
+
+def test_settings_access_token_ttl_is_fifteen_minutes_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ACCESS_TOKEN_TTL_SECONDS", raising=False)
+
+    assert Settings(_env_file=None).access_token_ttl == timedelta(minutes=15)

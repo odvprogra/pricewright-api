@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricewright.domain.tenants import Tenant, TenantSettings
@@ -67,6 +67,7 @@ def _to_user(record: UserRecord) -> User:
         role=Role(record.role),
         password_hash=record.password_hash,
         is_active=record.is_active,
+        failed_login_attempts=record.failed_login_attempts,
     )
 
 
@@ -89,6 +90,7 @@ class SqlAlchemyUserRepository:
                 role=user.role.value,
                 password_hash=user.password_hash,
                 is_active=user.is_active,
+                failed_login_attempts=user.failed_login_attempts,
             )
         )
 
@@ -99,6 +101,22 @@ class SqlAlchemyUserRepository:
             )
         )
         return None if record is None else _to_user(record)
+
+    async def save(self, user: User) -> None:
+        result = await self._session.execute(
+            update(UserRecord)
+            .where(UserRecord.tenant_id == self._scope.tenant_id, UserRecord.id == user.id)
+            .values(
+                email=user.email,
+                full_name=user.full_name,
+                role=user.role.value,
+                password_hash=user.password_hash,
+                is_active=user.is_active,
+                failed_login_attempts=user.failed_login_attempts,
+            )
+        )
+        if result.rowcount != 1:  # type: ignore[attr-defined]  # UPDATE returns a CursorResult
+            raise RuntimeError("only an existing user of the unit of work's tenant can be saved")
 
 
 class SqlAlchemyIdentityLookup:

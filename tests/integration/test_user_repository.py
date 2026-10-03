@@ -150,3 +150,32 @@ async def test_unit_of_work_reraises_integrity_errors_other_than_duplicates(
 
         with pytest.raises(IntegrityError, match="fk_users_tenant_id_tenants"):
             await uow.commit()
+
+
+async def test_user_repository_saves_changes_to_a_user(session_factory: Sessions) -> None:
+    northfield, [avery] = await register(session_factory, "Northfield", "avery@northfield.example")
+    avery.record_failed_login()
+    avery.role = Role.SALES_MANAGER
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+        await uow.users.save(avery)
+        await uow.commit()
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+        assert await uow.users.get(avery.id) == avery
+
+
+async def test_user_repository_cannot_save_a_user_of_another_tenant(
+    session_factory: Sessions,
+) -> None:
+    _, [avery] = await register(session_factory, "Northfield", "avery@northfield.example")
+    larkspur, _ = await register(session_factory, "Larkspur")
+    avery.is_active = False
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(larkspur.id)
+
+        with pytest.raises(RuntimeError, match="existing user of the unit of work's tenant"):
+            await uow.users.save(avery)
