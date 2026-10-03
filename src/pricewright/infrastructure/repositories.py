@@ -3,13 +3,13 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import case, literal, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
-from pricewright.domain.users import Role, User
+from pricewright.domain.users import MAX_FAILED_LOGINS, Role, User
 from pricewright.infrastructure.records import RefreshTokenRecord, TenantRecord, UserRecord
 
 
@@ -90,6 +90,7 @@ def _to_user(record: UserRecord) -> User:
         password_hash=record.password_hash,
         is_active=record.is_active,
         failed_login_attempts=record.failed_login_attempts,
+        version=record.version,
     )
 
 
@@ -113,6 +114,7 @@ class SqlAlchemyUserRepository:
                 password_hash=user.password_hash,
                 is_active=user.is_active,
                 failed_login_attempts=user.failed_login_attempts,
+                version=user.version,
             )
         )
 
@@ -124,28 +126,71 @@ class SqlAlchemyUserRepository:
         )
         return None if record is None else _to_user(record)
 
-    async def list(self, *, after: UUID | None, limit: int) -> list[User]:
+    async def page(self, *, after: UUID | None, limit: int) -> list[User]:
         query = select(UserRecord).where(UserRecord.tenant_id == self._scope.tenant_id)
         if after is not None:
             query = query.where(UserRecord.id > after)
         records = await self._session.scalars(query.order_by(UserRecord.id).limit(limit))
         return [_to_user(record) for record in records]
 
+    def _require_own(self, user: User) -> None:
+        if user.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("only a user of the unit of work's tenant can be saved")
+
     async def save(self, user: User) -> None:
-        result = await self._session.execute(
+        self._require_own(user)
+        # Compare-and-set in one statement: of two concurrent edits, the second matches no row.
+        new_version = await self._session.scalar(
+            update(UserRecord)
+            .where(
+                UserRecord.tenant_id == self._scope.tenant_id,
+                UserRecord.id == user.id,
+                UserRecord.version == user.version,
+            )
+            .values(
+                full_name=user.full_name,
+                role=user.role.value,
+                is_active=user.is_active,
+                version=UserRecord.version + 1,
+            )
+            .returning(UserRecord.version)
+        )
+        if new_version is None:
+            raise StaleVersionError("the user was changed by someone else; reload it")
+        user.version = new_version
+
+    async def save_login_state(self, user: User) -> None:
+        self._require_own(user)
+        # Only the locked flag is visible to admins, so only a change of it is a new version:
+        # signing in must not make an admin's pending edit stale.
+        was_locked = UserRecord.failed_login_attempts >= MAX_FAILED_LOGINS
+        lock_changed = case((was_locked != literal(user.is_locked), 1), else_=0)
+        new_version = await self._session.scalar(
             update(UserRecord)
             .where(UserRecord.tenant_id == self._scope.tenant_id, UserRecord.id == user.id)
             .values(
-                email=user.email,
-                full_name=user.full_name,
-                role=user.role.value,
-                password_hash=user.password_hash,
-                is_active=user.is_active,
                 failed_login_attempts=user.failed_login_attempts,
+                password_hash=user.password_hash,
+                version=UserRecord.version + lock_changed,
             )
+            .returning(UserRecord.version)
         )
-        if result.rowcount != 1:  # type: ignore[attr-defined]  # UPDATE returns a CursorResult
-            raise RuntimeError("only an existing user of the unit of work's tenant can be saved")
+        if new_version is None:
+            raise RuntimeError("only an existing user can be saved")
+        user.version = new_version
+
+    async def lock_active_admins(self) -> list[UUID]:
+        ids = await self._session.scalars(
+            select(UserRecord.id)
+            .where(
+                UserRecord.tenant_id == self._scope.tenant_id,
+                UserRecord.role == Role.ADMIN.value,
+                UserRecord.is_active,
+            )
+            .order_by(UserRecord.id)  # a stable lock order avoids deadlocks
+            .with_for_update()
+        )
+        return list(ids)
 
 
 def _to_refresh_token(record: RefreshTokenRecord) -> RefreshToken:

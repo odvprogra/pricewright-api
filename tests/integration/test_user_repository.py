@@ -6,8 +6,8 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 
-from pricewright.domain.errors import ConflictError
-from pricewright.domain.users import Role, User
+from pricewright.domain.errors import ConflictError, StaleVersionError
+from pricewright.domain.users import MAX_FAILED_LOGINS, Role, User
 from pricewright.infrastructure.records import UserRecord
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from tests.integration.data import Sessions, register
@@ -127,10 +127,11 @@ async def test_unit_of_work_reraises_integrity_errors_other_than_duplicates(
             await uow.commit()
 
 
-async def test_user_repository_saves_changes_to_a_user(session_factory: Sessions) -> None:
+async def test_user_repository_saves_admin_edits_and_bumps_the_version(
+    session_factory: Sessions,
+) -> None:
     northfield, [avery] = await register(session_factory, "Northfield", "avery@northfield.example")
-    avery.record_failed_login()
-    avery.role = Role.SALES_MANAGER
+    avery.change(full_name="Avery Manager", role=Role.SALES_MANAGER)
 
     async with SqlAlchemyUnitOfWork(session_factory) as uow:
         uow.bind_tenant(northfield.id)
@@ -139,7 +140,44 @@ async def test_user_repository_saves_changes_to_a_user(session_factory: Sessions
 
     async with SqlAlchemyUnitOfWork(session_factory) as uow:
         uow.bind_tenant(northfield.id)
-        assert await uow.users.get(avery.id) == avery
+        stored = await uow.users.get(avery.id)
+    assert stored == avery
+    assert avery.version == 2
+
+
+async def test_user_repository_refuses_an_edit_of_an_old_version(
+    session_factory: Sessions,
+) -> None:
+    northfield, [avery] = await register(session_factory, "Northfield", "avery@northfield.example")
+    avery.version = 0  # pretend it was read before an earlier save
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+
+        with pytest.raises(StaleVersionError):
+            await uow.users.save(avery)
+
+
+async def test_login_state_bumps_the_version_only_when_the_lock_changes(
+    session_factory: Sessions,
+) -> None:
+    northfield, [avery] = await register(session_factory, "Northfield", "avery@northfield.example")
+
+    async def save_login_state() -> int:
+        async with SqlAlchemyUnitOfWork(session_factory) as uow:
+            uow.bind_tenant(northfield.id)
+            await uow.users.save_login_state(avery)
+            await uow.commit()
+        return avery.version
+
+    avery.record_failed_login()
+    one_failure = await save_login_state()
+    avery.failed_login_attempts = MAX_FAILED_LOGINS
+    locked = await save_login_state()
+    avery.unlock()
+    unlocked = await save_login_state()
+
+    assert (one_failure, locked, unlocked) == (1, 2, 3)
 
 
 async def test_user_repository_cannot_save_a_user_of_another_tenant(
@@ -152,8 +190,10 @@ async def test_user_repository_cannot_save_a_user_of_another_tenant(
     async with SqlAlchemyUnitOfWork(session_factory) as uow:
         uow.bind_tenant(larkspur.id)
 
-        with pytest.raises(RuntimeError, match="existing user of the unit of work's tenant"):
+        with pytest.raises(RuntimeError, match="unit of work's tenant"):
             await uow.users.save(avery)
+        with pytest.raises(RuntimeError, match="unit of work's tenant"):
+            await uow.users.save_login_state(avery)
 
 
 async def test_user_repository_lists_the_tenants_users_in_id_order(
@@ -165,7 +205,26 @@ async def test_user_repository_lists_the_tenants_users_in_id_order(
 
     async with SqlAlchemyUnitOfWork(session_factory) as uow:
         uow.bind_tenant(northfield.id)
-        first = await uow.users.list(after=None, limit=2)
-        rest = await uow.users.list(after=first[-1].id, limit=2)
+        first = await uow.users.page(after=None, limit=2)
+        rest = await uow.users.page(after=first[-1].id, limit=2)
 
     assert first + rest == sorted(users, key=lambda user: user.id)
+
+
+async def test_login_state_of_a_user_that_was_never_saved_is_an_error(
+    session_factory: Sessions,
+) -> None:
+    northfield, _ = await register(session_factory, "Northfield")
+    ghost = User.create(
+        tenant_id=northfield.id,
+        email="ghost@northfield.example",
+        full_name="Ghost",
+        role=Role.SALES_REP,
+        password_hash="hash",
+    )
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+
+        with pytest.raises(RuntimeError, match="existing user"):
+            await uow.users.save_login_state(ghost)

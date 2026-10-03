@@ -4,11 +4,26 @@ from decimal import Decimal
 import pytest
 
 from pricewright.application.ports import UnitOfWork
-from pricewright.application.users import NewUser, create_user, get_user, list_users
+from pricewright.application.users import (
+    NewUser,
+    UserChanges,
+    change_user,
+    create_user,
+    get_user,
+    list_users,
+    unlock_user,
+)
 from pricewright.domain.auth import PermissionDeniedError, Principal
-from pricewright.domain.errors import NotFoundError
+from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.tenants import Tenant, TenantSettings
-from pricewright.domain.users import EmailAlreadyRegisteredError, Role, User, WeakPasswordError
+from pricewright.domain.users import (
+    MAX_FAILED_LOGINS,
+    EmailAlreadyRegisteredError,
+    LastAdminError,
+    Role,
+    User,
+    WeakPasswordError,
+)
 from tests.fakes import FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
 
 
@@ -166,3 +181,115 @@ async def test_only_admins_create_users() -> None:
 
 def test_new_user_never_shows_the_password() -> None:
     assert BLAIR.password not in repr(BLAIR)
+
+
+def add_admin(fixture: Fixture, email: str) -> User:
+    admin = User.create(
+        tenant_id=fixture.northfield.id,
+        email=email,
+        full_name="Admin",
+        role=Role.ADMIN,
+        password_hash="hash",
+    )
+    fixture.database.users[admin.id] = admin
+    return admin
+
+
+async def change(fixture: Fixture, user: User, changes: UserChanges, version: int = 1) -> User:
+    return await change_user(
+        caller(fixture.northfield),
+        user.id,
+        changes,
+        expected_version=version,
+        unit_of_work=fixture.unit_of_work,
+    )
+
+
+async def test_change_user_saves_a_new_version() -> None:
+    fixture = Fixture(reps=1)
+    [rep] = fixture.reps
+
+    changed = await change(fixture, rep, UserChanges(role=Role.SALES_MANAGER))
+
+    assert (changed.role, changed.version) == (Role.SALES_MANAGER, 2)
+    assert fixture.database.users[rep.id].role is Role.SALES_MANAGER
+
+
+async def test_change_user_based_on_an_old_version_is_rejected() -> None:
+    fixture = Fixture(reps=1)
+    [rep] = fixture.reps
+    await change(fixture, rep, UserChanges(full_name="First edit"))
+
+    with pytest.raises(StaleVersionError):
+        await change(fixture, rep, UserChanges(full_name="Second edit"), version=1)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [UserChanges(role=Role.SALES_MANAGER), UserChanges(is_active=False)],
+    ids=["demote", "deactivate"],
+)
+async def test_the_last_active_admin_cannot_be_demoted_or_deactivated(
+    changes: UserChanges,
+) -> None:
+    fixture = Fixture(reps=0)
+    only_admin = add_admin(fixture, "avery@northfield.example")
+
+    with pytest.raises(LastAdminError):
+        await change(fixture, only_admin, changes)
+
+    assert fixture.database.users[only_admin.id].is_active_admin
+
+
+async def test_an_admin_can_be_demoted_while_another_remains() -> None:
+    fixture = Fixture(reps=0)
+    avery = add_admin(fixture, "avery@northfield.example")
+    add_admin(fixture, "blair@northfield.example")
+
+    demoted = await change(fixture, avery, UserChanges(role=Role.SALES_REP))
+
+    assert demoted.role is Role.SALES_REP
+
+
+async def test_change_user_of_another_tenant_or_by_a_non_admin_fails() -> None:
+    fixture = Fixture(reps=1)
+    [rep] = fixture.reps
+
+    with pytest.raises(NotFoundError):
+        await change_user(
+            caller(fixture.larkspur),
+            rep.id,
+            UserChanges(is_active=False),
+            expected_version=1,
+            unit_of_work=fixture.unit_of_work,
+        )
+    with pytest.raises(PermissionDeniedError):
+        await change_user(
+            caller(fixture.northfield, Role.SALES_MANAGER),
+            rep.id,
+            UserChanges(is_active=False),
+            expected_version=1,
+            unit_of_work=fixture.unit_of_work,
+        )
+
+
+async def test_unlock_user_clears_the_lockout() -> None:
+    fixture = Fixture(reps=1)
+    [rep] = fixture.reps
+    rep.failed_login_attempts = MAX_FAILED_LOGINS
+
+    unlocked = await unlock_user(
+        caller(fixture.northfield), rep.id, unit_of_work=fixture.unit_of_work
+    )
+
+    assert not unlocked.is_locked
+    assert fixture.database.users[rep.id].failed_login_attempts == 0
+
+
+async def test_unlock_user_of_another_tenant_is_not_found() -> None:
+    fixture = Fixture(reps=1)
+
+    with pytest.raises(NotFoundError):
+        await unlock_user(
+            caller(fixture.larkspur), fixture.reps[0].id, unit_of_work=fixture.unit_of_work
+        )

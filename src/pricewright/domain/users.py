@@ -38,6 +38,12 @@ class EmailAlreadyRegisteredError(ConflictError):
     code = "email_already_registered"
 
 
+class LastAdminError(ConflictError):
+    """A tenant always keeps one active admin: nobody else could manage its users."""
+
+    code = "last_admin"
+
+
 def normalize_email(raw: str) -> str:
     """Emails identify users across every tenant, compared case-insensitively."""
     email = raw.strip().lower()
@@ -78,6 +84,8 @@ class User:
     password_hash: str
     is_active: bool = True
     failed_login_attempts: int = 0
+    version: int = 1
+    """Counts saved changes; the repository bumps it (ADR-0012)."""
 
     @property
     def is_locked(self) -> bool:
@@ -91,6 +99,26 @@ class User:
         self.failed_login_attempts += 1
 
     def record_successful_login(self) -> None:
+        self.failed_login_attempts = 0
+
+    @property
+    def is_active_admin(self) -> bool:
+        return self.is_active and self.role is Role.ADMIN
+
+    def change(
+        self,
+        *,
+        full_name: str | None = None,
+        role: Role | None = None,
+        is_active: bool | None = None,
+    ) -> None:
+        """Admin edits. The email is the sign-in identity and does not change here."""
+        self.full_name = self.full_name if full_name is None else normalize_full_name(full_name)
+        self.role = self.role if role is None else role
+        self.is_active = self.is_active if is_active is None else is_active
+
+    def unlock(self) -> None:
+        """Clear the failed sign-in count after a lockout (an admin's decision, NIST §3.2.2)."""
         self.failed_login_attempts = 0
 
     @classmethod

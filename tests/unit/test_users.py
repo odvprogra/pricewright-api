@@ -124,3 +124,47 @@ def test_inactive_user_cannot_sign_in() -> None:
     user.is_active = False
 
     assert not user.can_sign_in
+
+
+def test_user_change_edits_name_role_and_status() -> None:
+    user = avery()
+
+    user.change(full_name=" Avery Manager ", role=Role.SALES_MANAGER, is_active=False)
+
+    assert (user.full_name, user.role, user.is_active) == (
+        "Avery Manager",
+        Role.SALES_MANAGER,
+        False,
+    )
+    assert user.version == 1  # the repository counts saved versions
+
+
+def test_user_change_with_a_blank_name_changes_nothing() -> None:
+    user = avery()
+
+    with pytest.raises(InvalidUserError, match="full_name"):
+        user.change(full_name=" ", role=Role.ADMIN)
+
+    assert (user.full_name, user.role) == ("Avery", Role.SALES_REP)
+
+
+def test_unlock_lets_a_locked_user_sign_in_again() -> None:
+    user = avery()
+    user.failed_login_attempts = MAX_FAILED_LOGINS
+
+    user.unlock()
+
+    assert user.can_sign_in
+
+
+@pytest.mark.parametrize(
+    ("role", "is_active", "expected"),
+    [(Role.ADMIN, True, True), (Role.ADMIN, False, False), (Role.SALES_MANAGER, True, False)],
+)
+def test_active_admin_needs_both_the_role_and_the_active_status(
+    role: Role, is_active: bool, expected: bool
+) -> None:
+    user = avery()
+    user.change(role=role, is_active=is_active)
+
+    assert user.is_active_admin is expected

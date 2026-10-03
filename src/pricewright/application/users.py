@@ -6,9 +6,10 @@ from uuid import UUID
 from pricewright.application.pagination import Page
 from pricewright.application.ports import PasswordHasher, UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.auth import Permission, Principal
-from pricewright.domain.errors import NotFoundError
+from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.users import (
     EmailAlreadyRegisteredError,
+    LastAdminError,
     Role,
     User,
     normalize_email,
@@ -68,7 +69,7 @@ async def list_users(
     principal.require(Permission.USERS_MANAGE)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
-        users = await uow.users.list(after=after, limit=limit + 1)  # one extra: is there more?
+        users = await uow.users.page(after=after, limit=limit + 1)  # one extra: is there more?
     page = users[:limit]
     has_more = len(users) > limit
     return Page(items=page, next_after=page[-1].id if has_more else None)
@@ -82,4 +83,61 @@ async def get_user(principal: Principal, user_id: UUID, *, unit_of_work: UnitOfW
         user = await uow.users.get(user_id)
     if user is None:
         raise NotFoundError("no such user")
+    return user
+
+
+@dataclass(frozen=True, slots=True)
+class UserChanges:
+    """Fields left as ``None`` keep their value."""
+
+    full_name: str | None = None
+    role: Role | None = None
+    is_active: bool | None = None
+
+
+async def change_user(
+    principal: Principal,
+    user_id: UUID,
+    changes: UserChanges,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+) -> User:
+    """Rename, change the role of, or (de)activate a user; the tenant keeps an active admin."""
+    principal.require(Permission.USERS_MANAGE)
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        user = await uow.users.get(user_id)
+        if user is None:
+            raise NotFoundError("no such user")
+        if user.version != expected_version:
+            raise StaleVersionError("the user was changed by someone else; reload it")
+        was_active_admin = user.is_active_admin
+        user.change(full_name=changes.full_name, role=changes.role, is_active=changes.is_active)
+        # The admins stay locked until commit: a concurrent demotion of the other admin waits for
+        # this one and then counts again.
+        if (
+            was_active_admin
+            and not user.is_active_admin
+            and await uow.users.lock_active_admins() == [user.id]
+        ):
+            raise LastAdminError("the tenant needs at least one active admin")
+        await uow.users.save(user)
+        await uow.commit()
+    return user
+
+
+async def unlock_user(
+    principal: Principal, user_id: UUID, *, unit_of_work: UnitOfWorkFactory
+) -> User:
+    """Let a user locked out by failed sign-ins try again."""
+    principal.require(Permission.USERS_MANAGE)
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        user = await uow.users.get(user_id)
+        if user is None:
+            raise NotFoundError("no such user")
+        user.unlock()
+        await uow.users.save_login_state(user)
+        await uow.commit()
     return user
