@@ -29,15 +29,15 @@ the first quote to the order.
 Pricewright is built in milestones; this table shows what works today. The full scope is in the
 [product brief](docs/brief.md).
 
-| Capability                                                                               | Milestone | Status      |
-| ---------------------------------------------------------------------------------------- | --------- | ----------- |
-| Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI  | M0        | Done        |
-| Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation | M1        | In progress |
-| Catalog and customers with cursor pagination and audit events                            | M2        |             |
-| Pricing engine: price waterfall with a per-line breakdown of every rule applied          | M3        |             |
-| Quotes with revisions, expiration, approvals and optimistic locking                      | M4        |             |
-| Idempotent conversion of accepted quotes into orders                                     | M6        |             |
-| Transactional outbox, worker, quote PDFs and email notifications                         | M5        |             |
+| Capability                                                                               | Milestone | Status |
+| ---------------------------------------------------------------------------------------- | --------- | ------ |
+| Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI  | M0        | Done   |
+| Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation | M1        | Done   |
+| Catalog and customers with cursor pagination and audit events                            | M2        | Next   |
+| Pricing engine: price waterfall with a per-line breakdown of every rule applied          | M3        |        |
+| Quotes with revisions, expiration, approvals and optimistic locking                      | M4        |        |
+| Idempotent conversion of accepted quotes into orders                                     | M6        |        |
+| Transactional outbox, worker, quote PDFs and email notifications                         | M5        |        |
 
 The web app lives in a separate repository, `pricewright-web` (from M7). It consumes this API the
 same way every other client does: through a released `openapi.json`.
@@ -125,10 +125,19 @@ docs/                # product brief, architecture and ADRs
 
 ## Trade-offs & what I'd do next
 
-- **Only the baseline exists.** M0 sets up the service, CI and the release pipeline; business
-  features start with M1 (tenancy, auth and roles).
-- **No breaking-change check yet.** The spec has no business endpoints to protect; the oasdiff check
-  against the latest release arrives with the first ones in M2.
+- **Identity is built in, not delegated.** Passwords, tokens and API keys follow OWASP, NIST SP
+  800-63B-4 and the OAuth security RFCs (ADR-0007), but there is no MFA, no SSO and no rate limiting
+  by IP yet; a breached-password blocklist would be the next cheap win. An external identity
+  provider (OIDC) can replace sign-in without touching authorization.
+- **Admins set initial passwords.** Email invitations arrive with the worker and email in M5.
+- **Isolation lives in the application and in composite keys.** PostgreSQL row-level security would
+  add a fourth layer (ADR-0006); it stays a stretch goal.
+- **`Idempotency-Key`** arrives with orders (M6). Until then the creation endpoints are protected by
+  natural keys (a user's email, an account's name).
+- **The OpenAPI spec documents errors with FastAPI's default schemas**, not as Problem Details; the
+  fix belongs in the service template.
+- **No breaking-change check yet.** The oasdiff check against the latest release arrives in M2, with
+  the first business endpoints.
 - **Deliberately out of scope:** invoicing, inventory, taxes beyond a flat rate per tenant,
   payments, multi-currency conversion and SSO. Each is a product of its own; the integration points
   would be the order snapshot and the outbox events.

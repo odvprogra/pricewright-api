@@ -22,7 +22,7 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **M1 — Tenancy + auth + RBAC**.
+- Work one milestone at a time. Current milestone: **M2 — Catalog + customers**.
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.
@@ -52,7 +52,19 @@ src/pricewright/api/             FastAPI app, routers, Problem Details
 src/pricewright/main.py          composition root
 ```
 
-Read first: `main.py`, `api/app.py`, `api/problems.py`, `settings.py`, `infrastructure/database.py`.
+Read first: `main.py` (wiring), `application/ports.py` (unit of work and repositories),
+`domain/auth.py` (principals and permissions), `api/dependencies.py` (who is calling),
+`api/concurrency.py` (ETag / If-Match), `tests/fakes.py`.
+
+Rules the code relies on:
+
+- Use cases call `principal.require(...)` before any lookup, and bind the unit of work to the
+  caller's tenant; only `uow.identities` reads across tenants (ADR-0006, ADR-0009).
+- Tenant-owned tables get `UNIQUE (tenant_id, id)` and composite foreign keys.
+- Mutable aggregates carry a `version`: ETag out, `If-Match` in (412/428, ADR-0012).
+- Every route with an id needs a case in `tests/isolation_cases.py` (a guard test fails otherwise).
+- Fakes in `tests/fakes.py` enforce the same rules as the adapters; keep them in step.
+- Test secrets are generated at runtime: gitleaks flags literals.
 
 ## Decisions already made
 
@@ -70,7 +82,9 @@ expected ADRs and their milestones are listed in the brief (§9).
 
 ## Current status
 
-- Done: M0 — generated from python-service-template v1.0.2; ruleset on `main`; brief, README,
-  ADR-0002; release pipeline with immutable releases
+- Done: M0 — scaffold, release pipeline (v0.1.0). M1 — tenants, users, sign-in with rotating refresh
+  tokens, role permissions, tenant settings with optimistic concurrency, user management, service
+  accounts with API keys, tenant isolation suite (v0.2.0)
 - In progress: —
-- Next: M1 — tenancy, auth and RBAC, including service accounts with scoped API keys
+- Next: M2 — catalog and customers (CRUD, cursor pagination, filters, audit events), plus the
+  oasdiff breaking-change check
