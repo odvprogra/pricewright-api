@@ -1,6 +1,6 @@
 [project]
 name = "pricewright-api"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-tenant B2B quote-to-order API: transparent pricing engine, approval workflow and full audit trail."
 readme = "README.md"
 license = "MIT"
