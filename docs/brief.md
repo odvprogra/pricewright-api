@@ -172,18 +172,19 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 
 ## 9. Expected ADRs
 
-| ADR  | Topic                                                                                                            | Milestone |
-| ---- | ---------------------------------------------------------------------------------------------------------------- | --------- |
-| 0001 | [Architecture style, decisions recorded as ADRs](adr/0001-record-architecture-decisions.md)                      | M0        |
-| 0002 | [Separate repos with a versioned OpenAPI contract](adr/0002-separate-repos-with-a-versioned-openapi-contract.md) | M0        |
-| 0003 | Money representation, rounding and tax                                                                           | M3        |
-| 0004 | Pricing rule stacking policy and approval metric                                                                 | M3        |
-| 0005 | Quote lifecycle implementation (revisions, expiration)                                                           | M4        |
-| 0006 | Multi-tenancy strategy                                                                                           | M1        |
-| 0007 | Auth approach (users + service accounts)                                                                         | M1        |
-| 0008 | Transactional outbox without a broker                                                                            | M5        |
-| 0009 | 404 vs 403 for cross-tenant access                                                                               | M1        |
-| 0010 | Supplier price change proposals                                                                                  | M11       |
+| ADR  | Topic                                                                                                                       | Milestone |
+| ---- | --------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 0001 | [Architecture style, decisions recorded as ADRs](adr/0001-record-architecture-decisions.md)                                 | M0        |
+| 0002 | [Separate repos with a versioned OpenAPI contract](adr/0002-separate-repos-with-a-versioned-openapi-contract.md)            | M0        |
+| 0003 | Money representation, rounding and tax                                                                                      | M3        |
+| 0004 | Pricing rule stacking policy and approval metric                                                                            | M3        |
+| 0005 | Quote lifecycle implementation (revisions, expiration)                                                                      | M4        |
+| 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                            | M1        |
+| 0007 | Auth approach (users + service accounts)                                                                                    | M1        |
+| 0008 | Transactional outbox without a broker                                                                                       | M5        |
+| 0009 | 404 vs 403 for cross-tenant access                                                                                          | M1        |
+| 0010 | Supplier price change proposals                                                                                             | M11       |
+| 0011 | [Repository and Unit of Work ports](adr/0011-repository-and-unit-of-work-ports.md) (handbook §5: every pattern gets an ADR) | M1        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 

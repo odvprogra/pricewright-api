@@ -142,6 +142,21 @@ forbidden_modules = [
     "alembic",
 ]
 
+[[tool.importlinter.contracts]]
+name = "Use cases depend on ports, not frameworks (ADR-0011)"
+type = "forbidden"
+source_modules = ["pricewright.application"]
+forbidden_modules = [
+    "pricewright.settings",
+    "pydantic_settings",
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "sqlalchemy",
+    "asyncpg",
+    "alembic",
+]
+
 # --- Migrations ----------------------------------------------------------------------------------
 
 [tool.alembic]
