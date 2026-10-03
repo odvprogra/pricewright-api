@@ -11,8 +11,9 @@ from pricewright.application.ports import (
     UnitOfWorkFactory,
 )
 from pricewright.domain.auth import AuthenticationError, Principal
+from pricewright.domain.digests import digest
 from pricewright.domain.errors import RuleViolationError
-from pricewright.domain.sessions import RefreshToken, digest, new_refresh_token
+from pricewright.domain.sessions import RefreshToken, new_refresh_token
 from pricewright.domain.users import User, canonical_password, normalize_email
 
 # One message for every failure: callers cannot tell an unknown email from a wrong password or a
@@ -121,14 +122,14 @@ async def current_user(principal: Principal, *, unit_of_work: UnitOfWorkFactory)
     """The signed-in user, as stored now: a deactivated or deleted user is no longer signed in."""
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
-        user = await uow.users.get(principal.user_id)
+        user = await uow.users.get(principal.subject_id)
     if user is None or not user.can_sign_in:
         raise AuthenticationError("the account behind this token can no longer sign in")
     return user
 
 
 def _principal(user: User) -> Principal:
-    return Principal(tenant_id=user.tenant_id, user_id=user.id, role=user.role)
+    return Principal(tenant_id=user.tenant_id, subject_id=user.id, role=user.role)
 
 
 async def _find(identities: IdentityLookup, raw_email: str) -> User | None:

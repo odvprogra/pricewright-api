@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from pricewright.domain.sessions import RefreshToken, digest
+from pricewright.domain.digests import digest
+from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork

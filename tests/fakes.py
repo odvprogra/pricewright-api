@@ -14,15 +14,18 @@ from uuid import UUID
 
 from pricewright.api.dependencies import Services
 from pricewright.application.ports import (
+    ApiKeyRepository,
     IdentityLookup,
     IssuedToken,
     RefreshTokenRepository,
+    ServiceAccountRepository,
     TenantRepository,
     UnitOfWork,
     UserRepository,
 )
 from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.errors import ConflictError, StaleVersionError
+from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
@@ -33,6 +36,8 @@ class InMemoryDatabase:
     tenants: dict[UUID, Tenant] = field(default_factory=dict)
     users: dict[UUID, User] = field(default_factory=dict)
     refresh_tokens: dict[UUID, RefreshToken] = field(default_factory=dict)
+    service_accounts: dict[UUID, ServiceAccount] = field(default_factory=dict)
+    api_keys: dict[UUID, ApiKey] = field(default_factory=dict)
 
 
 class FakeTenantRepository:
@@ -132,6 +137,60 @@ class FakeRefreshTokenRepository:
                 token.revoked_at = now
 
 
+class FakeServiceAccountRepository:
+    def __init__(self, accounts: dict[UUID, ServiceAccount], uow: FakeUnitOfWork) -> None:
+        self._accounts = accounts
+        self._uow = uow
+
+    async def add(self, account: ServiceAccount) -> None:
+        if account.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("a service account can only be added to the unit of work's tenant")
+        self._accounts[account.id] = account
+
+    async def get(self, account_id: UUID) -> ServiceAccount | None:
+        account = self._accounts.get(account_id)
+        if account is None or account.tenant_id != self._uow.tenant_id:
+            return None
+        return copy.deepcopy(account)
+
+    async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
+        owned = sorted(
+            (a for a in self._accounts.values() if a.tenant_id == self._uow.tenant_id),
+            key=lambda account: account.id,
+        )
+        return copy.deepcopy([a for a in owned if after is None or a.id > after][:limit])
+
+
+class FakeApiKeyRepository:
+    def __init__(self, keys: dict[UUID, ApiKey], uow: FakeUnitOfWork) -> None:
+        self._keys = keys
+        self._uow = uow
+
+    async def add(self, key: ApiKey) -> None:
+        if key.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("an API key can only be added to the unit of work's tenant")
+        self._keys[key.id] = key
+
+    async def get(self, key_id: UUID) -> ApiKey | None:
+        key = self._keys.get(key_id)
+        return None if key is None or key.tenant_id != self._uow.tenant_id else copy.deepcopy(key)
+
+    async def active_for(self, account_id: UUID) -> list[ApiKey]:
+        keys = (
+            key
+            for key in self._keys.values()
+            if key.tenant_id == self._uow.tenant_id
+            and key.service_account_id == account_id
+            and key.revoked_at is None
+        )
+        return copy.deepcopy(sorted(keys, key=lambda key: key.id))
+
+    async def save(self, key: ApiKey) -> None:
+        stored = self._keys.get(key.id)
+        if stored is not None and stored.tenant_id == self._uow.tenant_id:
+            stored.last_used_at, stored.revoked_at = key.last_used_at, key.revoked_at
+
+
 class FakeIdentityLookup:
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -145,6 +204,10 @@ class FakeIdentityLookup:
         found = next((token for token in tokens if token.token_digest == token_digest), None)
         return copy.deepcopy(found)
 
+    async def api_key_by_digest(self, key_digest: str) -> ApiKey | None:
+        keys = self._database.api_keys.values()
+        return copy.deepcopy(next((key for key in keys if key.key_digest == key_digest), None))
+
 
 class FakeUnitOfWork:
     """Works on a copy of the database; ``commit`` writes the copy back."""
@@ -152,6 +215,8 @@ class FakeUnitOfWork:
     tenants: TenantRepository
     users: UserRepository
     refresh_tokens: RefreshTokenRepository
+    service_accounts: ServiceAccountRepository
+    api_keys: ApiKeyRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -163,6 +228,8 @@ class FakeUnitOfWork:
         self.tenants = FakeTenantRepository(self._staged.tenants)
         self.users = FakeUserRepository(self._staged.users, self)
         self.refresh_tokens = FakeRefreshTokenRepository(self._staged.refresh_tokens, self)
+        self.service_accounts = FakeServiceAccountRepository(self._staged.service_accounts, self)
+        self.api_keys = FakeApiKeyRepository(self._staged.api_keys, self)
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
@@ -192,6 +259,8 @@ class FakeUnitOfWork:
         self._database.tenants = copy.deepcopy(self._staged.tenants)
         self._database.users = copy.deepcopy(self._staged.users)
         self._database.refresh_tokens = copy.deepcopy(self._staged.refresh_tokens)
+        self._database.service_accounts = copy.deepcopy(self._staged.service_accounts)
+        self._database.api_keys = copy.deepcopy(self._staged.api_keys)
 
 
 class FakePasswordHasher:
@@ -239,7 +308,7 @@ class FakeAccessTokens:
     EXPIRES_IN = 900
 
     def issue(self, principal: Principal) -> IssuedToken:
-        token = f"token:{principal.tenant_id}:{principal.user_id}:{principal.role}"
+        token = f"token:{principal.tenant_id}:{principal.subject_id}:{principal.role}"
         return IssuedToken(token=token, expires_in=self.EXPIRES_IN)
 
     def read(self, token: str) -> Principal:

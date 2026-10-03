@@ -31,11 +31,13 @@ class JwtAccessTokens:
         self._clock = clock
 
     def issue(self, principal: Principal) -> IssuedToken:
+        if principal.role is None:
+            raise ValueError("access tokens are for users; service accounts use API keys")
         issued_at = self._clock()
         claims = {
             "iss": ISSUER,
             "aud": AUDIENCE,
-            "sub": str(principal.user_id),
+            "sub": str(principal.subject_id),
             "tid": str(principal.tenant_id),
             "role": principal.role.value,
             "iat": issued_at,
@@ -59,7 +61,7 @@ class JwtAccessTokens:
             )
             return Principal(
                 tenant_id=uuid.UUID(claims["tid"]),
-                user_id=uuid.UUID(claims["sub"]),
+                subject_id=uuid.UUID(claims["sub"]),
                 role=Role(claims["role"]),
             )
         except (jwt.PyJWTError, ValueError) as error:

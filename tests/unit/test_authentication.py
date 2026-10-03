@@ -15,7 +15,8 @@ from pricewright.application.authentication import (
 )
 from pricewright.application.ports import UnitOfWork
 from pricewright.domain.auth import AuthenticationError, Principal
-from pricewright.domain.sessions import ABSOLUTE_LIFETIME, IDLE_LIFETIME, RefreshToken, digest
+from pricewright.domain.digests import digest
+from pricewright.domain.sessions import ABSOLUTE_LIFETIME, IDLE_LIFETIME, RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import MAX_FAILED_LOGINS, Role, User
 from tests.fakes import (
@@ -160,7 +161,7 @@ async def test_log_in_treats_equivalent_unicode_passwords_as_equal() -> None:
 
     pair = await fixture.log_in(password="contraseña segura 2026")
 
-    assert fixture.tokens.read(pair.access.token).user_id == fixture.avery.id
+    assert fixture.tokens.read(pair.access.token).subject_id == fixture.avery.id
 
 
 def test_credentials_and_token_pairs_never_show_secrets() -> None:
@@ -190,7 +191,7 @@ async def test_refresh_rotates_the_refresh_token_and_issues_a_new_access_token()
     second = await fixture.refresh(first.refresh_token)
 
     assert second.refresh_token != first.refresh_token
-    assert fixture.tokens.read(second.access.token).user_id == fixture.avery.id
+    assert fixture.tokens.read(second.access.token).subject_id == fixture.avery.id
     assert fixture.session(first.refresh_token).used_at == fixture.clock()
     assert (
         fixture.session(second.refresh_token).family_id
