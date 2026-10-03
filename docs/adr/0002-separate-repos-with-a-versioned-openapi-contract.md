@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-02
+- **Amended:** 2026-10-03 — the breaking-change check compares each pull request with `main`
 
 ## Context
 
@@ -38,9 +39,11 @@ through the API's OpenAPI document:
   version in `uv.lock` and in `openapi.json`, so it passes `uv sync --locked` and the drift test.
 - **Consumers** (`pricewright-web`, `erp-mcp-server`, `ops-copilot`) pin a release and generate
   their client from its `openapi.json`. Upgrading is a reviewed version bump in the consumer.
-- **Breaking changes:** from M2, when the first business endpoints exist, CI compares the spec with
-  the latest release's using [oasdiff](https://github.com/oasdiff/oasdiff) and flags breaking
-  changes.
+- **Breaking changes:** from M2, when the first business endpoints exist, CI compares each pull
+  request's spec with `main`'s using [oasdiff](https://github.com/oasdiff/oasdiff). A breaking
+  change fails the check unless the pull request title marks it with `!` (`feat!:`), which makes
+  release-please bump the version. Comparing with the latest release instead would keep failing
+  every later pull request after an intended breaking change, until the next release.
 
 ## Alternatives considered
 

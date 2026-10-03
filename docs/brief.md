@@ -120,7 +120,8 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
   `openapi.json` release asset of `pricewright-api`, the same way `erp-mcp-server` and `ops-copilot`
   consume the API.
 - Contract: `pricewright-api` releases with SemVer (release-please), attaches `openapi.json` to
-  every release, and CI flags breaking changes against the previous release (oasdiff, from M2).
+  every release, and CI flags breaking changes in every pull request (oasdiff against `main`, from
+  M2).
 - Observability: structlog + OpenTelemetry; `request_id` propagated to the worker through the outbox
   event.
 

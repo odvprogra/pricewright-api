@@ -1,0 +1,58 @@
+name: API contract
+
+# Breaking-change check for the OpenAPI contract (docs/adr/0002). Each pull request's openapi.json is
+# compared with the base branch's, not with the latest release: after an intended breaking change,
+# every later pull request would fail until the next release. A breaking change passes only when
+# the PR title marks it with "!" (Conventional Commits), so release-please bumps the version for it.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited] # edited: the title can add or drop the "!"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  breaking-changes:
+    name: Breaking changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      OASDIFF_IMAGE: tufin/oasdiff:v1.33.0@sha256:6263a96dd2ef0726c54e21fea9b8e1607eac4841add0079324b424c1f52b819c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the base branch's openapi.json
+          persist-credentials: false
+
+      # The title reaches the shell as an environment variable, never as ${{ }} inside run:.
+      # oasdiff exits 1 when it finds breaking changes (--fail-on ERR) and above 100 when it cannot
+      # load a spec.
+      - name: Compare openapi.json with the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          git show "origin/$BASE_REF:openapi.json" > "$RUNNER_TEMP/base.json"
+          cp openapi.json "$RUNNER_TEMP/revision.json"
+          status=0
+          docker run --rm --volume "$RUNNER_TEMP:/specs:ro" "$OASDIFF_IMAGE" breaking \
+            /specs/base.json /specs/revision.json \
+            --fail-on ERR --allow-external-refs=false --format markdown \
+            > "$RUNNER_TEMP/breaking.md" || status=$?
+          cat "$RUNNER_TEMP/breaking.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          elif [ "$status" -ne 1 ]; then
+            echo "::error::oasdiff could not compare the specs (exit $status)"
+            exit "$status"
+          elif [[ "$PR_TITLE" =~ ^[a-z]+(\([^\)]*\))?!: ]]; then
+            echo "::notice::Breaking API changes, marked with ! in the title; see the job summary"
+          else
+            echo "::error::Breaking API changes (see the job summary). If intended, mark the PR title with ! (feat!: ...)"
+            exit 1
+          fi

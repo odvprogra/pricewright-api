@@ -33,7 +33,7 @@ Pricewright is built in milestones; this table shows what works today. The full 
 | ---------------------------------------------------------------------------------------- | --------- | ------ |
 | Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI  | M0        | Done   |
 | Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation | M1        | Done   |
-| Catalog and customers with cursor pagination and audit events                            | M2        | Next   |
+| Catalog and customers with cursor pagination and audit events                            | M2        | Doing  |
 | Pricing engine: price waterfall with a per-line breakdown of every rule applied          | M3        |        |
 | Quotes with revisions, expiration, approvals and optimistic locking                      | M4        |        |
 | Idempotent conversion of accepted quotes into orders                                     | M6        |        |
@@ -108,6 +108,10 @@ Configuration comes from environment variables; [.env.example](.env.example) doc
 `just test` runs everything with coverage (gate: 80% overall, 95% on the domain in CI). Integration
 tests need Docker; `just test -m "not integration"` skips them.
 
+On every pull request, CI also compares `openapi.json` with `main`'s
+([oasdiff](https://github.com/oasdiff/oasdiff)): a breaking change fails the check unless the pull
+request title marks it with `!`.
+
 ## Project structure
 
 ```text
@@ -134,10 +138,6 @@ docs/                # product brief, architecture and ADRs
   add a fourth layer (ADR-0006); it stays a stretch goal.
 - **`Idempotency-Key`** arrives with orders (M6). Until then the creation endpoints are protected by
   natural keys (a user's email, an account's name).
-- **The OpenAPI spec documents errors with FastAPI's default schemas**, not as Problem Details; the
-  fix belongs in the service template.
-- **No breaking-change check yet.** The oasdiff check against the latest release arrives in M2, with
-  the first business endpoints.
 - **Deliberately out of scope:** invoicing, inventory, taxes beyond a flat rate per tenant,
   payments, multi-currency conversion and SSO. Each is a product of its own; the integration points
   would be the order snapshot and the outbox events.
