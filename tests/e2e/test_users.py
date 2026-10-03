@@ -10,7 +10,7 @@ import pytest
 from pricewright.api.app import create_app
 from pricewright.domain.auth import Principal
 from pricewright.domain.tenants import Tenant, TenantSettings
-from pricewright.domain.users import Role, User
+from pricewright.domain.users import MAX_FAILED_LOGINS, Role, User
 from tests.fakes import FakeAccessTokens, InMemoryDatabase, fake_services
 
 NORTHFIELD = Tenant.register(name="Northfield", settings=TenantSettings("USD", Decimal(0)))
@@ -109,6 +109,7 @@ async def test_an_admin_adds_a_user_who_can_then_sign_in(client: httpx.AsyncClie
 
     assert created.status_code == 201
     assert created.headers["location"] == f"/api/v1/users/{created.json()['id']}"
+    assert created.headers["etag"] == '"1"'
     assert created.json()["role"] == "sales_manager"
     assert "password" not in created.text
     assert login.status_code == 200
@@ -144,3 +145,106 @@ async def test_a_sales_manager_cannot_add_users(client: httpx.AsyncClient) -> No
     )
 
     assert response.status_code == 403
+
+
+async def patch_user(
+    client: httpx.AsyncClient,
+    user: User,
+    body: dict[str, object],
+    *,
+    if_match: str | None = '"1"',
+    tenant: Tenant = NORTHFIELD,
+) -> httpx.Response:
+    headers = bearer(tenant) | ({"If-Match": if_match} if if_match is not None else {})
+    return await client.patch(f"/api/v1/users/{user.id}", json=body, headers=headers)
+
+
+async def test_reading_a_user_returns_its_etag(client: httpx.AsyncClient) -> None:
+    response = await client.get(f"/api/v1/users/{REPS[1].id}", headers=bearer(NORTHFIELD))
+
+    assert response.headers["etag"] == '"1"'
+
+
+async def test_an_admin_promotes_a_rep_with_the_current_etag(client: httpx.AsyncClient) -> None:
+    response = await patch_user(client, REPS[1], {"role": "sales_manager"})
+
+    assert response.status_code == 200
+    assert response.headers["etag"] == '"2"'
+    assert (response.json()["role"], response.json()["version"]) == ("sales_manager", 2)
+
+
+async def test_an_edit_based_on_an_old_etag_is_a_412(client: httpx.AsyncClient) -> None:
+    await patch_user(client, REPS[1], {"full_name": "First edit"})
+
+    response = await patch_user(client, REPS[1], {"full_name": "Second edit"})
+
+    assert response.status_code == 412
+
+
+async def test_editing_a_user_without_if_match_is_a_428(client: httpx.AsyncClient) -> None:
+    response = await patch_user(client, REPS[1], {"is_active": False}, if_match=None)
+
+    assert response.status_code == 428
+
+
+async def test_a_deactivated_user_can_no_longer_sign_in(client: httpx.AsyncClient) -> None:
+    created = await client.post("/api/v1/users", json=BLAIR, headers=bearer(NORTHFIELD))
+    blair_id = created.json()["id"]
+
+    await client.patch(
+        f"/api/v1/users/{blair_id}",
+        json={"is_active": False},
+        headers=bearer(NORTHFIELD) | {"If-Match": created.headers["etag"]},
+    )
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": BLAIR["email"], "password": BLAIR["password"]}
+    )
+
+    assert login.status_code == 401
+
+
+async def test_the_last_admin_cannot_be_demoted(client: httpx.AsyncClient) -> None:
+    admin = await client.post(
+        "/api/v1/users", json=BLAIR | {"role": "admin"}, headers=bearer(NORTHFIELD)
+    )
+
+    response = await client.patch(
+        f"/api/v1/users/{admin.json()['id']}",
+        json={"role": "sales_rep"},
+        headers=bearer(NORTHFIELD) | {"If-Match": '"1"'},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "last_admin"
+
+
+@pytest.mark.parametrize("body", [{}, {"email": "new@northfield.example"}], ids=["empty", "email"])
+async def test_invalid_user_edits_are_a_422(
+    client: httpx.AsyncClient, body: dict[str, object]
+) -> None:
+    response = await patch_user(client, REPS[1], body)
+
+    assert response.status_code == 422
+
+
+async def test_another_tenants_user_cannot_be_edited_or_unlocked(
+    client: httpx.AsyncClient,
+) -> None:
+    edit = await patch_user(client, REPS[1], {"is_active": False}, tenant=LARKSPUR)
+    unlock = await client.post(f"/api/v1/users/{REPS[1].id}/unlock", headers=bearer(LARKSPUR))
+
+    assert edit.status_code == unlock.status_code == 404
+
+
+async def test_an_admin_unlocks_a_locked_out_user(client: httpx.AsyncClient) -> None:
+    locked = REPS[2]
+    for _ in range(MAX_FAILED_LOGINS):
+        await client.post("/api/v1/auth/login", json={"email": locked.email, "password": "x" * 20})
+    before = await client.get(f"/api/v1/users/{locked.id}", headers=bearer(NORTHFIELD))
+
+    unlocked = await client.post(f"/api/v1/users/{locked.id}/unlock", headers=bearer(NORTHFIELD))
+
+    assert before.json()["locked"] is True
+    assert unlocked.status_code == 200
+    assert unlocked.json()["locked"] is False
+    assert unlocked.headers["etag"] == f'"{before.json()["version"] + 1}"'

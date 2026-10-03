@@ -69,18 +69,41 @@ class FakeUserRepository:
             return None
         return copy.deepcopy(user)  # like the adapter: changes need save()
 
-    async def list(self, *, after: UUID | None, limit: int) -> list[User]:
+    async def page(self, *, after: UUID | None, limit: int) -> list[User]:
         owned = sorted(
             (user for user in self._users.values() if user.tenant_id == self._uow.tenant_id),
             key=lambda user: user.id,
         )
         return copy.deepcopy([user for user in owned if after is None or user.id > after][:limit])
 
-    async def save(self, user: User) -> None:
+    def _stored(self, user: User) -> User:
+        if user.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a user of the unit of work's tenant can be saved")
         stored = self._users.get(user.id)
-        if stored is None or stored.tenant_id != self._uow.tenant_id:
-            raise RuntimeError("only an existing user of the unit of work's tenant can be saved")
-        self._users[user.id] = copy.deepcopy(user)
+        if stored is None:
+            raise RuntimeError("only an existing user can be saved")
+        return stored
+
+    async def save(self, user: User) -> None:
+        stored = self._stored(user)
+        if stored.version != user.version:
+            raise StaleVersionError("the user was changed by someone else; reload it")
+        stored.full_name, stored.role, stored.is_active = user.full_name, user.role, user.is_active
+        stored.version += 1
+        user.version = stored.version
+
+    async def save_login_state(self, user: User) -> None:
+        stored = self._stored(user)
+        if stored.is_locked != user.is_locked:  # like the adapter: only `locked` is visible
+            stored.version += 1
+        stored.failed_login_attempts = user.failed_login_attempts
+        stored.password_hash = user.password_hash
+        user.version = stored.version
+
+    async def lock_active_admins(self) -> list[UUID]:
+        users = self._users.values()
+        tenant_id = self._uow.tenant_id
+        return sorted(u.id for u in users if u.tenant_id == tenant_id and u.is_active_admin)
 
 
 class FakeRefreshTokenRepository:

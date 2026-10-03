@@ -36,12 +36,29 @@ class UserRepository(Protocol):
 
     async def get(self, user_id: UUID) -> User | None: ...
 
-    async def list(self, *, after: UUID | None, limit: int) -> list[User]:
+    async def page(self, *, after: UUID | None, limit: int) -> list[User]:
         """Up to ``limit`` users ordered by id, starting after ``after`` (keyset pagination)."""
         ...
 
     async def save(self, user: User) -> None:
-        """Store changes to a user loaded from this repository."""
+        """Store an admin's edits and bump ``user.version``, atomically.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``user.version``.
+        """
+        ...
+
+    async def save_login_state(self, user: User) -> None:
+        """Store the sign-in fields (failed attempts, password hash) and bump the version.
+
+        No version check: signing in never edits what an admin sees and changes.
+        """
+        ...
+
+    async def lock_active_admins(self) -> list[UUID]:
+        """Lock the tenant's active admins until commit and return their ids.
+
+        Two admins demoting each other at once are serialized, so one admin always remains.
+        """
         ...
 
 

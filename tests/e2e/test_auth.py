@@ -101,6 +101,7 @@ async def test_me_returns_the_signed_in_user(client: httpx.AsyncClient, avery: U
         "role": "admin",
         "is_active": True,
         "locked": False,
+        "version": 1,  # signing in does not change what admins see
     }
 
 

@@ -254,6 +254,47 @@
         "title": "UserPage",
         "type": "object"
       },
+      "UserPatch": {
+        "additionalProperties": false,
+        "description": "Only the fields sent change. The email is the sign-in identity and cannot.",
+        "properties": {
+          "full_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "UserPatch",
+        "type": "object"
+      },
       "UserResponse": {
         "properties": {
           "email": {
@@ -274,6 +315,7 @@
             "type": "boolean"
           },
           "locked": {
+            "description": "Too many failed sign-ins; an admin can unlock the user.",
             "title": "Locked",
             "type": "boolean"
           },
@@ -284,6 +326,11 @@
             "format": "uuid",
             "title": "Tenant Id",
             "type": "string"
+          },
+          "version": {
+            "description": "Also sent as the ETag; send it back in If-Match to update.",
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
@@ -293,7 +340,8 @@
           "full_name",
           "role",
           "is_active",
-          "locked"
+          "locked",
+          "version"
         ],
         "title": "UserResponse",
         "type": "object"
@@ -788,6 +836,153 @@
           }
         ],
         "summary": "One user of the tenant",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "update_user_api_v1_users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid access token"
+          },
+          "403": {
+            "description": "Only admins manage users (`users:manage`)"
+          },
+          "404": {
+            "description": "No such user in this tenant (ADR-0009)"
+          },
+          "409": {
+            "description": "The change would leave the tenant without an active admin"
+          },
+          "412": {
+            "description": "If-Match is stale: someone else changed the user; reload it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "428": {
+            "description": "If-Match is required"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rename a user, change their role, or (de)activate them",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/unlock": {
+      "post": {
+        "operationId": "unlock_api_v1_users__user_id__unlock_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid access token"
+          },
+          "403": {
+            "description": "Only admins manage users (`users:manage`)"
+          },
+          "404": {
+            "description": "No such user in this tenant (ADR-0009)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Let a user locked out by failed sign-ins try again",
         "tags": [
           "users"
         ]

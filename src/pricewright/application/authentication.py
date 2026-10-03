@@ -55,14 +55,14 @@ async def log_in(
             raise AuthenticationError(INVALID_CREDENTIALS)
         if not password_matches:
             user.record_failed_login()
-            await uow.users.save(user)
+            await uow.users.save_login_state(user)
             await uow.commit()
             raise AuthenticationError(INVALID_CREDENTIALS)
 
         user.record_successful_login()
         if hasher.needs_rehash(user.password_hash):
             user.password_hash = await hasher.hash(password)
-        await uow.users.save(user)
+        await uow.users.save_login_state(user)
         refresh_token = new_refresh_token()
         await uow.refresh_tokens.add(
             RefreshToken.start_family(

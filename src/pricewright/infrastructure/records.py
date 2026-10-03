@@ -66,6 +66,7 @@ class UserRecord(Base):
         CheckConstraint("email = lower(email)", name="email_is_lowercase"),
         CheckConstraint(f"role IN ({_ROLES})", name="role_is_known"),
         CheckConstraint("failed_login_attempts >= 0", name="failed_login_attempts_not_negative"),
+        CheckConstraint("version >= 1", name="version_positive"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
@@ -76,6 +77,7 @@ class UserRecord(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
     failed_login_attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
