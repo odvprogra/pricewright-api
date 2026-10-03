@@ -13,6 +13,7 @@ from pricewright.application.users import (
     list_users,
     unlock_user,
 )
+from pricewright.domain.audit import AuditAction
 from pricewright.domain.auth import PermissionDeniedError, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.tenants import Tenant, TenantSettings
@@ -24,7 +25,9 @@ from pricewright.domain.users import (
     User,
     WeakPasswordError,
 )
-from tests.fakes import FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
+from tests.fakes import FakeClock, FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
+
+CLOCK = FakeClock()
 
 
 class Fixture:
@@ -124,6 +127,7 @@ async def test_create_user_adds_a_user_to_the_callers_tenant() -> None:
         BLAIR,
         unit_of_work=fixture.unit_of_work,
         hasher=FakePasswordHasher(),
+        clock=CLOCK,
     )
 
     stored = fixture.database.users[blair.id]
@@ -147,6 +151,7 @@ async def test_create_user_refuses_an_email_registered_in_any_tenant() -> None:
             taken,
             unit_of_work=fixture.unit_of_work,
             hasher=FakePasswordHasher(),
+            clock=CLOCK,
         )
 
 
@@ -162,6 +167,7 @@ async def test_create_user_with_a_weak_password_saves_nothing() -> None:
             weak,
             unit_of_work=fixture.unit_of_work,
             hasher=FakePasswordHasher(),
+            clock=CLOCK,
         )
 
     assert fixture.database.users == {}
@@ -176,6 +182,7 @@ async def test_only_admins_create_users() -> None:
             BLAIR,
             unit_of_work=fixture.unit_of_work,
             hasher=FakePasswordHasher(),
+            clock=CLOCK,
         )
 
 
@@ -202,6 +209,7 @@ async def change(fixture: Fixture, user: User, changes: UserChanges, version: in
         changes,
         expected_version=version,
         unit_of_work=fixture.unit_of_work,
+        clock=CLOCK,
     )
 
 
@@ -262,6 +270,7 @@ async def test_change_user_of_another_tenant_or_by_a_non_admin_fails() -> None:
             UserChanges(is_active=False),
             expected_version=1,
             unit_of_work=fixture.unit_of_work,
+            clock=CLOCK,
         )
     with pytest.raises(PermissionDeniedError):
         await change_user(
@@ -270,6 +279,7 @@ async def test_change_user_of_another_tenant_or_by_a_non_admin_fails() -> None:
             UserChanges(is_active=False),
             expected_version=1,
             unit_of_work=fixture.unit_of_work,
+            clock=CLOCK,
         )
 
 
@@ -279,7 +289,7 @@ async def test_unlock_user_clears_the_lockout() -> None:
     rep.failed_login_attempts = MAX_FAILED_LOGINS
 
     unlocked = await unlock_user(
-        caller(fixture.northfield), rep.id, unit_of_work=fixture.unit_of_work
+        caller(fixture.northfield), rep.id, unit_of_work=fixture.unit_of_work, clock=CLOCK
     )
 
     assert not unlocked.is_locked
@@ -291,5 +301,68 @@ async def test_unlock_user_of_another_tenant_is_not_found() -> None:
 
     with pytest.raises(NotFoundError):
         await unlock_user(
-            caller(fixture.larkspur), fixture.reps[0].id, unit_of_work=fixture.unit_of_work
+            caller(fixture.larkspur),
+            fixture.reps[0].id,
+            unit_of_work=fixture.unit_of_work,
+            clock=CLOCK,
         )
+
+
+async def test_create_user_records_the_new_user_without_the_password() -> None:
+    fixture = Fixture(reps=0)
+    admin = caller(fixture.northfield)
+
+    blair = await create_user(
+        admin, BLAIR, unit_of_work=fixture.unit_of_work, hasher=FakePasswordHasher(), clock=CLOCK
+    )
+
+    [event] = fixture.database.audit_events.values()
+    assert (event.action, event.actor_id, event.resource_id) == (
+        AuditAction.USER_CREATED,
+        admin.subject_id,
+        blair.id,
+    )
+    assert event.changes == {
+        "email": (None, "blair@northfield.example"),
+        "full_name": (None, "Blair Manager"),
+        "role": (None, "sales_manager"),
+        "is_active": (None, True),
+        "locked": (None, False),
+    }
+    assert BLAIR.password not in repr(event)
+
+
+async def test_change_user_records_only_what_changed() -> None:
+    fixture = Fixture(reps=1)
+    [rep] = fixture.reps
+
+    await change(fixture, rep, UserChanges(full_name="Rep 0", role=Role.SALES_MANAGER))
+
+    [event] = fixture.database.audit_events.values()
+    assert event.action is AuditAction.USER_UPDATED
+    assert event.changes == {"role": ("sales_rep", "sales_manager")}
+
+
+async def test_refused_change_records_nothing() -> None:
+    fixture = Fixture(reps=0)
+    only_admin = add_admin(fixture, "avery@northfield.example")
+
+    with pytest.raises(LastAdminError):
+        await change(fixture, only_admin, UserChanges(is_active=False))
+
+    assert fixture.database.audit_events == {}
+
+
+async def test_unlock_user_records_the_unlock_only_when_the_user_was_locked() -> None:
+    fixture = Fixture(reps=2)
+    locked, free = fixture.reps
+    locked.failed_login_attempts = MAX_FAILED_LOGINS
+
+    for user in (locked, free):
+        await unlock_user(
+            caller(fixture.northfield), user.id, unit_of_work=fixture.unit_of_work, clock=CLOCK
+        )
+
+    [event] = fixture.database.audit_events.values()
+    assert (event.action, event.resource_id) == (AuditAction.USER_UNLOCKED, locked.id)
+    assert event.changes == {"locked": (True, False)}

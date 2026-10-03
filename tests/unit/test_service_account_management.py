@@ -13,6 +13,7 @@ from pricewright.application.service_accounts import (
     list_service_accounts,
     revoke_api_key,
 )
+from pricewright.domain.audit import AuditAction, AuditEvent
 from pricewright.domain.auth import Permission, PermissionDeniedError, Principal
 from pricewright.domain.digests import digest
 from pricewright.domain.errors import NotFoundError
@@ -47,8 +48,16 @@ class Fixture:
 
     async def account(self, name: str = "ops-copilot") -> ServiceAccount:
         return await create_service_account(
-            self.admin(), name=name, scopes=READ_TENANT, unit_of_work=self.unit_of_work
+            self.admin(),
+            name=name,
+            scopes=READ_TENANT,
+            unit_of_work=self.unit_of_work,
+            clock=self.clock,
         )
+
+    def events(self, action: AuditAction) -> list[AuditEvent]:
+        events = self.database.audit_events.values()
+        return [event for event in events if event.action is action]
 
 
 async def test_an_admin_creates_and_lists_service_accounts() -> None:
@@ -75,6 +84,7 @@ async def test_service_accounts_cannot_get_administrative_scopes() -> None:
             name="sneaky",
             scopes=frozenset({Permission.USERS_MANAGE}),
             unit_of_work=fixture.unit_of_work,
+            clock=fixture.clock,
         )
 
 
@@ -175,4 +185,50 @@ async def test_only_admins_manage_service_accounts(role: Role) -> None:
             name="ops-copilot",
             scopes=READ_TENANT,
             unit_of_work=fixture.unit_of_work,
+            clock=fixture.clock,
         )
+
+
+async def test_creating_an_account_records_its_name_and_scopes() -> None:
+    fixture = Fixture()
+
+    account = await fixture.account("erp-mcp-server")
+
+    [event] = fixture.events(AuditAction.SERVICE_ACCOUNT_CREATED)
+    assert event.resource_id == account.id
+    assert event.changes == {
+        "name": (None, "erp-mcp-server"),
+        "scopes": (None, "tenant:read"),
+        "is_active": (None, True),
+    }
+
+
+async def test_issuing_and_revoking_a_key_are_recorded_without_the_secret() -> None:
+    fixture = Fixture()
+    account = await fixture.account()
+    issued = await issue_api_key(
+        fixture.admin(),
+        account.id,
+        expires_at=None,
+        unit_of_work=fixture.unit_of_work,
+        clock=fixture.clock,
+    )
+
+    for _ in range(2):  # revoking again changes nothing, so it records nothing
+        await revoke_api_key(
+            fixture.admin(),
+            account.id,
+            issued.key.id,
+            unit_of_work=fixture.unit_of_work,
+            clock=fixture.clock,
+        )
+
+    [issue_event] = fixture.events(AuditAction.API_KEY_ISSUED)
+    [revoke_event] = fixture.events(AuditAction.API_KEY_REVOKED)
+    assert issue_event.changes == {
+        "service_account_id": (None, str(account.id)),
+        "hint": (None, issued.key.hint),
+    }
+    assert issued.secret not in repr(issue_event)
+    assert issued.key.key_digest not in repr(issue_event)
+    assert revoke_event.changes == {"revoked_at": (None, fixture.clock().isoformat())}

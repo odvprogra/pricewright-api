@@ -10,6 +10,7 @@ from pricewright.application.users import UserChanges, change_user
 from pricewright.domain.auth import Principal
 from pricewright.domain.users import LastAdminError, Role, User
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
+from tests.fakes import FakeClock
 from tests.integration.data import Sessions, register
 
 pytestmark = pytest.mark.integration
@@ -39,6 +40,7 @@ async def test_two_admins_demoting_each_other_at_once_leave_one_admin(
                 UserChanges(role=Role.SALES_REP),
                 expected_version=target.version,
                 unit_of_work=unit_of_work,
+                clock=FakeClock(),
             )
         except LastAdminError:
             return "refused"

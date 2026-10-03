@@ -119,6 +119,7 @@ async def add_service_account(
         name=body.name,
         scopes=frozenset(body.scopes),
         unit_of_work=services.unit_of_work,
+        clock=services.clock,
     )
     response.headers["Location"] = f"{router.prefix}/{account.id}"
     return ServiceAccountResponse.of(account)

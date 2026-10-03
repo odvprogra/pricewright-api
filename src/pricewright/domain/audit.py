@@ -81,8 +81,8 @@ class AuditEvent:
 
 
 def created(values: Mapping[str, AuditValue]) -> Changes:
-    """A new record: every field goes from nothing to its first value."""
-    return {name: (None, value) for name, value in values.items()}
+    """A new record: every field with a first value goes from nothing to it."""
+    return {name: (None, value) for name, value in values.items() if value is not None}
 
 
 def changed(before: Mapping[str, AuditValue], after: Mapping[str, AuditValue]) -> Changes:
