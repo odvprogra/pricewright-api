@@ -35,3 +35,10 @@ async def test_password_hasher_asks_to_rehash_hashes_made_with_weaker_parameters
 
     assert current.needs_rehash(await weak.hash(PASSWORD))
     assert not current.needs_rehash(await current.hash(PASSWORD))
+
+
+async def test_password_hasher_verifies_an_unknown_user_with_comparable_work() -> None:
+    hasher = Argon2PasswordHasher()
+
+    await hasher.verify_unknown(PASSWORD)  # first call also creates the reference hash
+    await hasher.verify_unknown(PASSWORD)  # later calls reuse it

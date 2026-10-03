@@ -17,6 +17,7 @@ dependencies = [
     "asyncpg>=0.31",
     "sqlalchemy[asyncio]>=2.1",
     "argon2-cffi>=25.1",
+    "pyjwt>=2.15",
 ]
 
 [project.scripts]

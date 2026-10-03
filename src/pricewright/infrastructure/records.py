@@ -14,6 +14,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -60,6 +61,7 @@ class UserRecord(Base):
         UniqueConstraint("tenant_id", "id"),
         CheckConstraint("email = lower(email)", name="email_is_lowercase"),
         CheckConstraint(f"role IN ({_ROLES})", name="role_is_known"),
+        CheckConstraint("failed_login_attempts >= 0", name="failed_login_attempts_not_negative"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
@@ -69,6 +71,7 @@ class UserRecord(Base):
     role: Mapped[str] = mapped_column(String(20))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

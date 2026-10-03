@@ -4,10 +4,12 @@ Adapters in ``infrastructure`` implement them; tests use in-memory fakes.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from pricewright.domain.auth import Principal
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
 
@@ -25,6 +27,10 @@ class UserRepository(Protocol):
 
     async def get(self, user_id: UUID) -> User | None: ...
 
+    async def save(self, user: User) -> None:
+        """Store changes to a user loaded from this repository."""
+        ...
+
 
 class IdentityLookup(Protocol):
     """The only cross-tenant reads: finding who is signing in before their tenant is known."""
@@ -39,7 +45,28 @@ class PasswordHasher(Protocol):
 
     async def verify(self, password_hash: str, password: str) -> bool: ...
 
+    async def verify_unknown(self, password: str) -> None:
+        """Spend the work of a verification when there is no user, so timing reveals nothing."""
+        ...
+
     def needs_rehash(self, password_hash: str) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedToken:
+    token: str
+    expires_in: int
+    """Seconds until the token expires."""
+
+
+class AccessTokens(Protocol):
+    """Short-lived, signed access tokens (ADR-0007)."""
+
+    def issue(self, principal: Principal) -> IssuedToken: ...
+
+    def read(self, token: str) -> Principal:
+        """Return the token's principal; raise ``AuthenticationError`` if it is not valid."""
+        ...
 
 
 class UnitOfWork(Protocol):

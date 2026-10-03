@@ -3,6 +3,7 @@ import uuid
 import pytest
 
 from pricewright.domain.users import (
+    MAX_FAILED_LOGINS,
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
     InvalidUserError,
@@ -85,3 +86,41 @@ def test_user_create_rejects_blank_or_too_long_name(full_name: str) -> None:
             role=Role.SALES_REP,
             password_hash="hash",
         )
+
+
+def avery() -> User:
+    return User.create(
+        tenant_id=uuid.uuid7(),
+        email="avery@northfield.example",
+        full_name="Avery",
+        role=Role.SALES_REP,
+        password_hash="hash",
+    )
+
+
+def test_user_locks_after_the_maximum_consecutive_failed_logins() -> None:
+    user = avery()
+
+    for _ in range(MAX_FAILED_LOGINS - 1):
+        user.record_failed_login()
+    assert user.can_sign_in
+
+    user.record_failed_login()
+    assert user.is_locked
+    assert not user.can_sign_in
+
+
+def test_user_successful_login_clears_the_failed_attempts() -> None:
+    user = avery()
+    user.record_failed_login()
+
+    user.record_successful_login()
+
+    assert user.failed_login_attempts == 0
+
+
+def test_inactive_user_cannot_sign_in() -> None:
+    user = avery()
+    user.is_active = False
+
+    assert not user.can_sign_in

@@ -5,15 +5,22 @@ tenant scoping, explicit commits and unique emails.
 """
 
 import copy
+import uuid
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Self
 from uuid import UUID
 
-from pricewright.application.ports import IdentityLookup, TenantRepository, UserRepository
+from pricewright.application.ports import (
+    IdentityLookup,
+    IssuedToken,
+    TenantRepository,
+    UserRepository,
+)
+from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.errors import ConflictError
 from pricewright.domain.tenants import Tenant
-from pricewright.domain.users import User
+from pricewright.domain.users import Role, User
 
 
 @dataclass
@@ -45,7 +52,15 @@ class FakeUserRepository:
 
     async def get(self, user_id: UUID) -> User | None:
         user = self._users.get(user_id)
-        return user if user is not None and user.tenant_id == self._uow.tenant_id else None
+        if user is None or user.tenant_id != self._uow.tenant_id:
+            return None
+        return copy.deepcopy(user)  # like the adapter: changes need save()
+
+    async def save(self, user: User) -> None:
+        stored = self._users.get(user.id)
+        if stored is None or stored.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only an existing user of the unit of work's tenant can be saved")
+        self._users[user.id] = copy.deepcopy(user)
 
 
 class FakeIdentityLookup:
@@ -53,7 +68,8 @@ class FakeIdentityLookup:
         self._users = users
 
     async def user_by_email(self, email: str) -> User | None:
-        return next((user for user in self._users.values() if user.email == email), None)
+        user = next((user for user in self._users.values() if user.email == email), None)
+        return copy.deepcopy(user)
 
 
 class FakeUnitOfWork:
@@ -102,15 +118,45 @@ class FakeUnitOfWork:
 
 
 class FakePasswordHasher:
-    """Readable and instant: ``hash("secret")`` is ``"hashed:secret"``."""
+    """Readable and instant: ``hash("secret")`` is ``"hashed:secret"``.
+
+    Hashes without the prefix count as made with old parameters (``needs_rehash``), and every
+    verification is recorded, so tests can check that unknown users cost the same work.
+    """
 
     PREFIX = "hashed:"
+
+    def __init__(self) -> None:
+        self.verified: list[str] = []
 
     async def hash(self, password: str) -> str:
         return self.PREFIX + password
 
     async def verify(self, password_hash: str, password: str) -> bool:
-        return password_hash == self.PREFIX + password
+        self.verified.append(password)
+        return password_hash in {self.PREFIX + password, "legacy:" + password}
+
+    async def verify_unknown(self, password: str) -> None:
+        self.verified.append(password)
 
     def needs_rehash(self, password_hash: str) -> bool:
         return not password_hash.startswith(self.PREFIX)
+
+
+class FakeAccessTokens:
+    """Tokens are ``token:<tenant>:<user>:<role>``; anything else is rejected."""
+
+    EXPIRES_IN = 900
+
+    def issue(self, principal: Principal) -> IssuedToken:
+        token = f"token:{principal.tenant_id}:{principal.user_id}:{principal.role}"
+        return IssuedToken(token=token, expires_in=self.EXPIRES_IN)
+
+    def read(self, token: str) -> Principal:
+        try:
+            prefix, tenant_id, user_id, role = token.split(":")
+            if prefix != "token":
+                raise ValueError(prefix)
+            return Principal(uuid.UUID(tenant_id), uuid.UUID(user_id), Role(role))
+        except ValueError as error:
+            raise AuthenticationError("invalid access token") from error

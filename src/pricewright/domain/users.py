@@ -14,6 +14,9 @@ MIN_PASSWORD_LENGTH = 15
 MAX_PASSWORD_LENGTH = 128
 MAX_EMAIL_LENGTH = 254  # RFC 5321 path limit
 MAX_NAME_LENGTH = 200
+# NIST SP 800-63B-4 §3.2.2: no more than 100 consecutive failed attempts before disabling the
+# password; an admin unlocks the account.
+MAX_FAILED_LOGINS = 100
 _EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 
@@ -43,9 +46,14 @@ def normalize_email(raw: str) -> str:
     return email
 
 
+def canonical_password(raw: str) -> str:
+    """NFKC-normalize (NIST SP 800-63B-4 §3.1.1.2), so equivalent input always hashes the same."""
+    return unicodedata.normalize("NFKC", raw)
+
+
 def normalize_password(raw: str) -> str:
-    """NFKC-normalize (NIST SP 800-63B-4 §3.1.1.2) and enforce the length policy."""
-    password = unicodedata.normalize("NFKC", raw)
+    """Canonicalize a new password and enforce the length policy."""
+    password = canonical_password(raw)
     if not MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH:
         raise WeakPasswordError(
             f"password must have {MIN_PASSWORD_LENGTH} to {MAX_PASSWORD_LENGTH} characters"
@@ -62,6 +70,21 @@ class User:
     role: Role
     password_hash: str
     is_active: bool = True
+    failed_login_attempts: int = 0
+
+    @property
+    def is_locked(self) -> bool:
+        return self.failed_login_attempts >= MAX_FAILED_LOGINS
+
+    @property
+    def can_sign_in(self) -> bool:
+        return self.is_active and not self.is_locked
+
+    def record_failed_login(self) -> None:
+        self.failed_login_attempts += 1
+
+    def record_successful_login(self) -> None:
+        self.failed_login_attempts = 0
 
     @classmethod
     def create(
