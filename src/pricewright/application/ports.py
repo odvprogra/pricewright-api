@@ -8,6 +8,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from pricewright.domain.tenants import Tenant
+from pricewright.domain.users import User
 
 
 class TenantRepository(Protocol):
@@ -16,10 +17,40 @@ class TenantRepository(Protocol):
     async def get(self, tenant_id: UUID) -> Tenant | None: ...
 
 
+class UserRepository(Protocol):
+    """Users of the unit of work's tenant only (ADR-0006)."""
+
+    async def add(self, user: User) -> None: ...
+
+    async def get(self, user_id: UUID) -> User | None: ...
+
+
+class IdentityLookup(Protocol):
+    """The only cross-tenant reads: finding who is signing in before their tenant is known."""
+
+    async def user_by_email(self, email: str) -> User | None: ...
+
+
+class PasswordHasher(Protocol):
+    """Slow, salted hashing (argon2id). Async: hashing is CPU-bound and must not block requests."""
+
+    async def hash(self, password: str) -> str: ...
+
+    async def verify(self, password_hash: str, password: str) -> bool: ...
+
+    def needs_rehash(self, password_hash: str) -> bool: ...
+
+
 class UnitOfWork(Protocol):
-    """One atomic business operation: changes are saved by ``commit`` or discarded on exit."""
+    """One atomic business operation: changes are saved by ``commit`` or discarded on exit.
+
+    Tenant-owned repositories (``users``) work only after ``bind_tenant``, and a unit of work can
+    never be bound to a second tenant (ADR-0006).
+    """
 
     tenants: TenantRepository
+    users: UserRepository
+    identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...
 
@@ -29,5 +60,7 @@ class UnitOfWork(Protocol):
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None: ...
+
+    def bind_tenant(self, tenant_id: UUID) -> None: ...
 
     async def commit(self) -> None: ...

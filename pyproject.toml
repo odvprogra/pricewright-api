@@ -16,6 +16,7 @@ dependencies = [
     "alembic[tz]>=1.20",  # tz: tzdata, so the UTC file names also work on Windows
     "asyncpg>=0.31",
     "sqlalchemy[asyncio]>=2.1",
+    "argon2-cffi>=25.1",
 ]
 
 [project.scripts]
@@ -73,6 +74,7 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
     "S101",  # assert is how pytest checks
+    "S105", "S106",  # fake credentials are test data; gitleaks scans the history for real ones
 ]
 
 # --- Types (ADR-0003 in engineering-standards) -----------------------------------------------------

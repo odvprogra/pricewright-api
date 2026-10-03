@@ -64,12 +64,13 @@ generates its client from the `openapi.json` attached to it. Details in
 
 ## Key decisions
 
-| Decision                                                                                                 | Why                                                                                        |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [ADR-0001](docs/adr/0001-record-architecture-decisions.md) Hexagonal-lite, decisions recorded as ADRs    | Business rules testable without infrastructure; reasons survive the people who made them   |
-| [ADR-0002](docs/adr/0002-separate-repos-with-a-versioned-openapi-contract.md) Versioned OpenAPI contract | Every client, the web app included, depends on a released, immutable spec                  |
-| [ADR-0006](docs/adr/0006-shared-schema-multi-tenancy.md) Shared-schema multi-tenancy                     | Cheapest model to run; isolation enforced by scoped repositories, composite keys and tests |
-| [ADR-0011](docs/adr/0011-repository-and-unit-of-work-ports.md) Repository and Unit of Work ports         | Use cases stay framework-free and testable with fakes; atomic operations are explicit      |
+| Decision                                                                                                          | Why                                                                                        |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [ADR-0001](docs/adr/0001-record-architecture-decisions.md) Hexagonal-lite, decisions recorded as ADRs             | Business rules testable without infrastructure; reasons survive the people who made them   |
+| [ADR-0002](docs/adr/0002-separate-repos-with-a-versioned-openapi-contract.md) Versioned OpenAPI contract          | Every client, the web app included, depends on a released, immutable spec                  |
+| [ADR-0006](docs/adr/0006-shared-schema-multi-tenancy.md) Shared-schema multi-tenancy                              | Cheapest model to run; isolation enforced by scoped repositories, composite keys and tests |
+| [ADR-0007](docs/adr/0007-authentication-for-users-and-service-accounts.md) Authentication without an external IdP | Standards-based passwords and tokens, and a demo that runs with `docker compose up`        |
+| [ADR-0011](docs/adr/0011-repository-and-unit-of-work-ports.md) Repository and Unit of Work ports                  | Use cases stay framework-free and testable with fakes; atomic operations are explicit      |
 
 ## Run it locally
 

@@ -180,7 +180,7 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0004 | Pricing rule stacking policy and approval metric                                                                            | M3        |
 | 0005 | Quote lifecycle implementation (revisions, expiration)                                                                      | M4        |
 | 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                            | M1        |
-| 0007 | Auth approach (users + service accounts)                                                                                    | M1        |
+| 0007 | [Authentication for users and service accounts](adr/0007-authentication-for-users-and-service-accounts.md)                  | M1        |
 | 0008 | Transactional outbox without a broker                                                                                       | M5        |
 | 0009 | 404 vs 403 for cross-tenant access                                                                                          | M1        |
 | 0010 | Supplier price change proposals                                                                                             | M11       |
