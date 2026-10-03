@@ -1,4 +1,4 @@
-"""Signing in, staying signed in and signing out (ADR-0007)."""
+"""Signing in, staying signed in, signing out, and API keys (ADR-0007)."""
 
 from dataclasses import dataclass, field
 
@@ -10,9 +10,10 @@ from pricewright.application.ports import (
     PasswordHasher,
     UnitOfWorkFactory,
 )
-from pricewright.domain.auth import AuthenticationError, Principal
+from pricewright.domain.auth import AuthenticationError, PermissionDeniedError, Principal
 from pricewright.domain.digests import digest
 from pricewright.domain.errors import RuleViolationError
+from pricewright.domain.service_accounts import is_well_formed
 from pricewright.domain.sessions import RefreshToken, new_refresh_token
 from pricewright.domain.users import User, canonical_password, normalize_email
 
@@ -20,6 +21,7 @@ from pricewright.domain.users import User, canonical_password, normalize_email
 # locked account (OWASP Authentication Cheat Sheet).
 INVALID_CREDENTIALS = "invalid email or password"
 INVALID_REFRESH = "invalid refresh token"
+INVALID_API_KEY = "invalid API key"
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,8 +120,31 @@ async def log_out(refresh_token: str, *, unit_of_work: UnitOfWorkFactory, clock:
         await uow.commit()
 
 
+async def authenticate_api_key(
+    key: str, *, unit_of_work: UnitOfWorkFactory, clock: Clock
+) -> Principal:
+    """The service account behind an API key. A malformed key fails before any lookup."""
+    if not is_well_formed(key):
+        raise AuthenticationError(INVALID_API_KEY)
+    async with unit_of_work() as uow:
+        stored = await uow.identities.api_key_by_digest(digest(key))
+        if stored is None:
+            raise AuthenticationError(INVALID_API_KEY)
+        uow.bind_tenant(stored.tenant_id)
+        now = clock()
+        account = await uow.service_accounts.get(stored.service_account_id)
+        if account is None or not account.is_active or not stored.is_usable(now):
+            raise AuthenticationError(INVALID_API_KEY)
+        if stored.record_use(now):  # at most once an hour, so most requests write nothing
+            await uow.api_keys.save(stored)
+            await uow.commit()
+    return Principal(tenant_id=account.tenant_id, subject_id=account.id, scopes=account.scopes)
+
+
 async def current_user(principal: Principal, *, unit_of_work: UnitOfWorkFactory) -> User:
     """The signed-in user, as stored now: a deactivated or deleted user is no longer signed in."""
+    if principal.is_service_account:
+        raise PermissionDeniedError("service accounts have no user profile")
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
         user = await uow.users.get(principal.subject_id)
