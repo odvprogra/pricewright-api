@@ -78,13 +78,14 @@ expected ADRs and their milestones are listed in the brief (§9).
 - Never bump versions or edit `CHANGELOG.md` by hand: the release PR updates `pyproject.toml`,
   `uv.lock`, `openapi.json` and the changelog together.
 - A breaking API change needs a `!` in its Conventional Commit (`feat!:`) so the version reflects
-  it.
+  it. `.github/workflows/api-contract.yml` (oasdiff against `main`) fails a pull request whose
+  breaking changes are not marked that way.
 
 ## Current status
 
 - Done: M0 — scaffold, release pipeline (v0.1.0). M1 — tenants, users, sign-in with rotating refresh
   tokens, role permissions, tenant settings with optimistic concurrency, user management, service
   accounts with API keys, tenant isolation suite (v0.2.0)
-- In progress: —
-- Next: M2 — catalog and customers (CRUD, cursor pagination, filters, audit events), plus the
-  oasdiff breaking-change check
+- In progress: M2 — catalog and customers (CRUD, cursor pagination, filters, audit events). Done so
+  far: errors documented as Problem Details in the spec, the oasdiff breaking-change check
+- Next: M3 — pricing engine
