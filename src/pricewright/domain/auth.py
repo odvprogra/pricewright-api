@@ -32,6 +32,7 @@ class Permission(StrEnum):
     TENANT_MANAGE = "tenant:manage"
     USERS_MANAGE = "users:manage"
     SERVICE_ACCOUNTS_MANAGE = "service_accounts:manage"
+    AUDIT_READ = "audit:read"
 
 
 # Brief §2: reps and managers see the tenant's settings; only admins change them and manage users.
@@ -43,9 +44,14 @@ ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
 
 
 # Administration stays with people: a service account can never manage its tenant, its users or
-# other service accounts, whatever it is granted.
+# other service accounts, nor read the audit trail of what they do, whatever it is granted.
 ADMINISTRATIVE_PERMISSIONS = frozenset(
-    {Permission.TENANT_MANAGE, Permission.USERS_MANAGE, Permission.SERVICE_ACCOUNTS_MANAGE}
+    {
+        Permission.TENANT_MANAGE,
+        Permission.USERS_MANAGE,
+        Permission.SERVICE_ACCOUNTS_MANAGE,
+        Permission.AUDIT_READ,
+    }
 )
 GRANTABLE_SCOPES = frozenset(Permission) - ADMINISTRATIVE_PERMISSIONS
 

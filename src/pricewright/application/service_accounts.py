@@ -5,7 +5,7 @@ from datetime import datetime
 from uuid import UUID
 
 from pricewright.application.audit import api_key_fields, record, service_account_fields
-from pricewright.application.pagination import Page
+from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import Clock, UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.audit import AuditAction, changed, created
 from pricewright.domain.auth import Permission, Principal
@@ -52,14 +52,15 @@ async def create_service_account(
 
 
 async def list_service_accounts(
-    principal: Principal, *, after: UUID | None, limit: int, unit_of_work: UnitOfWorkFactory
+    principal: Principal, *, after: Keyset | None, limit: int, unit_of_work: UnitOfWorkFactory
 ) -> Page[ServiceAccount]:
     principal.require(Permission.SERVICE_ACCOUNTS_MANAGE)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
-        accounts = await uow.service_accounts.page(after=after, limit=limit + 1)
-    page = accounts[:limit]
-    return Page(items=page, next_after=page[-1].id if len(accounts) > limit else None)
+        accounts = await uow.service_accounts.page(
+            after=None if after is None else after.id, limit=limit + 1
+        )
+    return page_of(accounts, limit, lambda account: Keyset(account.id))
 
 
 async def get_service_account(

@@ -63,6 +63,10 @@ Rules the code relies on:
 - Tenant-owned tables get `UNIQUE (tenant_id, id)` and composite foreign keys.
 - Mutable aggregates carry a `version`: ETag out, `If-Match` in (412/428, ADR-0012).
 - Every route with an id needs a case in `tests/isolation_cases.py` (a guard test fails otherwise).
+- Use cases that change a record append its audit event in the same unit of work
+  (`application/audit.py`, ADR-0013).
+- Lists take whitelisted filters and `sort`; cursors are bound to the query (`api/pagination.py`,
+  ADR-0014). Response values from a growing set are strings with `examples` (ADR-0015).
 - Fakes in `tests/fakes.py` enforce the same rules as the adapters; keep them in step.
 - Test secrets are generated at runtime: gitleaks flags literals.
 
