@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.0](https://github.com/odvprogra/pricewright-api/compare/v0.3.0...v0.4.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* show unit costs only to people with costs:read ([#41](https://github.com/odvprogra/pricewright-api/issues/41))
+
+### Features
+
+* accept only ISO 4217 currencies, with their minor units ([#39](https://github.com/odvprogra/pricewright-api/issues/39)) ([2ca8cac](https://github.com/odvprogra/pricewright-api/commit/2ca8cac95ec21e044f764e7d4fc74de592d0e042))
+* add the pricing engine with a price breakdown per line ([#43](https://github.com/odvprogra/pricewright-api/issues/43)) ([879d867](https://github.com/odvprogra/pricewright-api/commit/879d867731a2cb123a3392ff0d4cdf2533524662))
+* let managers maintain pricing rules over the API ([#46](https://github.com/odvprogra/pricewright-api/issues/46)) ([aa7e635](https://github.com/odvprogra/pricewright-api/commit/aa7e635602f828a4080d5da10a8fa462fa6161a3))
+* model pricing rules: scoped, effective-dated discounts and margin floors ([#42](https://github.com/odvprogra/pricewright-api/issues/42)) ([27d6d68](https://github.com/odvprogra/pricewright-api/commit/27d6d6867aa9e057658a67cbdec5c80c8eed2df1))
+* preview prices with a step-by-step breakdown over the API ([#47](https://github.com/odvprogra/pricewright-api/issues/47)) ([3922c51](https://github.com/odvprogra/pricewright-api/commit/3922c51b70ed7c68b03cebd1128d6f17434d4aca))
+* show unit costs only to people with costs:read ([#41](https://github.com/odvprogra/pricewright-api/issues/41)) ([41b0958](https://github.com/odvprogra/pricewright-api/commit/41b0958d700f43cb21e36d4a737e28a801574bb7))
+* store pricing rules with their volume brackets ([#44](https://github.com/odvprogra/pricewright-api/issues/44)) ([a0c52ff](https://github.com/odvprogra/pricewright-api/commit/a0c52ff44690150b091d57c758cb03f29e278f32))
+
+
+### Bug Fixes
+
+* record decimals in the audit trail at their column's scale ([#45](https://github.com/odvprogra/pricewright-api/issues/45)) ([4263339](https://github.com/odvprogra/pricewright-api/commit/426333957c22d3d5b4ec5f6234a1788020762aba))
+
+
+### Documentation
+
+* close M3 in the README, CLAUDE.md, architecture and brief ([#48](https://github.com/odvprogra/pricewright-api/issues/48)) ([c5760ef](https://github.com/odvprogra/pricewright-api/commit/c5760ef5322ae9a860a7d6d1640f92786396f328))
+
 ## [0.3.0](https://github.com/odvprogra/pricewright-api/compare/v0.2.0...v0.3.0) (2026-10-04)
 
 
