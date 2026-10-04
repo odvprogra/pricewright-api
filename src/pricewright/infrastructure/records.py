@@ -42,6 +42,7 @@ from pricewright.domain.customers import (
     MAX_TAX_ID_LENGTH,
     CustomerTier,
 )
+from pricewright.domain.pricing_rules import MAX_RULE_NAME_LENGTH, RuleKind
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
 from pricewright.infrastructure.database import Base
 
@@ -54,6 +55,8 @@ _ROLES = ", ".join(f"'{role}'" for role in Role)
 _ACTOR_TYPES = ", ".join(f"'{actor_type}'" for actor_type in ActorType)
 _UNITS = ", ".join(f"'{unit}'" for unit in UnitOfMeasure)
 _TIERS = ", ".join(f"'{tier}'" for tier in CustomerTier)
+_RULE_KINDS = ", ".join(f"'{kind}'" for kind in RuleKind)
+_QUANTITY = Numeric(10, 3)  # domain/quantities.py
 # The API middleware accepts request IDs of up to 128 characters.
 _REQUEST_ID_LENGTH = 128
 
@@ -296,3 +299,74 @@ class CustomerRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class PricingRuleRecord(Base):
+    """One row per rule, whatever its kind (ADR-0018); checks hold each kind's shape."""
+
+    __tablename__ = "pricing_rules"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),  # target of the brackets' composite foreign key
+        # A product or a category of the same tenant (ADR-0006), or neither: every product.
+        ForeignKeyConstraint(["tenant_id", "product_id"], ["products.tenant_id", "products.id"]),
+        ForeignKeyConstraint(
+            ["tenant_id", "category_id"], ["product_categories.tenant_id", "product_categories.id"]
+        ),
+        Index(None, "tenant_id", "name", "id"),  # the list by name
+        Index(None, "tenant_id", "product_id"),
+        Index(None, "tenant_id", "category_id"),
+        CheckConstraint(f"kind IN ({_RULE_KINDS})", name="kind_is_known"),
+        CheckConstraint("product_id IS NULL OR category_id IS NULL", name="one_scope"),
+        CheckConstraint(f"customer_tier IN ({_TIERS})", name="customer_tier_is_known"),
+        CheckConstraint(
+            "(customer_tier IS NOT NULL) = (kind = 'customer_tier')",
+            name="customer_tier_only_on_tier_discounts",
+        ),
+        CheckConstraint("(rate IS NULL) = (kind = 'volume_tier')", name="rate_unless_volume_tier"),
+        CheckConstraint(
+            "CASE WHEN kind = 'margin_floor' THEN rate >= 0 AND rate < 1 "
+            "ELSE rate > 0 AND rate <= 1 END",
+            name="rate_in_range",
+        ),
+        CheckConstraint("valid_to IS NULL OR valid_to > valid_from", name="window_is_ordered"),
+        CheckConstraint("kind <> 'promotion' OR valid_to IS NOT NULL", name="promotions_end"),
+        CheckConstraint("version >= 1", name="version_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    kind: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(MAX_RULE_NAME_LENGTH, collation=_UNICODE))
+    product_id: Mapped[uuid.UUID | None]
+    category_id: Mapped[uuid.UUID | None]
+    customer_tier: Mapped[str | None] = mapped_column(String(10))
+    rate: Mapped[Decimal | None] = mapped_column(_RATE)
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class PricingRuleBracketRecord(Base):
+    """A volume tier's bracket: from ``min_quantity`` on, ``rate`` off. Replaced as a set."""
+
+    __tablename__ = "pricing_rule_brackets"
+    __table_args__ = (
+        # A bracket belongs to a rule of its own tenant (ADR-0006) and goes with it.
+        ForeignKeyConstraint(
+            ["tenant_id", "rule_id"],
+            ["pricing_rules.tenant_id", "pricing_rules.id"],
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("min_quantity > 0", name="min_quantity_positive"),
+        CheckConstraint("rate > 0 AND rate <= 1", name="rate_in_range"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    rule_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    min_quantity: Mapped[Decimal] = mapped_column(_QUANTITY, primary_key=True)
+    rate: Mapped[Decimal] = mapped_column(_RATE)

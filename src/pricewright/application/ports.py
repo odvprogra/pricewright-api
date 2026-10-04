@@ -16,6 +16,7 @@ from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
+from pricewright.domain.pricing_rules import PricingRule, RuleKind
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
@@ -227,6 +228,49 @@ class CustomerRepository(Protocol):
         ...
 
 
+class PricingRuleSort(StrEnum):
+    NAME = "name"
+    CREATED = "created_at"
+
+
+@dataclass(frozen=True, slots=True)
+class PricingRuleQuery:
+    """Which pricing rules to list and in which order (ADR-0014). ``None`` filters match all."""
+
+    kind: RuleKind | None = None
+    product_id: UUID | None = None
+    category_id: UUID | None = None
+    customer_tier: CustomerTier | None = None
+    active: bool | None = None
+    sort: PricingRuleSort = PricingRuleSort.NAME
+    descending: bool = False
+
+
+class PricingRuleRepository(Protocol):
+    """Pricing rules of the unit of work's tenant only (ADR-0006), with their brackets."""
+
+    async def add(self, rule: PricingRule) -> None: ...
+
+    async def get(self, rule_id: UUID) -> PricingRule | None: ...
+
+    async def page(
+        self, query: PricingRuleQuery, *, after: Keyset | None, limit: int
+    ) -> list[PricingRule]:
+        """Up to ``limit`` matching rules in the query's order, after ``after``."""
+        ...
+
+    async def effective_at(self, at: datetime) -> list[PricingRule]:
+        """Every active rule whose window holds ``at``: what the pricing engine applies."""
+        ...
+
+    async def save(self, rule: PricingRule) -> None:
+        """Store changes, brackets included, and bump ``rule.version``, atomically.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``rule.version``.
+        """
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEventFilter:
     """Which audit events to list; a field left as ``None`` matches every event."""
@@ -306,6 +350,7 @@ class UnitOfWork(Protocol):
     product_categories: ProductCategoryRepository
     products: ProductRepository
     customers: CustomerRepository
+    pricing_rules: PricingRuleRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...

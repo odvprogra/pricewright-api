@@ -1,10 +1,23 @@
 """SQLAlchemy implementations of the repository ports (ADR-0011)."""
 
+from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, case, func, literal, or_, select, tuple_, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    case,
+    delete,
+    func,
+    literal,
+    or_,
+    select,
+    tuple_,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import QueryableAttribute
 
@@ -13,6 +26,8 @@ from pricewright.application.ports import (
     AuditEventFilter,
     CustomerQuery,
     CustomerSort,
+    PricingRuleQuery,
+    PricingRuleSort,
     ProductQuery,
     ProductSort,
 )
@@ -22,6 +37,7 @@ from pricewright.domain.catalog import Product, ProductCategory, UnitOfMeasure
 from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.money import Money
+from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
@@ -31,6 +47,8 @@ from pricewright.infrastructure.records import (
     ApiKeyRecord,
     AuditEventRecord,
     CustomerRecord,
+    PricingRuleBracketRecord,
+    PricingRuleRecord,
     ProductCategoryRecord,
     ProductRecord,
     RefreshTokenRecord,
@@ -755,6 +773,159 @@ class SqlAlchemyCustomerRepository:
         if new_version is None:
             raise StaleVersionError("the customer was changed by someone else; reload it")
         customer.version = new_version
+
+
+def _to_rule(record: PricingRuleRecord, brackets: Sequence[Bracket]) -> PricingRule:
+    return PricingRule(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        kind=RuleKind(record.kind),
+        name=record.name,
+        valid_from=record.valid_from,
+        valid_to=record.valid_to,
+        rate=record.rate,
+        brackets=tuple(brackets),
+        product_id=record.product_id,
+        category_id=record.category_id,
+        customer_tier=None if record.customer_tier is None else CustomerTier(record.customer_tier),
+        is_active=record.is_active,
+        version=record.version,
+    )
+
+
+class SqlAlchemyPricingRuleRepository:
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    def _require_own(self, rule: PricingRule) -> None:
+        if rule.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("only a pricing rule of the unit of work's tenant can be stored")
+
+    def _add_brackets(self, rule: PricingRule) -> None:
+        self._session.add_all(
+            PricingRuleBracketRecord(
+                tenant_id=rule.tenant_id,
+                rule_id=rule.id,
+                min_quantity=bracket.min_quantity,
+                rate=bracket.rate,
+            )
+            for bracket in rule.brackets
+        )
+
+    async def add(self, rule: PricingRule) -> None:
+        self._require_own(rule)
+        self._session.add(
+            PricingRuleRecord(
+                id=rule.id,
+                tenant_id=rule.tenant_id,
+                kind=rule.kind.value,
+                name=rule.name,
+                product_id=rule.product_id,
+                category_id=rule.category_id,
+                customer_tier=None if rule.customer_tier is None else rule.customer_tier.value,
+                rate=rule.rate,
+                valid_from=rule.valid_from,
+                valid_to=rule.valid_to,
+                is_active=rule.is_active,
+                version=rule.version,
+            )
+        )
+        await self._session.flush()  # the brackets' foreign key needs the rule's row
+        self._add_brackets(rule)
+
+    async def _rules(self, select_: Select[PricingRuleRecord]) -> list[PricingRule]:
+        """The rules ``select_`` finds, with their brackets read in one more query."""
+        records = list(await self._session.scalars(select_))
+        tiers = [record.id for record in records if record.kind == RuleKind.VOLUME_TIER]
+        brackets: defaultdict[UUID, list[Bracket]] = defaultdict(list)
+        if tiers:
+            # Plain rows, not records: saving replaces brackets, and loaded records would clash.
+            rows = await self._session.execute(
+                select(
+                    PricingRuleBracketRecord.rule_id,
+                    PricingRuleBracketRecord.min_quantity,
+                    PricingRuleBracketRecord.rate,
+                )
+                .where(
+                    PricingRuleBracketRecord.tenant_id == self._scope.tenant_id,
+                    PricingRuleBracketRecord.rule_id.in_(tiers),
+                )
+                .order_by(PricingRuleBracketRecord.min_quantity)
+            )
+            for rule_id, min_quantity, rate in rows:
+                brackets[rule_id].append(Bracket(min_quantity, rate))
+        return [_to_rule(record, brackets[record.id]) for record in records]
+
+    def _owned(self) -> Select[PricingRuleRecord]:
+        return select(PricingRuleRecord).where(PricingRuleRecord.tenant_id == self._scope.tenant_id)
+
+    async def get(self, rule_id: UUID) -> PricingRule | None:
+        found = await self._rules(self._owned().where(PricingRuleRecord.id == rule_id))
+        return found[0] if found else None
+
+    async def page(
+        self, query: PricingRuleQuery, *, after: Keyset | None, limit: int
+    ) -> list[PricingRule]:
+        conditions: list[ColumnElement[bool]] = []
+        if query.kind is not None:
+            conditions.append(PricingRuleRecord.kind == query.kind.value)
+        if query.product_id is not None:
+            conditions.append(PricingRuleRecord.product_id == query.product_id)
+        if query.category_id is not None:
+            conditions.append(PricingRuleRecord.category_id == query.category_id)
+        if query.customer_tier is not None:
+            conditions.append(PricingRuleRecord.customer_tier == query.customer_tier.value)
+        if query.active is not None:
+            conditions.append(PricingRuleRecord.is_active == query.active)
+        sort_column = {PricingRuleSort.NAME: PricingRuleRecord.name}
+        beyond, order = _keyset(
+            sort_column.get(query.sort), PricingRuleRecord.id, after, descending=query.descending
+        )
+        return await self._rules(
+            self._owned().where(*conditions, *beyond).order_by(*order).limit(limit)
+        )
+
+    async def effective_at(self, at: datetime) -> list[PricingRule]:
+        return await self._rules(
+            self._owned()
+            .where(
+                PricingRuleRecord.is_active,
+                PricingRuleRecord.valid_from <= at,
+                or_(PricingRuleRecord.valid_to.is_(None), PricingRuleRecord.valid_to > at),
+            )
+            .order_by(PricingRuleRecord.id)
+        )
+
+    async def save(self, rule: PricingRule) -> None:
+        self._require_own(rule)
+        new_version = await self._session.scalar(
+            update(PricingRuleRecord)
+            .where(
+                PricingRuleRecord.tenant_id == self._scope.tenant_id,
+                PricingRuleRecord.id == rule.id,
+                PricingRuleRecord.version == rule.version,
+            )
+            .values(
+                name=rule.name,
+                rate=rule.rate,
+                valid_from=rule.valid_from,
+                valid_to=rule.valid_to,
+                is_active=rule.is_active,
+                version=PricingRuleRecord.version + 1,
+            )
+            .returning(PricingRuleRecord.version)
+        )
+        if new_version is None:
+            raise StaleVersionError("the pricing rule was changed by someone else; reload it")
+        rule.version = new_version
+        await self._session.execute(
+            delete(PricingRuleBracketRecord).where(
+                PricingRuleBracketRecord.tenant_id == self._scope.tenant_id,
+                PricingRuleBracketRecord.rule_id == rule.id,
+            )
+        )
+        self._add_brackets(rule)
 
 
 class SqlAlchemyIdentityLookup:

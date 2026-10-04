@@ -25,6 +25,9 @@ from pricewright.application.ports import (
     CustomerSort,
     IdentityLookup,
     IssuedToken,
+    PricingRuleQuery,
+    PricingRuleRepository,
+    PricingRuleSort,
     ProductCategoryRepository,
     ProductQuery,
     ProductRepository,
@@ -40,6 +43,7 @@ from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
+from pricewright.domain.pricing_rules import PricingRule
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
@@ -58,6 +62,7 @@ class InMemoryDatabase:
     product_categories: dict[UUID, ProductCategory] = field(default_factory=dict)
     products: dict[UUID, Product] = field(default_factory=dict)
     customers: dict[UUID, Customer] = field(default_factory=dict)
+    pricing_rules: dict[UUID, PricingRule] = field(default_factory=dict)
 
 
 class FakeTenantRepository:
@@ -341,6 +346,60 @@ class FakeProductRepository:
         self._products[product.id] = copy.deepcopy(product)
 
 
+class FakePricingRuleRepository:
+    def __init__(self, rules: dict[UUID, PricingRule], uow: FakeUnitOfWork) -> None:
+        self._rules = rules
+        self._uow = uow
+
+    def _owned(self) -> list[PricingRule]:
+        return [rule for rule in self._rules.values() if rule.tenant_id == self._uow.tenant_id]
+
+    async def add(self, rule: PricingRule) -> None:
+        if rule.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a pricing rule of the unit of work's tenant can be stored")
+        self._rules[rule.id] = rule
+
+    async def get(self, rule_id: UUID) -> PricingRule | None:
+        return copy.deepcopy(next((rule for rule in self._owned() if rule.id == rule_id), None))
+
+    async def page(
+        self, query: PricingRuleQuery, *, after: Keyset | None, limit: int
+    ) -> list[PricingRule]:
+        def matches(rule: PricingRule) -> bool:
+            return (
+                query.kind in {None, rule.kind}
+                and query.product_id in {None, rule.product_id}
+                and query.category_id in {None, rule.category_id}
+                and query.customer_tier in {None, rule.customer_tier}
+                and query.active in {None, rule.is_active}
+            )
+
+        def key(value: str | None, rule_id: UUID) -> tuple[str, UUID]:
+            by_name = query.sort is PricingRuleSort.NAME
+            return (text_key(value or "") if by_name else ""), rule_id
+
+        return keyset_page(
+            [rule for rule in self._owned() if matches(rule)],
+            lambda rule: key(rule.name, rule.id),
+            None if after is None else key(after.value, after.id),
+            descending=query.descending,
+            limit=limit,
+        )
+
+    async def effective_at(self, at: datetime) -> list[PricingRule]:
+        effective = [rule for rule in self._owned() if rule.is_effective(at)]
+        return copy.deepcopy(sorted(effective, key=lambda rule: rule.id))
+
+    async def save(self, rule: PricingRule) -> None:
+        stored = self._rules.get(rule.id)
+        if stored is None or stored.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a pricing rule of the unit of work's tenant can be stored")
+        if stored.version != rule.version:
+            raise StaleVersionError("the pricing rule was changed by someone else; reload it")
+        rule.version = stored.version + 1
+        self._rules[rule.id] = copy.deepcopy(rule)
+
+
 def keyset_page[T](
     rows: list[T],
     position: Callable[[T], tuple[str, UUID]],
@@ -453,6 +512,7 @@ class FakeUnitOfWork:
     product_categories: ProductCategoryRepository
     products: ProductRepository
     customers: CustomerRepository
+    pricing_rules: PricingRuleRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -472,6 +532,7 @@ class FakeUnitOfWork:
         )
         self.products = FakeProductRepository(self._staged.products, self)
         self.customers = FakeCustomerRepository(self._staged.customers, self)
+        self.pricing_rules = FakePricingRuleRepository(self._staged.pricing_rules, self)
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
