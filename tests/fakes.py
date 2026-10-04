@@ -7,7 +7,7 @@ tenant scoping, explicit commits and unique emails.
 import copy
 import dataclasses
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
@@ -311,6 +311,9 @@ class FakeProductRepository:
     async def with_sku(self, sku: str) -> Product | None:
         found = next((p for p in self._owned() if p.sku.lower() == sku.lower()), None)
         return copy.deepcopy(found)
+
+    async def with_ids(self, product_ids: Collection[UUID]) -> list[Product]:
+        return copy.deepcopy([p for p in self._owned() if p.id in product_ids])
 
     async def page(self, query: ProductQuery, *, after: Keyset | None, limit: int) -> list[Product]:
         def matches(product: Product) -> bool:

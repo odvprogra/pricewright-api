@@ -226,3 +226,19 @@ async def test_another_tenants_products_are_invisible(session_factory: Sessions)
 
     assert (hidden, by_sku) == (None, None)
     assert await skus(session_factory, larkspur, ProductQuery()) == []
+
+
+async def test_products_are_found_by_ids_within_the_tenant(session_factory: Sessions) -> None:
+    northfield, _ = await register(session_factory, "Northfield")
+    larkspur, _ = await register(session_factory, "Larkspur")
+    tape, wrap = product(northfield, "TAPE-48", "Packing tape"), product(northfield, "W-1", "Wrap")
+    theirs = product(larkspur, "TAPE-48", "Packing tape")
+    await store(session_factory, northfield, tape, wrap)
+    await store(session_factory, larkspur, theirs)
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+        found = await uow.products.with_ids({tape.id, theirs.id, uuid.uuid7()})
+        none = await uow.products.with_ids(set())
+
+    assert (found, none) == ([tape], [])

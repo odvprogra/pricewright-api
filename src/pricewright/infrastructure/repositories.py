@@ -1,7 +1,7 @@
 """SQLAlchemy implementations of the repository ports (ADR-0011)."""
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -619,6 +619,17 @@ class SqlAlchemyProductRepository:
 
     async def with_sku(self, sku: str) -> Product | None:
         return await self._one(func.lower(ProductRecord.sku) == sku.lower())
+
+    async def with_ids(self, product_ids: Collection[UUID]) -> list[Product]:
+        if not product_ids:
+            return []
+        records = await self._session.scalars(
+            select(ProductRecord).where(
+                ProductRecord.tenant_id == self._scope.tenant_id,
+                ProductRecord.id.in_(product_ids),
+            )
+        )
+        return [_to_product(record) for record in records]
 
     async def page(self, query: ProductQuery, *, after: Keyset | None, limit: int) -> list[Product]:
         select_ = select(ProductRecord).where(ProductRecord.tenant_id == self._scope.tenant_id)

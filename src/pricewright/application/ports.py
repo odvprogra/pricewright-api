@@ -3,7 +3,7 @@
 Adapters in ``infrastructure`` implement them; tests use in-memory fakes.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -166,6 +166,10 @@ class ProductRepository(Protocol):
 
     async def with_sku(self, sku: str) -> Product | None:
         """The product with this SKU, ignoring case."""
+        ...
+
+    async def with_ids(self, product_ids: Collection[UUID]) -> list[Product]:
+        """The products with these ids, in no particular order; unknown ids are left out."""
         ...
 
     async def page(self, query: ProductQuery, *, after: Keyset | None, limit: int) -> list[Product]:

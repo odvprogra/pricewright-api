@@ -179,3 +179,17 @@ async def test_lists_only_show_the_callers_tenant(world: World) -> None:
     assert customers.json()["items"] == []
     assert rules.json()["items"] == []
     assert tenant.json()["name"] == "Larkspur Tool Co."
+
+
+async def test_a_preview_cannot_use_another_tenants_customer_or_products(world: World) -> None:
+    ids = world.northfield_ids
+    line = {"product_id": ids["product_id"], "quantity": "1"}
+
+    with_their_customer = await world.client.post(
+        "/api/v1/pricing/preview",
+        json={"customer_id": ids["customer_id"], "lines": [line]},
+        headers=world.larkspur_admin,
+    )
+
+    assert with_their_customer.status_code == 422
+    assert with_their_customer.json()["code"] == "unknown_customer"
