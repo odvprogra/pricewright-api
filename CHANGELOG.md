@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/odvprogra/pricewright-api/compare/v0.2.0...v0.3.0) (2026-10-04)
+
+
+### Features
+
+* add the Money value object and record how money is represented ([#26](https://github.com/odvprogra/pricewright-api/issues/26)) ([d0bd98e](https://github.com/odvprogra/pricewright-api/commit/d0bd98e869041b9651fa0237055735a29d9c0934))
+* document service account scopes as open-ended values ([#31](https://github.com/odvprogra/pricewright-api/issues/31)) ([c9855c1](https://github.com/odvprogra/pricewright-api/commit/c9855c1f3f523bb69958a1278778e30d7a413d40))
+* let admins manage product categories ([#32](https://github.com/odvprogra/pricewright-api/issues/32)) ([d5bebe4](https://github.com/odvprogra/pricewright-api/commit/d5bebe433ae0c2bb7eb49ebfd292c41fdef7bbf4))
+* let admins manage the product catalog over the API ([#34](https://github.com/odvprogra/pricewright-api/issues/34)) ([9ea2860](https://github.com/odvprogra/pricewright-api/commit/9ea286060b5401f51680a801c79f54cf5378f7e2))
+* let admins read the audit trail ([#30](https://github.com/odvprogra/pricewright-api/issues/30)) ([5c1026a](https://github.com/odvprogra/pricewright-api/commit/5c1026aeb1322af2044dbbcb67fe014a2f8d3be2))
+* let sales teams manage customers over the API ([#36](https://github.com/odvprogra/pricewright-api/issues/36)) ([5eaae59](https://github.com/odvprogra/pricewright-api/commit/5eaae592266c16b653abd57d7e72e7df180dc853))
+* record admin actions in the audit trail ([#29](https://github.com/odvprogra/pricewright-api/issues/29)) ([cdbd63a](https://github.com/odvprogra/pricewright-api/commit/cdbd63a4542df2cfb690c010aaabb984f49b0ef0))
+* store append-only audit events ([#28](https://github.com/odvprogra/pricewright-api/issues/28)) ([9a51b75](https://github.com/odvprogra/pricewright-api/commit/9a51b755ab5d1e1a320473797e0f613cd0df56cb))
+* store customers keyed by account number ([#35](https://github.com/odvprogra/pricewright-api/issues/35)) ([cb1be8c](https://github.com/odvprogra/pricewright-api/commit/cb1be8c11dd3f389450e948a70339b7dfb9c5a9d))
+* store products priced in the tenant's currency ([#33](https://github.com/odvprogra/pricewright-api/issues/33)) ([710318c](https://github.com/odvprogra/pricewright-api/commit/710318ce13318b3e866384a6db8a3814010f5d11))
+
+
+### Documentation
+
+* close M2 in the README, CLAUDE.md, architecture and brief ([#37](https://github.com/odvprogra/pricewright-api/issues/37)) ([147cec9](https://github.com/odvprogra/pricewright-api/commit/147cec9df6b65f93fb0df91816a2a567b1797c28))
+
 ## [0.2.0](https://github.com/odvprogra/pricewright-api/compare/v0.1.0...v0.2.0) (2026-10-03)
 
 
