@@ -12,6 +12,7 @@ from pricewright.application.ports import AuditEventFilter, UnitOfWork, UnitOfWo
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditValue, Changes
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import Product, ProductCategory
+from pricewright.domain.customers import Customer
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
@@ -104,4 +105,15 @@ def product_fields(product: Product) -> dict[str, AuditValue]:
         "list_price": str(product.list_price.amount),
         "unit_cost": str(product.unit_cost.amount),
         "is_active": product.is_active,
+    }
+
+
+def customer_fields(customer: Customer) -> dict[str, AuditValue]:
+    return {
+        "account_number": customer.account_number,
+        "name": customer.name,
+        "tax_id": customer.tax_id,
+        "tier": customer.tier.value,
+        "payment_terms_days": customer.payment_terms_days,
+        "is_active": customer.is_active,
     }

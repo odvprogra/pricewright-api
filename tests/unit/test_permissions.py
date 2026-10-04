@@ -62,3 +62,15 @@ def test_reps_and_managers_read_but_do_not_manage_the_catalog(role: Role) -> Non
 def test_integrations_can_read_the_catalog_but_never_change_it() -> None:
     assert Permission.CATALOG_READ in GRANTABLE_SCOPES
     assert Permission.CATALOG_MANAGE not in GRANTABLE_SCOPES
+
+
+@pytest.mark.parametrize("role", list(Role))
+def test_every_role_manages_customers(role: Role) -> None:
+    caller = principal(role)
+
+    caller.require(Permission.CUSTOMERS_READ)
+    caller.require(Permission.CUSTOMERS_MANAGE)
+
+
+def test_integrations_can_be_granted_customer_access() -> None:
+    assert {Permission.CUSTOMERS_READ, Permission.CUSTOMERS_MANAGE} <= GRANTABLE_SCOPES
