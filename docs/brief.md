@@ -32,8 +32,9 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
 - **ServiceAccount** — belongs to one tenant; authenticates with scoped API keys (used by
   `erp-mcp-server` and `ops-copilot`). The authenticated principal covers users and service accounts
   from M1.
-- **Customer** — name, tax id, segment/tier (`standard`, `silver`, `gold`), payment terms.
-- **Product** — SKU, name, unit, list price, unit cost, active flag.
+- **Customer** — account number, name, tax id, segment/tier (`standard`, `silver`, `gold`), payment
+  terms (net days).
+- **Product** — SKU, name, category, unit, list price, unit cost, active flag.
 - **PricingRule** — typed rule with priority and validity window. Types:
   - `VolumeTier` — discount by quantity bracket for a product or category
   - `CustomerTierDiscount` — discount by customer tier
@@ -177,20 +178,24 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 
 ## 9. Expected ADRs
 
-| ADR  | Topic                                                                                                                       | Milestone |
-| ---- | --------------------------------------------------------------------------------------------------------------------------- | --------- |
-| 0001 | [Architecture style, decisions recorded as ADRs](adr/0001-record-architecture-decisions.md)                                 | M0        |
-| 0002 | [Separate repos with a versioned OpenAPI contract](adr/0002-separate-repos-with-a-versioned-openapi-contract.md)            | M0        |
-| 0003 | Money representation, rounding and tax                                                                                      | M3        |
-| 0004 | Pricing rule stacking policy and approval metric                                                                            | M3        |
-| 0005 | Quote lifecycle implementation (revisions, expiration)                                                                      | M4        |
-| 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                            | M1        |
-| 0007 | [Authentication for users and service accounts](adr/0007-authentication-for-users-and-service-accounts.md)                  | M1        |
-| 0008 | Transactional outbox without a broker                                                                                       | M5        |
-| 0009 | [404 for another tenant's resources, 403 for missing permissions](adr/0009-not-found-for-other-tenants-resources.md)        | M1        |
-| 0010 | Supplier price change proposals                                                                                             | M11       |
-| 0011 | [Repository and Unit of Work ports](adr/0011-repository-and-unit-of-work-ports.md) (handbook §5: every pattern gets an ADR) | M1        |
-| 0012 | [Optimistic concurrency with ETag and If-Match](adr/0012-optimistic-concurrency-with-etag-and-if-match.md)                  | M1        |
+| ADR  | Topic                                                                                                                                   | Milestone |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 0001 | [Architecture style, decisions recorded as ADRs](adr/0001-record-architecture-decisions.md)                                             | M0        |
+| 0002 | [Separate repos with a versioned OpenAPI contract](adr/0002-separate-repos-with-a-versioned-openapi-contract.md)                        | M0        |
+| 0003 | [Money as an exact decimal with its currency, rounded half up](adr/0003-money-as-an-exact-decimal-with-its-currency.md)                 | M2        |
+| 0004 | Pricing rule stacking policy and approval metric                                                                                        | M3        |
+| 0005 | Quote lifecycle implementation (revisions, expiration)                                                                                  | M4        |
+| 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                                        | M1        |
+| 0007 | [Authentication for users and service accounts](adr/0007-authentication-for-users-and-service-accounts.md)                              | M1        |
+| 0008 | Transactional outbox without a broker                                                                                                   | M5        |
+| 0009 | [404 for another tenant's resources, 403 for missing permissions](adr/0009-not-found-for-other-tenants-resources.md)                    | M1        |
+| 0010 | Supplier price change proposals                                                                                                         | M11       |
+| 0011 | [Repository and Unit of Work ports](adr/0011-repository-and-unit-of-work-ports.md) (handbook §5: every pattern gets an ADR)             | M1        |
+| 0012 | [Optimistic concurrency with ETag and If-Match](adr/0012-optimistic-concurrency-with-etag-and-if-match.md)                              | M1        |
+| 0013 | [Append-only audit events, written in the same transaction](adr/0013-append-only-audit-events-in-the-same-transaction.md)               | M2        |
+| 0014 | [List queries: whitelisted filters and sort, keyset cursors](adr/0014-list-queries-with-whitelisted-filters-sort-and-keyset-cursors.md) | M2        |
+| 0015 | [Open-ended values in responses](adr/0015-open-ended-values-in-responses.md)                                                            | M2        |
+| 0016 | [Catalog and customer master data](adr/0016-catalog-and-customer-master-data.md)                                                        | M2        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 

@@ -29,15 +29,16 @@ the first quote to the order.
 Pricewright is built in milestones; this table shows what works today. The full scope is in the
 [product brief](docs/brief.md).
 
-| Capability                                                                               | Milestone | Status |
-| ---------------------------------------------------------------------------------------- | --------- | ------ |
-| Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI  | M0        | Done   |
-| Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation | M1        | Done   |
-| Catalog and customers with cursor pagination and audit events                            | M2        | Doing  |
-| Pricing engine: price waterfall with a per-line breakdown of every rule applied          | M3        |        |
-| Quotes with revisions, expiration, approvals and optimistic locking                      | M4        |        |
-| Idempotent conversion of accepted quotes into orders                                     | M6        |        |
-| Transactional outbox, worker, quote PDFs and email notifications                         | M5        |        |
+| Capability                                                                                | Milestone | Status |
+| ----------------------------------------------------------------------------------------- | --------- | ------ |
+| Service baseline: Problem Details errors, request IDs, health checks, versioned OpenAPI   | M0        | Done   |
+| Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation  | M1        | Done   |
+| Catalog and customers: search, filters, sorting and cursor pages; money exact to 4 places | M2        | Done   |
+| Audit trail: every change with its actor, before/after values and request ID              | M2        | Done   |
+| Pricing engine: price waterfall with a per-line breakdown of every rule applied           | M3        |        |
+| Quotes with revisions, expiration, approvals and optimistic locking                       | M4        |        |
+| Idempotent conversion of accepted quotes into orders                                      | M6        |        |
+| Transactional outbox, worker, quote PDFs and email notifications                          | M5        |        |
 
 The web app lives in a separate repository, `pricewright-web` (from M7). It consumes this API the
 same way every other client does: through a released `openapi.json`.
@@ -123,8 +124,8 @@ request title marks it with `!`.
 src/pricewright/
 ├── domain/          # business rules, pure Python
 ├── application/     # use cases and ports
-├── infrastructure/  # adapters: logging, database
-├── api/             # FastAPI app, Problem Details, middleware, health
+├── infrastructure/  # adapters: database records and repositories, tokens, passwords, logging
+├── api/             # FastAPI routers, Problem Details, money JSON, cursors, middleware
 ├── settings.py      # configuration from the environment
 └── main.py          # composition root
 tests/               # unit, architecture, integration, e2e
@@ -142,7 +143,14 @@ docs/                # product brief, architecture and ADRs
 - **Isolation lives in the application and in composite keys.** PostgreSQL row-level security would
   add a fourth layer (ADR-0006); it stays a stretch goal.
 - **`Idempotency-Key`** arrives with orders (M6). Until then the creation endpoints are protected by
-  natural keys (a user's email, an account's name).
+  natural keys (a user's email, an account's name, a SKU, a customer's account number).
+- **Search is a "contains" match within the tenant's rows** (ADR-0016). A trigram index (`pg_trgm`)
+  is the next step once a tenant's catalog reaches tens of thousands of products.
+- **The audit trail grows without bound.** A retention policy (and archiving old events to cheaper
+  storage) is needed before real tenants run for years; production should also run the API under a
+  database role that cannot `TRUNCATE` it (ADR-0013).
+- **Text sorts need ICU.** Names sort with PostgreSQL's `unicode` collation (ADR-0014), which the
+  official images and managed services provide.
 - **Deliberately out of scope:** invoicing, inventory, taxes beyond a flat rate per tenant,
   payments, multi-currency conversion and SSO. Each is a product of its own; the integration points
   would be the order snapshot and the outbox events.
