@@ -22,7 +22,7 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **M3 — Pricing engine**.
+- Work one milestone at a time. Current milestone: **M4 — Quotes + lifecycle + approvals**.
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.
@@ -55,7 +55,8 @@ src/pricewright/main.py          composition root
 Read first: `main.py` (wiring), `application/ports.py` (unit of work and repositories),
 `domain/auth.py` (principals and permissions), `api/dependencies.py` (who is calling),
 `api/concurrency.py` (ETag / If-Match), `application/audit.py` (the audit trail),
-`api/pagination.py` (cursors), `domain/money.py`, `tests/fakes.py`.
+`api/pagination.py` (cursors), `domain/money.py`, `domain/pricing.py` (the engine),
+`tests/fakes.py`.
 
 Rules the code relies on:
 
@@ -68,6 +69,8 @@ Rules the code relies on:
   (`application/audit.py`, ADR-0013).
 - Lists take whitelisted filters and `sort`; cursors are bound to the query (`api/pagination.py`,
   ADR-0014). Response values from a growing set are strings with `examples` (ADR-0015).
+- Prices come only from the pricing engine (`domain/pricing.py`, ADR-0004); responses leave out
+  costs and margins for callers without `costs:read` (ADR-0017).
 - Fakes in `tests/fakes.py` enforce the same rules as the adapters; keep them in step.
 - Test secrets are generated at runtime: gitleaks flags literals.
 
@@ -92,6 +95,9 @@ expected ADRs and their milestones are listed in the brief (§9).
   tokens, role permissions, tenant settings with optimistic concurrency, user management, service
   accounts with API keys, tenant isolation suite (v0.2.0). M2 — errors documented as Problem
   Details, the oasdiff breaking-change check, money (ADR-0003), the audit trail (ADR-0013), list
-  queries (ADR-0014), product categories, products and customers (ADR-0016) (v0.3.0)
+  queries (ADR-0014), product categories, products and customers (ADR-0016) (v0.3.0). M3 — ISO 4217
+  currencies, costs only for people (ADR-0017), pricing rules (ADR-0018), the pricing engine with
+  its breakdown and approval metric (ADR-0004), rules managed over the API, `POST /pricing/preview`
+  (v0.4.0)
 - In progress: —
-- Next: M3 — pricing engine (pure domain, rules pipeline, `PriceBreakdown`, `POST /pricing/preview`)
+- Next: M4 — quotes, lifecycle (ADR-0005), revisions, line endpoints, approvals
