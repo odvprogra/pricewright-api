@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from pricewright.application.ports import (
     ApiKeyRepository,
     AuditEventRepository,
+    CustomerRepository,
     IdentityLookup,
     ProductCategoryRepository,
     ProductRepository,
@@ -22,6 +23,7 @@ from pricewright.domain.errors import ConflictError
 from pricewright.infrastructure.repositories import (
     SqlAlchemyApiKeyRepository,
     SqlAlchemyAuditEventRepository,
+    SqlAlchemyCustomerRepository,
     SqlAlchemyIdentityLookup,
     SqlAlchemyProductCategoryRepository,
     SqlAlchemyProductRepository,
@@ -46,6 +48,7 @@ class SqlAlchemyUnitOfWork:
     audit_events: AuditEventRepository
     product_categories: ProductCategoryRepository
     products: ProductRepository
+    customers: CustomerRepository
     identities: IdentityLookup
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -63,6 +66,7 @@ class SqlAlchemyUnitOfWork:
         self.audit_events = SqlAlchemyAuditEventRepository(self._session, self._scope)
         self.product_categories = SqlAlchemyProductCategoryRepository(self._session, self._scope)
         self.products = SqlAlchemyProductRepository(self._session, self._scope)
+        self.customers = SqlAlchemyCustomerRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
         return self
 

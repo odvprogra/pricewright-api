@@ -15,6 +15,7 @@ from pricewright.application.pagination import Keyset
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import Product, ProductCategory
+from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
@@ -181,6 +182,51 @@ class ProductRepository(Protocol):
         ...
 
 
+class CustomerSort(StrEnum):
+    ACCOUNT_NUMBER = "account_number"
+    NAME = "name"
+    CREATED = "created_at"
+
+
+@dataclass(frozen=True, slots=True)
+class CustomerQuery:
+    """Which customers to list and in which order (ADR-0014). ``None`` filters match everything."""
+
+    text: str | None = None
+    """Contained in the account number or the name, ignoring case."""
+    tax_id: str | None = None
+    """The exact tax id, compact (``compact_tax_id``)."""
+    tier: CustomerTier | None = None
+    active: bool | None = None
+    sort: CustomerSort = CustomerSort.NAME
+    descending: bool = False
+
+
+class CustomerRepository(Protocol):
+    """Customers of the unit of work's tenant only (ADR-0006)."""
+
+    async def add(self, customer: Customer) -> None: ...
+
+    async def get(self, customer_id: UUID) -> Customer | None: ...
+
+    async def with_account_number(self, account_number: str) -> Customer | None:
+        """The customer with this account number, ignoring case."""
+        ...
+
+    async def page(
+        self, query: CustomerQuery, *, after: Keyset | None, limit: int
+    ) -> list[Customer]:
+        """Up to ``limit`` matching customers in the query's order, after ``after``."""
+        ...
+
+    async def save(self, customer: Customer) -> None:
+        """Store changes and bump ``customer.version``, atomically.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``customer.version``.
+        """
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEventFilter:
     """Which audit events to list; a field left as ``None`` matches every event."""
@@ -259,6 +305,7 @@ class UnitOfWork(Protocol):
     audit_events: AuditEventRepository
     product_categories: ProductCategoryRepository
     products: ProductRepository
+    customers: CustomerRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...

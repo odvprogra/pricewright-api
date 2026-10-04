@@ -3,11 +3,11 @@
 import re
 import uuid
 from dataclasses import dataclass
-from enum import Enum, StrEnum
-from typing import Literal
+from enum import StrEnum
 
 from pricewright.domain.errors import ConflictError, RuleViolationError
 from pricewright.domain.money import Money
+from pricewright.domain.updates import KEEP, Keep
 
 MAX_CATEGORY_NAME_LENGTH = 100
 MAX_SKU_LENGTH = 40  # SAP S/4HANA's material numbers have up to 40 characters
@@ -57,15 +57,6 @@ class UnitOfMeasure(StrEnum):
     FOOT = "FOT"
     LITRE = "LTR"
     GALLON = "GLL"
-
-
-class _Keep(Enum):
-    KEEP = "keep"
-
-
-KEEP = _Keep.KEEP
-"""Leaves an optional field as it is, where ``None`` means "clear it"."""
-type Keep = Literal[_Keep.KEEP]
 
 
 def _category_name(name: str) -> str:
@@ -174,7 +165,7 @@ class Product:
         unit: UnitOfMeasure | None = None,
         list_price: Money | None = None,
         unit_cost: Money | None = None,
-        category_id: uuid.UUID | Literal[_Keep.KEEP] | None = KEEP,
+        category_id: uuid.UUID | Keep | None = KEEP,
         is_active: bool | None = None,
     ) -> None:
         """Fields left as ``None`` (``KEEP`` for the category) keep their value. The SKU is the

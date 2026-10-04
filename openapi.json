@@ -111,7 +111,9 @@
           "product_category.created",
           "product_category.updated",
           "product.created",
-          "product.updated"
+          "product.updated",
+          "customer.created",
+          "customer.updated"
         ],
         "title": "AuditAction",
         "type": "string"
@@ -159,7 +161,9 @@
               "product_category.created",
               "product_category.updated",
               "product.created",
-              "product.updated"
+              "product.updated",
+              "customer.created",
+              "customer.updated"
             ],
             "title": "Action",
             "type": "string"
@@ -216,7 +220,8 @@
               "service_account",
               "api_key",
               "product_category",
-              "product"
+              "product",
+              "customer"
             ],
             "title": "Resource Type",
             "type": "string"
@@ -243,7 +248,8 @@
           "service_account",
           "api_key",
           "product_category",
-          "product"
+          "product",
+          "customer"
         ],
         "title": "AuditResourceType",
         "type": "string"

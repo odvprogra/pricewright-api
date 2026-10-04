@@ -1,16 +1,25 @@
 """SQLAlchemy implementations of the repository ports (ADR-0011)."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, case, func, literal, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import QueryableAttribute
 
 from pricewright.application.pagination import Keyset
-from pricewright.application.ports import AuditEventFilter, ProductQuery, ProductSort
+from pricewright.application.ports import (
+    AuditEventFilter,
+    CustomerQuery,
+    CustomerSort,
+    ProductQuery,
+    ProductSort,
+)
 from pricewright.domain.audit import ActorType, AuditAction, AuditEvent
 from pricewright.domain.auth import Permission
 from pricewright.domain.catalog import Product, ProductCategory, UnitOfMeasure
+from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.money import Money
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
@@ -21,6 +30,7 @@ from pricewright.infrastructure.logging import current_request_id
 from pricewright.infrastructure.records import (
     ApiKeyRecord,
     AuditEventRecord,
+    CustomerRecord,
     ProductCategoryRecord,
     ProductRecord,
     RefreshTokenRecord,
@@ -484,13 +494,15 @@ class SqlAlchemyProductCategoryRepository:
         return None if record is None else _to_category(record)
 
     async def page(self, *, after: Keyset | None, limit: int) -> list[ProductCategory]:
-        key = (ProductCategoryRecord.name, ProductCategoryRecord.id)
-        query = select(ProductCategoryRecord).where(
-            ProductCategoryRecord.tenant_id == self._scope.tenant_id
+        beyond, order = _keyset(
+            ProductCategoryRecord.name, ProductCategoryRecord.id, after, descending=False
         )
-        if after is not None:
-            query = query.where(tuple_(*key) > tuple_(after.value, after.id))
-        records = await self._session.scalars(query.order_by(*key).limit(limit))
+        records = await self._session.scalars(
+            select(ProductCategoryRecord)
+            .where(ProductCategoryRecord.tenant_id == self._scope.tenant_id, *beyond)
+            .order_by(*order)
+            .limit(limit)
+        )
         return [_to_category(record) for record in records]
 
     async def save(self, category: ProductCategory) -> None:
@@ -524,6 +536,25 @@ def _to_product(record: ProductRecord) -> Product:
         is_active=record.is_active,
         version=record.version,
     )
+
+
+def _keyset(
+    column: QueryableAttribute[str] | None,
+    id_column: QueryableAttribute[UUID],
+    after: Keyset | None,
+    *,
+    descending: bool,
+) -> tuple[list[ColumnElement[bool]], list[ColumnElement[Any]]]:
+    """Conditions and ordering for a page sorted by ``column`` (or by id alone), then by id, that
+    continues after ``after`` (ADR-0014). Row-value comparison keeps it one index range scan."""
+    key = (id_column,) if column is None else (column, id_column)
+    beyond: list[ColumnElement[bool]] = []
+    if after is not None:
+        position = (after.id,) if column is None else (after.value, after.id)
+        rows, start = tuple_(*key), tuple_(*position)
+        beyond.append(rows < start if descending else rows > start)
+    order: list[ColumnElement[Any]] = [part.desc() if descending else part.asc() for part in key]
+    return beyond, order
 
 
 def _contains(text: str) -> str:
@@ -588,18 +619,10 @@ class SqlAlchemyProductRepository:
         if query.active is not None:
             select_ = select_.where(ProductRecord.is_active == query.active)
         sort_column = {ProductSort.SKU: ProductRecord.sku, ProductSort.NAME: ProductRecord.name}
-        column = sort_column.get(query.sort)
-        key = (ProductRecord.id,) if column is None else (column, ProductRecord.id)
-        if after is not None:
-            position = (after.id,) if column is None else (after.value, after.id)
-            beyond = (
-                tuple_(*key) < tuple_(*position)
-                if query.descending
-                else tuple_(*key) > tuple_(*position)
-            )
-            select_ = select_.where(beyond)
-        order = [part.desc() for part in key] if query.descending else list(key)
-        records = await self._session.scalars(select_.order_by(*order).limit(limit))
+        beyond, order = _keyset(
+            sort_column.get(query.sort), ProductRecord.id, after, descending=query.descending
+        )
+        records = await self._session.scalars(select_.where(*beyond).order_by(*order).limit(limit))
         return [_to_product(record) for record in records]
 
     async def save(self, product: Product) -> None:
@@ -625,6 +648,113 @@ class SqlAlchemyProductRepository:
         if new_version is None:
             raise StaleVersionError("the product was changed by someone else; reload it")
         product.version = new_version
+
+
+def _to_customer(record: CustomerRecord) -> Customer:
+    return Customer(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        account_number=record.account_number,
+        name=record.name,
+        tier=CustomerTier(record.tier),
+        payment_terms_days=record.payment_terms_days,
+        tax_id=record.tax_id,
+        is_active=record.is_active,
+        version=record.version,
+    )
+
+
+class SqlAlchemyCustomerRepository:
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    def _require_own(self, customer: Customer) -> None:
+        if customer.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("only a customer of the unit of work's tenant can be stored")
+
+    async def add(self, customer: Customer) -> None:
+        self._require_own(customer)
+        self._session.add(
+            CustomerRecord(
+                id=customer.id,
+                tenant_id=customer.tenant_id,
+                account_number=customer.account_number,
+                name=customer.name,
+                tax_id=customer.tax_id,
+                tier=customer.tier.value,
+                payment_terms_days=customer.payment_terms_days,
+                is_active=customer.is_active,
+                version=customer.version,
+            )
+        )
+
+    async def _one(self, condition: ColumnElement[bool]) -> Customer | None:
+        record = await self._session.scalar(
+            select(CustomerRecord).where(
+                CustomerRecord.tenant_id == self._scope.tenant_id, condition
+            )
+        )
+        return None if record is None else _to_customer(record)
+
+    async def get(self, customer_id: UUID) -> Customer | None:
+        return await self._one(CustomerRecord.id == customer_id)
+
+    async def with_account_number(self, account_number: str) -> Customer | None:
+        return await self._one(func.lower(CustomerRecord.account_number) == account_number.lower())
+
+    async def page(
+        self, query: CustomerQuery, *, after: Keyset | None, limit: int
+    ) -> list[Customer]:
+        conditions = [CustomerRecord.tenant_id == self._scope.tenant_id]
+        if query.text is not None:
+            pattern = _contains(query.text)
+            conditions.append(
+                or_(
+                    CustomerRecord.account_number.ilike(pattern, escape="\\"),
+                    CustomerRecord.name.ilike(pattern, escape="\\"),
+                )
+            )
+        if query.tax_id is not None:
+            conditions.append(CustomerRecord.tax_id == query.tax_id)
+        if query.tier is not None:
+            conditions.append(CustomerRecord.tier == query.tier.value)
+        if query.active is not None:
+            conditions.append(CustomerRecord.is_active == query.active)
+        sort_column = {
+            CustomerSort.ACCOUNT_NUMBER: CustomerRecord.account_number,
+            CustomerSort.NAME: CustomerRecord.name,
+        }
+        beyond, order = _keyset(
+            sort_column.get(query.sort), CustomerRecord.id, after, descending=query.descending
+        )
+        records = await self._session.scalars(
+            select(CustomerRecord).where(*conditions, *beyond).order_by(*order).limit(limit)
+        )
+        return [_to_customer(record) for record in records]
+
+    async def save(self, customer: Customer) -> None:
+        self._require_own(customer)
+        new_version = await self._session.scalar(
+            update(CustomerRecord)
+            .where(
+                CustomerRecord.tenant_id == self._scope.tenant_id,
+                CustomerRecord.id == customer.id,
+                CustomerRecord.version == customer.version,
+            )
+            .values(
+                name=customer.name,
+                tax_id=customer.tax_id,
+                tier=customer.tier.value,
+                payment_terms_days=customer.payment_terms_days,
+                is_active=customer.is_active,
+                version=CustomerRecord.version + 1,
+            )
+            .returning(CustomerRecord.version)
+        )
+        if new_version is None:
+            raise StaleVersionError("the customer was changed by someone else; reload it")
+        customer.version = new_version
 
 
 class SqlAlchemyIdentityLookup:

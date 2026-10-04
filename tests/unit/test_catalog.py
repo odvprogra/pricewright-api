@@ -4,7 +4,6 @@ from decimal import Decimal
 import pytest
 
 from pricewright.domain.catalog import (
-    KEEP,
     MAX_CATEGORY_NAME_LENGTH,
     InvalidCatalogError,
     Product,
@@ -12,6 +11,7 @@ from pricewright.domain.catalog import (
     UnitOfMeasure,
 )
 from pricewright.domain.money import Money
+from pricewright.domain.updates import KEEP
 
 TENANT_ID = uuid.uuid7()
 CATEGORY_ID = uuid.uuid7()
