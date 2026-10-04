@@ -179,3 +179,39 @@ async def test_only_admins_change_the_catalog(client: httpx.AsyncClient, role: R
     response = await client.post(PATH, json=bolts(), headers=bearer(role))
 
     assert response.status_code == 403
+
+
+async def test_service_accounts_read_the_catalog_without_unit_costs(
+    client: httpx.AsyncClient,
+) -> None:
+    created = await client.post(PATH, json=bolts(), headers=bearer())
+    account = await client.post(
+        "/api/v1/service-accounts",
+        json={"name": "erp-mcp-server", "scopes": ["catalog:read"]},
+        headers=bearer(),
+    )
+    key = await client.post(
+        f"/api/v1/service-accounts/{account.json()['id']}/keys", json={}, headers=bearer()
+    )
+    integration = {"Authorization": f"Bearer {key.json()['key']}"}
+
+    one = await client.get(created.headers["Location"], headers=integration)
+    listed = await client.get(PATH, headers=integration)
+    for_a_rep = await client.get(created.headers["Location"], headers=bearer(Role.SALES_REP))
+
+    assert one.status_code == 200
+    assert "unit_cost" not in one.json()
+    assert one.json()["list_price"] == {"amount": "12.5000", "currency": "USD"}
+    assert ["unit_cost" in item for item in listed.json()["items"]] == [False]
+    assert for_a_rep.json()["unit_cost"] == {"amount": "7.2500", "currency": "USD"}
+
+
+async def test_service_accounts_cannot_be_granted_costs(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/service-accounts",
+        json={"name": "erp-mcp-server", "scopes": ["catalog:read", "costs:read"]},
+        headers=bearer(),
+    )
+
+    assert response.status_code == 422
+    assert "costs:read" in response.json()["detail"]

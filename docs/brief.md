@@ -196,6 +196,7 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0014 | [List queries: whitelisted filters and sort, keyset cursors](adr/0014-list-queries-with-whitelisted-filters-sort-and-keyset-cursors.md) | M2        |
 | 0015 | [Open-ended values in responses](adr/0015-open-ended-values-in-responses.md)                                                            | M2        |
 | 0016 | [Catalog and customer master data](adr/0016-catalog-and-customer-master-data.md)                                                        | M2        |
+| 0017 | [Costs and margins only for people, behind `costs:read`](adr/0017-costs-only-for-people-with-costs-read.md)                             | M3        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 

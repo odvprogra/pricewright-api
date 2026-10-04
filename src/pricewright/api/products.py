@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
@@ -21,6 +22,7 @@ from pricewright.application.catalog import (
     list_products,
 )
 from pricewright.application.ports import ProductQuery, ProductSort
+from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import (
     MAX_PRODUCT_NAME_LENGTH,
     MAX_SKU_LENGTH,
@@ -54,12 +56,17 @@ class ProductResponse(BaseModel):
         examples=list(UnitOfMeasure),
     )
     list_price: MoneyJson
-    unit_cost: MoneyJson
+    # Left out, not null, for callers without costs:read (ADR-0017): the schema marks it optional.
+    unit_cost: MoneyJson | SkipJsonSchema[None] = Field(
+        default=None,
+        exclude_if=lambda cost: cost is None,
+        description="Only for people with `costs:read`; service accounts never see it.",
+    )
     is_active: bool = Field(description="False once archived: kept for history, not for sale.")
     version: int = Field(description="Also sent as the ETag; send it back in If-Match to update.")
 
     @classmethod
-    def of(cls, product: Product) -> ProductResponse:
+    def of(cls, product: Product, caller: Principal) -> ProductResponse:
         return cls(
             id=product.id,
             sku=product.sku,
@@ -67,7 +74,9 @@ class ProductResponse(BaseModel):
             category_id=product.category_id,
             unit=product.unit.value,
             list_price=MoneyJson.of(product.list_price),
-            unit_cost=MoneyJson.of(product.unit_cost),
+            unit_cost=(
+                MoneyJson.of(product.unit_cost) if caller.holds(Permission.COSTS_READ) else None
+            ),
             is_active=product.is_active,
             version=product.version,
         )
@@ -169,7 +178,7 @@ async def read_products(
         unit_of_work=services.unit_of_work,
     )
     return ProductPage(
-        items=[ProductResponse.of(product) for product in page.items],
+        items=[ProductResponse.of(product, principal) for product in page.items],
         next_cursor=encode_cursor(page.next_after, fingerprint),
     )
 
@@ -180,7 +189,7 @@ async def read_product(
 ) -> ProductResponse:
     product = await get_product(principal, product_id, unit_of_work=services.unit_of_work)
     response.headers["ETag"] = etag(product.version)
-    return ProductResponse.of(product)
+    return ProductResponse.of(product, principal)
 
 
 @router.post(
@@ -214,7 +223,7 @@ async def add_product(
     )
     response.headers["Location"] = f"{router.prefix}/{product.id}"
     response.headers["ETag"] = etag(product.version)
-    return ProductResponse.of(product)
+    return ProductResponse.of(product, principal)
 
 
 @router.patch(
@@ -244,4 +253,4 @@ async def update_product(
         clock=services.clock,
     )
     response.headers["ETag"] = etag(product.version)
-    return ProductResponse.of(product)
+    return ProductResponse.of(product, principal)

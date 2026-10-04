@@ -102,7 +102,7 @@ sequenceDiagram
 - Every log line is structured JSON with a `request_id` when one exists.
 - Authorization is by permission (`resource:action`), never by role name; service accounts hold
   scopes, never the permissions reserved for people (administration, the audit trail, catalog
-  changes) (ADR-0007).
+  changes, costs) (ADR-0007, ADR-0017).
 - Every change appends its audit event in the same unit of work (ADR-0013).
 - Lists filter and sort through whitelisted parameters and page with keyset cursors bound to the
   query (ADR-0014).
