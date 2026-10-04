@@ -1,10 +1,12 @@
 """What the audit trail keeps of each record (ADR-0013): business fields, never secrets or digests.
 
 Values are JSON scalars: decimals and times as strings, scopes space-delimited as in OAuth
-(RFC 6749 §3.3).
+(RFC 6749 §3.3). Decimals keep their column's scale, so 12.5 and 12.50 are the same value and an
+edit between them is no change.
 """
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pricewright.application.pagination import Keyset, Page, page_of
@@ -13,8 +15,9 @@ from pricewright.domain.audit import AuditAction, AuditEvent, AuditValue, Change
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
+from pricewright.domain.money import AMOUNT_DECIMAL_PLACES
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
-from pricewright.domain.tenants import Tenant
+from pricewright.domain.tenants import RATE_DECIMAL_PLACES, Tenant
 from pricewright.domain.users import User
 
 
@@ -56,11 +59,16 @@ def _time(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
 
 
+def _decimal(value: Decimal, places: int) -> str:
+    """As the column stores it: ``Decimal("12.5")`` with 4 places is ``"12.5000"``."""
+    return str(value.quantize(Decimal(1).scaleb(-places)))
+
+
 def tenant_fields(tenant: Tenant) -> dict[str, AuditValue]:
     return {
         "name": tenant.name,
-        "tax_rate": str(tenant.settings.tax_rate),
-        "approval_threshold": str(tenant.settings.approval_threshold),
+        "tax_rate": _decimal(tenant.settings.tax_rate, RATE_DECIMAL_PLACES),
+        "approval_threshold": _decimal(tenant.settings.approval_threshold, RATE_DECIMAL_PLACES),
     }
 
 
@@ -102,8 +110,8 @@ def product_fields(product: Product) -> dict[str, AuditValue]:
         "name": product.name,
         "category_id": None if product.category_id is None else str(product.category_id),
         "unit": product.unit.value,
-        "list_price": str(product.list_price.amount),
-        "unit_cost": str(product.unit_cost.amount),
+        "list_price": _decimal(product.list_price.amount, AMOUNT_DECIMAL_PLACES),
+        "unit_cost": _decimal(product.unit_cost.amount, AMOUNT_DECIMAL_PLACES),
         "is_active": product.is_active,
     }
 
