@@ -10,8 +10,10 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from pricewright.application.pagination import Keyset
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
+from pricewright.domain.catalog import ProductCategory
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
@@ -109,6 +111,29 @@ class ApiKeyRepository(Protocol):
         ...
 
 
+class ProductCategoryRepository(Protocol):
+    """Product categories of the unit of work's tenant only (ADR-0006)."""
+
+    async def add(self, category: ProductCategory) -> None: ...
+
+    async def get(self, category_id: UUID) -> ProductCategory | None: ...
+
+    async def named(self, name: str) -> ProductCategory | None:
+        """The category with this name, ignoring case."""
+        ...
+
+    async def page(self, *, after: Keyset | None, limit: int) -> list[ProductCategory]:
+        """Up to ``limit`` categories by name (Unicode collation, ADR-0014), then id."""
+        ...
+
+    async def save(self, category: ProductCategory) -> None:
+        """Store a rename and bump ``category.version``, atomically.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``category.version``.
+        """
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEventFilter:
     """Which audit events to list; a field left as ``None`` matches every event."""
@@ -185,6 +210,7 @@ class UnitOfWork(Protocol):
     service_accounts: ServiceAccountRepository
     api_keys: ApiKeyRepository
     audit_events: AuditEventRepository
+    product_categories: ProductCategoryRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...

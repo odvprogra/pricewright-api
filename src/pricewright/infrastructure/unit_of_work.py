@@ -11,6 +11,7 @@ from pricewright.application.ports import (
     ApiKeyRepository,
     AuditEventRepository,
     IdentityLookup,
+    ProductCategoryRepository,
     RefreshTokenRepository,
     ServiceAccountRepository,
     TenantRepository,
@@ -21,6 +22,7 @@ from pricewright.infrastructure.repositories import (
     SqlAlchemyApiKeyRepository,
     SqlAlchemyAuditEventRepository,
     SqlAlchemyIdentityLookup,
+    SqlAlchemyProductCategoryRepository,
     SqlAlchemyRefreshTokenRepository,
     SqlAlchemyServiceAccountRepository,
     SqlAlchemyTenantRepository,
@@ -40,6 +42,7 @@ class SqlAlchemyUnitOfWork:
     service_accounts: ServiceAccountRepository
     api_keys: ApiKeyRepository
     audit_events: AuditEventRepository
+    product_categories: ProductCategoryRepository
     identities: IdentityLookup
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -55,6 +58,7 @@ class SqlAlchemyUnitOfWork:
         self.service_accounts = SqlAlchemyServiceAccountRepository(self._session, self._scope)
         self.api_keys = SqlAlchemyApiKeyRepository(self._session, self._scope)
         self.audit_events = SqlAlchemyAuditEventRepository(self._session, self._scope)
+        self.product_categories = SqlAlchemyProductCategoryRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
         return self
 

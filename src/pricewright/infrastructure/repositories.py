@@ -3,12 +3,14 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import case, literal, select, update
+from sqlalchemy import case, func, literal, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricewright.application.pagination import Keyset
 from pricewright.application.ports import AuditEventFilter
 from pricewright.domain.audit import ActorType, AuditAction, AuditEvent
 from pricewright.domain.auth import Permission
+from pricewright.domain.catalog import ProductCategory
 from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -18,6 +20,7 @@ from pricewright.infrastructure.logging import current_request_id
 from pricewright.infrastructure.records import (
     ApiKeyRecord,
     AuditEventRecord,
+    ProductCategoryRecord,
     RefreshTokenRecord,
     ServiceAccountRecord,
     TenantRecord,
@@ -435,6 +438,75 @@ class SqlAlchemyAuditEventRepository:
             query.order_by(AuditEventRecord.id.desc()).limit(limit)
         )
         return [_to_audit_event(record) for record in records]
+
+
+def _to_category(record: ProductCategoryRecord) -> ProductCategory:
+    return ProductCategory(
+        id=record.id, tenant_id=record.tenant_id, name=record.name, version=record.version
+    )
+
+
+class SqlAlchemyProductCategoryRepository:
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    async def add(self, category: ProductCategory) -> None:
+        if category.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("a category can only be added to the unit of work's tenant")
+        self._session.add(
+            ProductCategoryRecord(
+                id=category.id,
+                tenant_id=category.tenant_id,
+                name=category.name,
+                version=category.version,
+            )
+        )
+
+    async def get(self, category_id: UUID) -> ProductCategory | None:
+        record = await self._session.scalar(
+            select(ProductCategoryRecord).where(
+                ProductCategoryRecord.tenant_id == self._scope.tenant_id,
+                ProductCategoryRecord.id == category_id,
+            )
+        )
+        return None if record is None else _to_category(record)
+
+    async def named(self, name: str) -> ProductCategory | None:
+        record = await self._session.scalar(
+            select(ProductCategoryRecord).where(
+                ProductCategoryRecord.tenant_id == self._scope.tenant_id,
+                func.lower(ProductCategoryRecord.name) == name.lower(),
+            )
+        )
+        return None if record is None else _to_category(record)
+
+    async def page(self, *, after: Keyset | None, limit: int) -> list[ProductCategory]:
+        key = (ProductCategoryRecord.name, ProductCategoryRecord.id)
+        query = select(ProductCategoryRecord).where(
+            ProductCategoryRecord.tenant_id == self._scope.tenant_id
+        )
+        if after is not None:
+            query = query.where(tuple_(*key) > tuple_(after.value, after.id))
+        records = await self._session.scalars(query.order_by(*key).limit(limit))
+        return [_to_category(record) for record in records]
+
+    async def save(self, category: ProductCategory) -> None:
+        if category.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("only a category of the unit of work's tenant can be saved")
+        new_version = await self._session.scalar(
+            update(ProductCategoryRecord)
+            .where(
+                ProductCategoryRecord.tenant_id == self._scope.tenant_id,
+                ProductCategoryRecord.id == category.id,
+                ProductCategoryRecord.version == category.version,
+            )
+            .values(name=category.name, version=ProductCategoryRecord.version + 1)
+            .returning(ProductCategoryRecord.version)
+        )
+        if new_version is None:
+            raise StaleVersionError("the category was changed by someone else; reload it")
+        category.version = new_version
 
 
 class SqlAlchemyIdentityLookup:

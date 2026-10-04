@@ -28,10 +28,13 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from pricewright.domain.audit import ActorType, AuditValue
+from pricewright.domain.catalog import MAX_CATEGORY_NAME_LENGTH
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
 from pricewright.infrastructure.database import Base
 
 _UUIDV7 = text("uuidv7()")
+# ICU's root collation: names sort as people read them on every server (ADR-0014).
+_UNICODE = "unicode"
 _RATE = Numeric(5, 4)
 _ROLES = ", ".join(f"'{role}'" for role in Role)
 _ACTOR_TYPES = ", ".join(f"'{actor_type}'" for actor_type in ActorType)
@@ -175,3 +178,27 @@ class AuditEventRecord(Base):
     resource_id: Mapped[uuid.UUID]
     changes: Mapped[dict[str, list[AuditValue]]] = mapped_column(JSONB)
     request_id: Mapped[str | None] = mapped_column(String(_REQUEST_ID_LENGTH))
+
+
+class ProductCategoryRecord(Base):
+    __tablename__ = "product_categories"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),  # target of the products' composite foreign key
+        Index(None, "tenant_id", "name", "id"),  # the list, by name
+        Index(
+            "uq_product_categories_tenant_id_lower_name",
+            "tenant_id",
+            func.lower(text("name")),
+            unique=True,
+        ),
+        CheckConstraint("version >= 1", name="version_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    name: Mapped[str] = mapped_column(String(MAX_CATEGORY_NAME_LENGTH, collation=_UNICODE))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
