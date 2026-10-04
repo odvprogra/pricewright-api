@@ -20,8 +20,8 @@ compatible extensions such as new values.
 
 - A response field whose set of values will grow is a `string`, with today's values listed in
   `examples` and a description telling clients to handle unknown values: an audit event's `action`
-  and `resource_type`, and a service account's `scopes` (an enum until M2 started adding
-  permissions).
+  and `resource_type`, a service account's `scopes` (an enum until M2 started adding permissions), a
+  product's `unit` and a pricing rule's `kind` (kinds such as exclusive promotions are expected).
 - Fixed sets stay `enum` in responses: roles, customer tiers, actor types. Adding a value to one of
   those is a breaking change, marked with `!`.
 - Requests keep `enum` everywhere, so invalid input is a 422; adding an accepted value to a request

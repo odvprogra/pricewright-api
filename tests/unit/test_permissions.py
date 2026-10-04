@@ -86,3 +86,16 @@ def test_integrations_never_read_costs() -> None:
 
     assert Permission.COSTS_READ not in GRANTABLE_SCOPES
     assert not caller.holds(Permission.COSTS_READ)
+
+
+def test_everyone_reads_pricing_rules_but_only_managers_and_admins_manage_them() -> None:
+    assert all(principal(role).holds(Permission.PRICING_READ) for role in Role)
+    assert principal(Role.SALES_MANAGER).holds(Permission.PRICING_MANAGE)
+    assert principal(Role.ADMIN).holds(Permission.PRICING_MANAGE)
+    with pytest.raises(PermissionDeniedError, match="pricing:manage"):
+        principal(Role.SALES_REP).require(Permission.PRICING_MANAGE)
+
+
+def test_integrations_can_read_pricing_but_never_change_it() -> None:
+    assert Permission.PRICING_READ in GRANTABLE_SCOPES
+    assert Permission.PRICING_MANAGE not in GRANTABLE_SCOPES

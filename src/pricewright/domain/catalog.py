@@ -31,6 +31,10 @@ class UnknownCategoryError(RuleViolationError):
     code = "unknown_category"
 
 
+class UnknownProductError(RuleViolationError):
+    code = "unknown_product"
+
+
 class UnitOfMeasure(StrEnum):
     """UN/ECE Recommendation 20 codes; packages are Recommendation 21 codes prefixed with X.
 

@@ -39,6 +39,9 @@ class Permission(StrEnum):
     CUSTOMERS_MANAGE = "customers:manage"
     COSTS_READ = "costs:read"
     """Unit costs and the margins they reveal (ADR-0017)."""
+    PRICING_READ = "pricing:read"
+    """The pricing rules, and prices computed with them."""
+    PRICING_MANAGE = "pricing:manage"
 
 
 _SELLING = frozenset(
@@ -48,23 +51,24 @@ _SELLING = frozenset(
         Permission.COSTS_READ,
         Permission.CUSTOMERS_READ,
         Permission.CUSTOMERS_MANAGE,
+        Permission.PRICING_READ,
     }
 )
 
-# Brief §2: everyone sees the tenant's settings and the catalog, with its costs (reps see margins on
-# quote lines, brief §3), and manages customers; only admins change the settings and the catalog,
-# and manage users.
+# Brief §2: everyone sees the tenant's settings, the catalog with its costs (reps see margins on
+# quote lines, brief §3) and the pricing rules, and manages customers; managers also manage the
+# pricing rules; only admins change the settings and the catalog, and manage users.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
     Role.SALES_REP: _SELLING,
-    Role.SALES_MANAGER: _SELLING,
+    Role.SALES_MANAGER: _SELLING | {Permission.PRICING_MANAGE},
     Role.ADMIN: frozenset(Permission),
 }
 
 
 # Some permissions stay with people, whatever a service account is granted: administering the
 # tenant, its users and its service accounts; reading the audit trail of what they do; changing the
-# catalog, so a person approves every price change (decision D-02); and reading costs, which an
-# integration such as an LLM drafting customer messages could leak (ADR-0017).
+# catalog or the pricing rules, so a person approves every price change (decision D-02); and reading
+# costs, which an integration such as an LLM drafting customer messages could leak (ADR-0017).
 PEOPLE_ONLY_PERMISSIONS = frozenset(
     {
         Permission.TENANT_MANAGE,
@@ -73,6 +77,7 @@ PEOPLE_ONLY_PERMISSIONS = frozenset(
         Permission.AUDIT_READ,
         Permission.CATALOG_MANAGE,
         Permission.COSTS_READ,
+        Permission.PRICING_MANAGE,
     }
 )
 GRANTABLE_SCOPES = frozenset(Permission) - PEOPLE_ONLY_PERMISSIONS
