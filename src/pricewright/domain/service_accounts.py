@@ -1,7 +1,7 @@
 """Service accounts and their API keys: how other systems call the API (ADR-0007).
 
 ``erp-mcp-server`` and ``ops-copilot`` act for a tenant through a service account, which holds a
-subset of the non-administrative permissions as scopes.
+subset of the permissions as scopes: never those reserved for people (``PEOPLE_ONLY_PERMISSIONS``).
 
 Keys look like ``pwk_`` + 40 random base62 characters + a 6-character CRC32 checksum, after GitHub's
 token format: the prefix lets secret scanners spot a leaked key, and the checksum rejects a

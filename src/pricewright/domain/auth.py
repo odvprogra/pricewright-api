@@ -33,27 +33,34 @@ class Permission(StrEnum):
     USERS_MANAGE = "users:manage"
     SERVICE_ACCOUNTS_MANAGE = "service_accounts:manage"
     AUDIT_READ = "audit:read"
+    CATALOG_READ = "catalog:read"
+    CATALOG_MANAGE = "catalog:manage"
 
 
-# Brief §2: reps and managers see the tenant's settings; only admins change them and manage users.
+_SELLING = frozenset({Permission.TENANT_READ, Permission.CATALOG_READ})
+
+# Brief §2: everyone sees the tenant's settings and the catalog; only admins change them, manage
+# users and products.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
-    Role.SALES_REP: frozenset({Permission.TENANT_READ}),
-    Role.SALES_MANAGER: frozenset({Permission.TENANT_READ}),
+    Role.SALES_REP: _SELLING,
+    Role.SALES_MANAGER: _SELLING,
     Role.ADMIN: frozenset(Permission),
 }
 
 
-# Administration stays with people: a service account can never manage its tenant, its users or
-# other service accounts, nor read the audit trail of what they do, whatever it is granted.
-ADMINISTRATIVE_PERMISSIONS = frozenset(
+# Some permissions stay with people, whatever a service account is granted: administering the
+# tenant, its users and its service accounts; reading the audit trail of what they do; and changing
+# the catalog, so a person approves every price change (decision D-02).
+PEOPLE_ONLY_PERMISSIONS = frozenset(
     {
         Permission.TENANT_MANAGE,
         Permission.USERS_MANAGE,
         Permission.SERVICE_ACCOUNTS_MANAGE,
         Permission.AUDIT_READ,
+        Permission.CATALOG_MANAGE,
     }
 )
-GRANTABLE_SCOPES = frozenset(Permission) - ADMINISTRATIVE_PERMISSIONS
+GRANTABLE_SCOPES = frozenset(Permission) - PEOPLE_ONLY_PERMISSIONS
 
 
 @dataclass(frozen=True, slots=True)

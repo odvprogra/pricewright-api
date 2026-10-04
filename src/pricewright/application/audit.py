@@ -11,6 +11,7 @@ from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import AuditEventFilter, UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditValue, Changes
 from pricewright.domain.auth import Permission, Principal
+from pricewright.domain.catalog import ProductCategory
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
@@ -87,3 +88,7 @@ def api_key_fields(key: ApiKey) -> dict[str, AuditValue]:
         "expires_at": _time(key.expires_at),
         "revoked_at": _time(key.revoked_at),
     }
+
+
+def category_fields(category: ProductCategory) -> dict[str, AuditValue]:
+    return {"name": category.name}

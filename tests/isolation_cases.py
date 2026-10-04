@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 class IsolationCase:
     method: str
     path: str
-    """Route template; ``{user_id}``, ``{account_id}`` and ``{key_id}`` are Northfield's ids."""
+    """Route template; ``{user_id}``, ``{account_id}``, ``{key_id}`` ... are Northfield's ids."""
     json: dict[str, object] | None = None
     headers: dict[str, str] = field(default_factory=dict)
 
@@ -31,4 +31,11 @@ CASES = (
     IsolationCase("GET", "/api/v1/service-accounts/{account_id}/keys"),
     IsolationCase("POST", "/api/v1/service-accounts/{account_id}/keys", json={}),
     IsolationCase("DELETE", "/api/v1/service-accounts/{account_id}/keys/{key_id}"),
+    IsolationCase("GET", "/api/v1/product-categories/{category_id}"),
+    IsolationCase(
+        "PATCH",
+        "/api/v1/product-categories/{category_id}",
+        json={"name": "Hijacked"},
+        headers={"If-Match": '"1"'},
+    ),
 )

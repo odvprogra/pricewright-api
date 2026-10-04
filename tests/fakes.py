@@ -14,12 +14,14 @@ from typing import Self
 from uuid import UUID
 
 from pricewright.api.dependencies import Services
+from pricewright.application.pagination import Keyset
 from pricewright.application.ports import (
     ApiKeyRepository,
     AuditEventFilter,
     AuditEventRepository,
     IdentityLookup,
     IssuedToken,
+    ProductCategoryRepository,
     RefreshTokenRepository,
     ServiceAccountRepository,
     TenantRepository,
@@ -28,6 +30,7 @@ from pricewright.application.ports import (
 )
 from pricewright.domain.audit import AuditEvent
 from pricewright.domain.auth import AuthenticationError, Principal
+from pricewright.domain.catalog import ProductCategory
 from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -44,6 +47,7 @@ class InMemoryDatabase:
     service_accounts: dict[UUID, ServiceAccount] = field(default_factory=dict)
     api_keys: dict[UUID, ApiKey] = field(default_factory=dict)
     audit_events: dict[UUID, AuditEvent] = field(default_factory=dict)
+    product_categories: dict[UUID, ProductCategory] = field(default_factory=dict)
 
 
 class FakeTenantRepository:
@@ -226,6 +230,53 @@ class FakeAuditEventRepository:
         return [event for event in newest_first if matches(event)][:limit]
 
 
+def text_key(text: str) -> str:
+    """Close to the database's Unicode collation for the tests' names: case does not decide."""
+    return text.casefold()
+
+
+class FakeProductCategoryRepository:
+    def __init__(self, categories: dict[UUID, ProductCategory], uow: FakeUnitOfWork) -> None:
+        self._categories = categories
+        self._uow = uow
+
+    def _owned(self) -> list[ProductCategory]:
+        tenant_id = self._uow.tenant_id
+        return [c for c in self._categories.values() if c.tenant_id == tenant_id]
+
+    async def add(self, category: ProductCategory) -> None:
+        if category.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("a category can only be added to the unit of work's tenant")
+        self._categories[category.id] = category
+
+    async def get(self, category_id: UUID) -> ProductCategory | None:
+        found = next((c for c in self._owned() if c.id == category_id), None)
+        return copy.deepcopy(found)
+
+    async def named(self, name: str) -> ProductCategory | None:
+        found = next((c for c in self._owned() if c.name.lower() == name.lower()), None)
+        return copy.deepcopy(found)
+
+    async def page(self, *, after: Keyset | None, limit: int) -> list[ProductCategory]:
+        def key(category: ProductCategory) -> tuple[str, UUID]:
+            return text_key(category.name), category.id
+
+        ordered = sorted(self._owned(), key=key)
+        if after is not None:
+            start = (text_key(after.value or ""), after.id)
+            ordered = [category for category in ordered if key(category) > start]
+        return copy.deepcopy(ordered[:limit])
+
+    async def save(self, category: ProductCategory) -> None:
+        stored = self._categories.get(category.id)
+        if stored is None or stored.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a category of the unit of work's tenant can be saved")
+        if stored.version != category.version:
+            raise StaleVersionError("the category was changed by someone else; reload it")
+        stored.name, stored.version = category.name, stored.version + 1
+        category.version = stored.version
+
+
 class FakeIdentityLookup:
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -253,6 +304,7 @@ class FakeUnitOfWork:
     service_accounts: ServiceAccountRepository
     api_keys: ApiKeyRepository
     audit_events: AuditEventRepository
+    product_categories: ProductCategoryRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -267,6 +319,9 @@ class FakeUnitOfWork:
         self.service_accounts = FakeServiceAccountRepository(self._staged.service_accounts, self)
         self.api_keys = FakeApiKeyRepository(self._staged.api_keys, self)
         self.audit_events = FakeAuditEventRepository(self._staged.audit_events, self)
+        self.product_categories = FakeProductCategoryRepository(
+            self._staged.product_categories, self
+        )
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
@@ -290,10 +345,14 @@ class FakeUnitOfWork:
         self._tenant_id = tenant_id
 
     async def commit(self) -> None:
-        # The same unique constraints as the database: emails, and account names per tenant.
+        # The same unique constraints as the database: emails, account names per tenant, and
+        # category names per tenant ignoring case.
         emails = [user.email for user in self._staged.users.values()]
         names = [(a.tenant_id, a.name) for a in self._staged.service_accounts.values()]
-        if len(emails) != len(set(emails)) or len(names) != len(set(names)):
+        categories = [
+            (c.tenant_id, c.name.lower()) for c in self._staged.product_categories.values()
+        ]
+        if any(len(keys) != len(set(keys)) for keys in (emails, names, categories)):
             raise ConflictError("the change conflicts with an existing record")
         self._database.tenants = copy.deepcopy(self._staged.tenants)
         self._database.users = copy.deepcopy(self._staged.users)
@@ -301,6 +360,7 @@ class FakeUnitOfWork:
         self._database.service_accounts = copy.deepcopy(self._staged.service_accounts)
         self._database.api_keys = copy.deepcopy(self._staged.api_keys)
         self._database.audit_events = copy.deepcopy(self._staged.audit_events)
+        self._database.product_categories = copy.deepcopy(self._staged.product_categories)
 
 
 class FakePasswordHasher:
