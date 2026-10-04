@@ -22,6 +22,9 @@ from pricewright.application.ports import (
     IdentityLookup,
     IssuedToken,
     ProductCategoryRepository,
+    ProductQuery,
+    ProductRepository,
+    ProductSort,
     RefreshTokenRepository,
     ServiceAccountRepository,
     TenantRepository,
@@ -30,7 +33,7 @@ from pricewright.application.ports import (
 )
 from pricewright.domain.audit import AuditEvent
 from pricewright.domain.auth import AuthenticationError, Principal
-from pricewright.domain.catalog import ProductCategory
+from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -48,6 +51,7 @@ class InMemoryDatabase:
     api_keys: dict[UUID, ApiKey] = field(default_factory=dict)
     audit_events: dict[UUID, AuditEvent] = field(default_factory=dict)
     product_categories: dict[UUID, ProductCategory] = field(default_factory=dict)
+    products: dict[UUID, Product] = field(default_factory=dict)
 
 
 class FakeTenantRepository:
@@ -277,6 +281,63 @@ class FakeProductCategoryRepository:
         category.version = stored.version
 
 
+class FakeProductRepository:
+    def __init__(self, products: dict[UUID, Product], uow: FakeUnitOfWork) -> None:
+        self._products = products
+        self._uow = uow
+
+    def _owned(self) -> list[Product]:
+        return [p for p in self._products.values() if p.tenant_id == self._uow.tenant_id]
+
+    async def add(self, product: Product) -> None:
+        if product.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a product of the unit of work's tenant can be stored")
+        self._products[product.id] = product
+
+    async def get(self, product_id: UUID) -> Product | None:
+        return copy.deepcopy(next((p for p in self._owned() if p.id == product_id), None))
+
+    async def with_sku(self, sku: str) -> Product | None:
+        found = next((p for p in self._owned() if p.sku.lower() == sku.lower()), None)
+        return copy.deepcopy(found)
+
+    async def page(self, query: ProductQuery, *, after: Keyset | None, limit: int) -> list[Product]:
+        def matches(product: Product) -> bool:
+            text = None if query.text is None else query.text.lower()
+            return (
+                (text is None or text in product.sku.lower() or text in product.name.lower())
+                and (query.sku is None or product.sku.lower() == query.sku.lower())
+                and query.category_id in {None, product.category_id}
+                and query.active in {None, product.is_active}
+            )
+
+        def key(value: str | None, product_id: UUID) -> tuple[str, UUID]:
+            return ("" if query.sort is ProductSort.CREATED else text_key(value or "")), product_id
+
+        def product_key(product: Product) -> tuple[str, UUID]:
+            value = {ProductSort.SKU: product.sku, ProductSort.NAME: product.name}
+            return key(value.get(query.sort), product.id)
+
+        ordered = sorted(filter(matches, self._owned()), key=product_key, reverse=query.descending)
+        if after is not None:
+            start = key(after.value, after.id)
+            ordered = [
+                p
+                for p in ordered
+                if (product_key(p) < start if query.descending else product_key(p) > start)
+            ]
+        return copy.deepcopy(ordered[:limit])
+
+    async def save(self, product: Product) -> None:
+        stored = self._products.get(product.id)
+        if stored is None or stored.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a product of the unit of work's tenant can be stored")
+        if stored.version != product.version:
+            raise StaleVersionError("the product was changed by someone else; reload it")
+        product.version = stored.version + 1
+        self._products[product.id] = copy.deepcopy(product)
+
+
 class FakeIdentityLookup:
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -305,6 +366,7 @@ class FakeUnitOfWork:
     api_keys: ApiKeyRepository
     audit_events: AuditEventRepository
     product_categories: ProductCategoryRepository
+    products: ProductRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -322,6 +384,7 @@ class FakeUnitOfWork:
         self.product_categories = FakeProductCategoryRepository(
             self._staged.product_categories, self
         )
+        self.products = FakeProductRepository(self._staged.products, self)
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
@@ -346,13 +409,13 @@ class FakeUnitOfWork:
 
     async def commit(self) -> None:
         # The same unique constraints as the database: emails, account names per tenant, and
-        # category names per tenant ignoring case.
-        emails = [user.email for user in self._staged.users.values()]
-        names = [(a.tenant_id, a.name) for a in self._staged.service_accounts.values()]
-        categories = [
-            (c.tenant_id, c.name.lower()) for c in self._staged.product_categories.values()
-        ]
-        if any(len(keys) != len(set(keys)) for keys in (emails, names, categories)):
+        # category names and SKUs per tenant ignoring case.
+        staged = self._staged
+        emails = [user.email for user in staged.users.values()]
+        names = [(a.tenant_id, a.name) for a in staged.service_accounts.values()]
+        categories = [(c.tenant_id, c.name.lower()) for c in staged.product_categories.values()]
+        skus = [(p.tenant_id, p.sku.lower()) for p in staged.products.values()]
+        if any(len(keys) != len(set(keys)) for keys in (emails, names, categories, skus)):
             raise ConflictError("the change conflicts with an existing record")
         self._database.tenants = copy.deepcopy(self._staged.tenants)
         self._database.users = copy.deepcopy(self._staged.users)
@@ -361,6 +424,7 @@ class FakeUnitOfWork:
         self._database.api_keys = copy.deepcopy(self._staged.api_keys)
         self._database.audit_events = copy.deepcopy(self._staged.audit_events)
         self._database.product_categories = copy.deepcopy(self._staged.product_categories)
+        self._database.products = copy.deepcopy(self._staged.products)
 
 
 class FakePasswordHasher:

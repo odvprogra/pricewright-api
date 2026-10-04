@@ -3,15 +3,16 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import case, func, literal, select, tuple_, update
+from sqlalchemy import ColumnElement, case, func, literal, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricewright.application.pagination import Keyset
-from pricewright.application.ports import AuditEventFilter
+from pricewright.application.ports import AuditEventFilter, ProductQuery, ProductSort
 from pricewright.domain.audit import ActorType, AuditAction, AuditEvent
 from pricewright.domain.auth import Permission
-from pricewright.domain.catalog import ProductCategory
+from pricewright.domain.catalog import Product, ProductCategory, UnitOfMeasure
 from pricewright.domain.errors import StaleVersionError
+from pricewright.domain.money import Money
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant, TenantSettings
@@ -21,6 +22,7 @@ from pricewright.infrastructure.records import (
     ApiKeyRecord,
     AuditEventRecord,
     ProductCategoryRecord,
+    ProductRecord,
     RefreshTokenRecord,
     ServiceAccountRecord,
     TenantRecord,
@@ -507,6 +509,122 @@ class SqlAlchemyProductCategoryRepository:
         if new_version is None:
             raise StaleVersionError("the category was changed by someone else; reload it")
         category.version = new_version
+
+
+def _to_product(record: ProductRecord) -> Product:
+    return Product(
+        id=record.id,
+        tenant_id=record.tenant_id,
+        sku=record.sku,
+        name=record.name,
+        unit=UnitOfMeasure(record.unit),
+        list_price=Money(record.list_price, record.currency),
+        unit_cost=Money(record.unit_cost, record.currency),
+        category_id=record.category_id,
+        is_active=record.is_active,
+        version=record.version,
+    )
+
+
+def _contains(text: str) -> str:
+    """A LIKE pattern matching ``text`` literally anywhere: its wildcards are escaped."""
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+class SqlAlchemyProductRepository:
+    def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
+        self._session = session
+        self._scope = scope
+
+    def _require_own(self, product: Product) -> None:
+        if product.tenant_id != self._scope.tenant_id:
+            raise RuntimeError("only a product of the unit of work's tenant can be stored")
+
+    async def add(self, product: Product) -> None:
+        self._require_own(product)
+        self._session.add(
+            ProductRecord(
+                id=product.id,
+                tenant_id=product.tenant_id,
+                sku=product.sku,
+                name=product.name,
+                category_id=product.category_id,
+                unit=product.unit.value,
+                currency=product.currency,
+                list_price=product.list_price.amount,
+                unit_cost=product.unit_cost.amount,
+                is_active=product.is_active,
+                version=product.version,
+            )
+        )
+
+    async def _one(self, condition: ColumnElement[bool]) -> Product | None:
+        record = await self._session.scalar(
+            select(ProductRecord).where(ProductRecord.tenant_id == self._scope.tenant_id, condition)
+        )
+        return None if record is None else _to_product(record)
+
+    async def get(self, product_id: UUID) -> Product | None:
+        return await self._one(ProductRecord.id == product_id)
+
+    async def with_sku(self, sku: str) -> Product | None:
+        return await self._one(func.lower(ProductRecord.sku) == sku.lower())
+
+    async def page(self, query: ProductQuery, *, after: Keyset | None, limit: int) -> list[Product]:
+        select_ = select(ProductRecord).where(ProductRecord.tenant_id == self._scope.tenant_id)
+        if query.text is not None:
+            pattern = _contains(query.text)
+            select_ = select_.where(
+                or_(
+                    ProductRecord.sku.ilike(pattern, escape="\\"),
+                    ProductRecord.name.ilike(pattern, escape="\\"),
+                )
+            )
+        if query.sku is not None:
+            select_ = select_.where(func.lower(ProductRecord.sku) == query.sku.lower())
+        if query.category_id is not None:
+            select_ = select_.where(ProductRecord.category_id == query.category_id)
+        if query.active is not None:
+            select_ = select_.where(ProductRecord.is_active == query.active)
+        sort_column = {ProductSort.SKU: ProductRecord.sku, ProductSort.NAME: ProductRecord.name}
+        column = sort_column.get(query.sort)
+        key = (ProductRecord.id,) if column is None else (column, ProductRecord.id)
+        if after is not None:
+            position = (after.id,) if column is None else (after.value, after.id)
+            beyond = (
+                tuple_(*key) < tuple_(*position)
+                if query.descending
+                else tuple_(*key) > tuple_(*position)
+            )
+            select_ = select_.where(beyond)
+        order = [part.desc() for part in key] if query.descending else list(key)
+        records = await self._session.scalars(select_.order_by(*order).limit(limit))
+        return [_to_product(record) for record in records]
+
+    async def save(self, product: Product) -> None:
+        self._require_own(product)
+        new_version = await self._session.scalar(
+            update(ProductRecord)
+            .where(
+                ProductRecord.tenant_id == self._scope.tenant_id,
+                ProductRecord.id == product.id,
+                ProductRecord.version == product.version,
+            )
+            .values(
+                name=product.name,
+                category_id=product.category_id,
+                unit=product.unit.value,
+                list_price=product.list_price.amount,
+                unit_cost=product.unit_cost.amount,
+                is_active=product.is_active,
+                version=ProductRecord.version + 1,
+            )
+            .returning(ProductRecord.version)
+        )
+        if new_version is None:
+            raise StaleVersionError("the product was changed by someone else; reload it")
+        product.version = new_version
 
 
 class SqlAlchemyIdentityLookup:

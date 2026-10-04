@@ -6,6 +6,7 @@ Adapters in ``infrastructure`` implement them; tests use in-memory fakes.
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
@@ -13,7 +14,7 @@ from uuid import UUID
 from pricewright.application.pagination import Keyset
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
-from pricewright.domain.catalog import ProductCategory
+from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
@@ -134,6 +135,52 @@ class ProductCategoryRepository(Protocol):
         ...
 
 
+class ProductSort(StrEnum):
+    SKU = "sku"
+    NAME = "name"
+    CREATED = "created_at"
+
+
+@dataclass(frozen=True, slots=True)
+class ProductQuery:
+    """Which products to list and in which order (ADR-0014). ``None`` filters match everything."""
+
+    text: str | None = None
+    """Contained in the SKU or the name, ignoring case."""
+    sku: str | None = None
+    """The exact SKU, ignoring case."""
+    category_id: UUID | None = None
+    active: bool | None = None
+    sort: ProductSort = ProductSort.NAME
+    descending: bool = False
+
+
+class ProductRepository(Protocol):
+    """Products of the unit of work's tenant only (ADR-0006)."""
+
+    async def add(self, product: Product) -> None: ...
+
+    async def get(self, product_id: UUID) -> Product | None: ...
+
+    async def with_sku(self, sku: str) -> Product | None:
+        """The product with this SKU, ignoring case."""
+        ...
+
+    async def page(self, query: ProductQuery, *, after: Keyset | None, limit: int) -> list[Product]:
+        """Up to ``limit`` matching products in the query's order, after ``after``.
+
+        The keyset holds the sort value (none when sorted by creation) and the id.
+        """
+        ...
+
+    async def save(self, product: Product) -> None:
+        """Store changes and bump ``product.version``, atomically.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``product.version``.
+        """
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEventFilter:
     """Which audit events to list; a field left as ``None`` matches every event."""
@@ -211,6 +258,7 @@ class UnitOfWork(Protocol):
     api_keys: ApiKeyRepository
     audit_events: AuditEventRepository
     product_categories: ProductCategoryRepository
+    products: ProductRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...
