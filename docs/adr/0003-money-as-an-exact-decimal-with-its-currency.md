@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-03
+- **Amended:** 2026-10-04 — currencies and their minor units come from ISO 4217 List One
 
 ## Context
 
@@ -30,10 +31,22 @@ turns 987.345 into 987.35, and
 [Council Regulation (EC) 1103/97](https://eur-lex.europa.eu/eli/reg/1997/1103/2001-01-01/eng) rounds
 half-way results up. PostgreSQL's `round(numeric)` breaks ties away from zero.
 
+Minor units come from ISO 4217, whose maintenance agency, SIX, publishes them in
+[List One](https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html):
+0 for JPY, 2 for USD, 3 for KWD. The list also holds fund codes (CLF) and X codes such as gold (XAU)
+that nobody prices goods in. Libraries do not all agree with it: Unicode CLDR, which Babel uses, has
+display digits that differ for 13 currencies (IQD has 3 minor units in ISO, 0 in CLDR), while
+[Java's `Currency`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Currency.html)
+and [Joda-Money](https://www.joda.org/joda-money/) ship the ISO table themselves.
+
 ## Decision
 
 - **Domain.** A frozen `Money(amount: Decimal, currency)`; at most four decimal places and 14
   integer digits, so it always fits the column. Arithmetic (from M3) only between equal currencies.
+- **Currencies.** Only current ISO 4217 currencies with numeric minor units: the 155 of List One
+  published on 2026-09-17, without funds or X codes. `domain/currencies.py` holds them with their
+  minor units, and `Money` and the tenant's settings refuse any other code. An amendment to the
+  standard is an edit to that table.
 - **Storage.** Amounts are `NUMERIC(18,4)`. Every table holding money has a `currency CHAR(3)`
   column, kept equal to the tenant's currency by a composite foreign key
   `(tenant_id, currency) → tenants (id, currency)`. The tenant's currency never changes.
@@ -53,6 +66,10 @@ half-way results up. PostgreSQL's `round(numeric)` breaks ties away from zero.
 - **SAP's price unit** (a price per 100 or 1,000 pieces): avoids decimals, but every consumer must
   divide, and a wrong divisor is a silent hundredfold error.
 - **Floats:** never; they cannot represent 0.1.
+- **Minor units from Babel (CLDR):** display conventions, not ISO's minor units, and a dependency
+  for a table that changes a few times a year.
+- **A currencies table in the database** (SAP's TCURX, Oracle's `FND_CURRENCIES`): lets SQL round
+  per currency; worth it with the reports (M10), and until then a second copy to keep in step.
 - **Half even (banker's rounding)**, the handbook's former rule: unbiased when many rounded values
   are summed, but not how invoices and tax are rounded, and quotes round each line only once.
 - **Tax per line instead of per document:** equally common (Stripe and Dynamics 365 offer both); the
