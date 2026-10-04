@@ -567,15 +567,8 @@ class FakeUnitOfWork:
         unique_keys = (emails, names, categories, skus, accounts)
         if any(len(keys) != len(set(keys)) for keys in unique_keys):
             raise ConflictError("the change conflicts with an existing record")
-        self._database.tenants = copy.deepcopy(self._staged.tenants)
-        self._database.users = copy.deepcopy(self._staged.users)
-        self._database.refresh_tokens = copy.deepcopy(self._staged.refresh_tokens)
-        self._database.service_accounts = copy.deepcopy(self._staged.service_accounts)
-        self._database.api_keys = copy.deepcopy(self._staged.api_keys)
-        self._database.audit_events = copy.deepcopy(self._staged.audit_events)
-        self._database.product_categories = copy.deepcopy(self._staged.product_categories)
-        self._database.products = copy.deepcopy(self._staged.products)
-        self._database.customers = copy.deepcopy(self._staged.customers)
+        for table in dataclasses.fields(InMemoryDatabase):  # every table, new ones included
+            setattr(self._database, table.name, copy.deepcopy(getattr(staged, table.name)))
 
 
 class FakePasswordHasher:

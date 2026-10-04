@@ -21,6 +21,7 @@ from pricewright.domain.catalog import (
     SkuTakenError,
     UnitOfMeasure,
     UnknownCategoryError,
+    UnknownProductError,
 )
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.money import Money
@@ -101,10 +102,16 @@ async def rename_category(
     return category
 
 
-async def _ensure_category_exists(uow: UnitOfWork, category_id: UUID | None) -> None:
+async def ensure_category_exists(uow: UnitOfWork, category_id: UUID | None) -> None:
     """Another tenant's category does not exist here (ADR-0009)."""
     if category_id is not None and await uow.product_categories.get(category_id) is None:
         raise UnknownCategoryError("no such category in this tenant")
+
+
+async def ensure_product_exists(uow: UnitOfWork, product_id: UUID | None) -> None:
+    """Another tenant's product does not exist here (ADR-0009)."""
+    if product_id is not None and await uow.products.get(product_id) is None:
+        raise UnknownProductError("no such product in this tenant")
 
 
 async def _tenant_currency(uow: UnitOfWork, tenant_id: UUID) -> str:
@@ -140,7 +147,7 @@ async def create_product(
             unit_cost=new.unit_cost,
             category_id=new.category_id,
         )
-        await _ensure_category_exists(uow, product.category_id)
+        await ensure_category_exists(uow, product.category_id)
         if (holder := await uow.products.with_sku(product.sku)) is not None:
             raise SkuTakenError(f"SKU {holder.sku} is already in the catalog")
         await uow.products.add(product)
@@ -213,7 +220,7 @@ async def change_product(
         if product.version != expected_version:
             raise StaleVersionError("the product was changed by someone else; reload it")
         if changes.category_id is not KEEP:
-            await _ensure_category_exists(uow, changes.category_id)
+            await ensure_category_exists(uow, changes.category_id)
         before = product_fields(product)
         product.change(
             name=changes.name,

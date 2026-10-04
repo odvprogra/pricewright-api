@@ -16,6 +16,9 @@ from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.money import AMOUNT_DECIMAL_PLACES
+from pricewright.domain.pricing_rules import RATE_DECIMAL_PLACES as RULE_RATE_PLACES
+from pricewright.domain.pricing_rules import PricingRule
+from pricewright.domain.quantities import QUANTITY_DECIMAL_PLACES
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.tenants import RATE_DECIMAL_PLACES, Tenant
 from pricewright.domain.users import User
@@ -124,4 +127,28 @@ def customer_fields(customer: Customer) -> dict[str, AuditValue]:
         "tier": customer.tier.value,
         "payment_terms_days": customer.payment_terms_days,
         "is_active": customer.is_active,
+    }
+
+
+def _id(value: UUID | None) -> str | None:
+    return None if value is None else str(value)
+
+
+def pricing_rule_fields(rule: PricingRule) -> dict[str, AuditValue]:
+    """Brackets as ``min_quantity:rate`` pairs, space-delimited; none for other kinds."""
+    brackets = " ".join(
+        f"{_decimal(b.min_quantity, QUANTITY_DECIMAL_PLACES)}:{_decimal(b.rate, RULE_RATE_PLACES)}"
+        for b in rule.brackets
+    )
+    return {
+        "kind": rule.kind.value,
+        "name": rule.name,
+        "product_id": _id(rule.product_id),
+        "category_id": _id(rule.category_id),
+        "customer_tier": None if rule.customer_tier is None else rule.customer_tier.value,
+        "rate": None if rule.rate is None else _decimal(rule.rate, RULE_RATE_PLACES),
+        "brackets": brackets or None,
+        "valid_from": _time(rule.valid_from),
+        "valid_to": _time(rule.valid_to),
+        "is_active": rule.is_active,
     }
