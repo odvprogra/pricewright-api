@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from pricewright.domain.money import MAX_AMOUNT, InvalidMoneyError, Money
+from pricewright.domain.money import MAX_AMOUNT, InvalidMoneyError, Money, round_half_up
 
 # Every amount NUMERIC(18, 4) can store.
 storable_amounts = st.decimals(min_value=-MAX_AMOUNT, max_value=MAX_AMOUNT, places=4)
@@ -43,3 +43,29 @@ def test_money_rejects_a_currency_that_is_not_an_iso_code(currency: str) -> None
 def test_money_equality_ignores_trailing_zeros_but_not_the_currency() -> None:
     assert Money(Decimal("12.5"), "USD") == Money(Decimal("12.5000"), "USD")
     assert Money(Decimal("12.5"), "USD") != Money(Decimal("12.5"), "EUR")
+
+
+@pytest.mark.parametrize(
+    ("value", "places", "rounded"),
+    [("1.11105", 4, "1.1111"), ("0.125", 2, "0.13"), ("-0.125", 2, "-0.13"), ("617.5", 0, "618")],
+)
+def test_round_half_up_breaks_ties_away_from_zero(value: str, places: int, rounded: str) -> None:
+    assert round_half_up(Decimal(value), places) == Decimal(rounded)
+
+
+def test_money_adds_and_subtracts_only_the_same_currency() -> None:
+    price, cost = Money(Decimal("12.5"), "USD"), Money(Decimal("7.25"), "USD")
+
+    assert (price + cost, price - cost) == (
+        Money(Decimal("19.75"), "USD"),
+        Money(Decimal("5.25"), "USD"),
+    )
+    with pytest.raises(InvalidMoneyError, match="do not mix"):
+        price + Money(Decimal(1), "EUR")
+    with pytest.raises(InvalidMoneyError, match="within"):
+        Money(MAX_AMOUNT, "USD") + Money(Decimal("0.0001"), "USD")
+
+
+@pytest.mark.parametrize(("currency", "minor_units"), [("USD", 2), ("JPY", 0), ("KWD", 3)])
+def test_money_knows_its_currency_minor_units(currency: str, minor_units: int) -> None:
+    assert Money(Decimal(1), currency).minor_units == minor_units

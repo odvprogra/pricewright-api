@@ -184,7 +184,7 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0001 | [Architecture style, decisions recorded as ADRs](adr/0001-record-architecture-decisions.md)                                             | M0        |
 | 0002 | [Separate repos with a versioned OpenAPI contract](adr/0002-separate-repos-with-a-versioned-openapi-contract.md)                        | M0        |
 | 0003 | [Money as an exact decimal with its currency, rounded half up](adr/0003-money-as-an-exact-decimal-with-its-currency.md)                 | M2        |
-| 0004 | Pricing rule stacking policy and approval metric                                                                                        | M3        |
+| 0004 | [Pricing waterfall, breakdown and approval metric](adr/0004-pricing-waterfall-breakdown-and-approval-metric.md)                         | M3        |
 | 0005 | Quote lifecycle implementation (revisions, expiration)                                                                                  | M4        |
 | 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                                        | M1        |
 | 0007 | [Authentication for users and service accounts](adr/0007-authentication-for-users-and-service-accounts.md)                              | M1        |
