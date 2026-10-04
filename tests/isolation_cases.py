@@ -45,4 +45,11 @@ CASES = (
         json={"is_active": False},
         headers={"If-Match": '"1"'},
     ),
+    IsolationCase("GET", "/api/v1/customers/{customer_id}"),
+    IsolationCase(
+        "PATCH",
+        "/api/v1/customers/{customer_id}",
+        json={"tier": "gold"},
+        headers={"If-Match": '"1"'},
+    ),
 )

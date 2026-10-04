@@ -35,12 +35,21 @@ class Permission(StrEnum):
     AUDIT_READ = "audit:read"
     CATALOG_READ = "catalog:read"
     CATALOG_MANAGE = "catalog:manage"
+    CUSTOMERS_READ = "customers:read"
+    CUSTOMERS_MANAGE = "customers:manage"
 
 
-_SELLING = frozenset({Permission.TENANT_READ, Permission.CATALOG_READ})
+_SELLING = frozenset(
+    {
+        Permission.TENANT_READ,
+        Permission.CATALOG_READ,
+        Permission.CUSTOMERS_READ,
+        Permission.CUSTOMERS_MANAGE,
+    }
+)
 
-# Brief §2: everyone sees the tenant's settings and the catalog; only admins change them, manage
-# users and products.
+# Brief §2: everyone sees the tenant's settings and the catalog and manages customers; only admins
+# change the settings and the catalog, and manage users.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
     Role.SALES_REP: _SELLING,
     Role.SALES_MANAGER: _SELLING,
