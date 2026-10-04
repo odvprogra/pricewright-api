@@ -20,7 +20,7 @@ compatible extensions such as new values.
 
 - A response field whose set of values will grow is a `string`, with today's values listed in
   `examples` and a description telling clients to handle unknown values: an audit event's `action`
-  and `resource_type`, and a service account's `scopes` (which change from an enum before M2 adds
+  and `resource_type`, and a service account's `scopes` (an enum until M2 started adding
   permissions).
 - Fixed sets stay `enum` in responses: roles, customer tiers, actor types. Adding a value to one of
   those is a breaking change, marked with `!`.
@@ -38,5 +38,5 @@ compatible extensions such as new values.
 
 - **Positive:** the contract grows without breaking clients, and oasdiff still catches real breaks.
 - **Negative:** generated clients see plain strings for these fields, so they lose exhaustiveness
-  checks and must keep a default branch. Turning `scopes` from an enum into a string is itself a
-  breaking change, made once, before 1.0.
+  checks and must keep a default branch. Clients generated before `scopes` became open-ended must be
+  regenerated before they meet a new scope.
