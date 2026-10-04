@@ -80,6 +80,7 @@ generates its client from the `openapi.json` attached to it. Details in
 | [ADR-0015](docs/adr/0015-open-ended-values-in-responses.md) Open-ended values in responses                                   | Growing value sets (audit actions, scopes) never break generated clients                            |
 | [ADR-0016](docs/adr/0016-catalog-and-customer-master-data.md) Archived, never deleted; keyed by SKU and account number       | Quotes never point at nothing; other systems rely on codes; retries cannot duplicate records        |
 | [ADR-0017](docs/adr/0017-costs-only-for-people-with-costs-read.md) Costs only for people (`costs:read`)                      | Integrations, and the LLMs behind them, never see costs or margins                                  |
+| [ADR-0018](docs/adr/0018-pricing-rules-typed-scoped-and-effective-dated.md) Pricing rules: typed, scoped, effective-dated    | One table the engine reads at once; the best discount wins without priorities to maintain           |
 
 ## Run it locally
 
