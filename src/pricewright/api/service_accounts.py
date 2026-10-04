@@ -37,8 +37,8 @@ class ServiceAccountRequest(BaseModel):
 
     name: str = Field(max_length=MAX_NAME_LENGTH, examples=["erp-mcp-server"])
     scopes: list[Permission] = Field(
-        description="Permissions the account acts with. Administration, the audit trail and "
-        "catalog changes stay with people and cannot be granted."
+        description="Permissions the account acts with. Administration, the audit trail, "
+        "catalog changes and costs stay with people and cannot be granted."
     )
 
 

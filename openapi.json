@@ -819,7 +819,8 @@
           "catalog:read",
           "catalog:manage",
           "customers:read",
-          "customers:manage"
+          "customers:manage",
+          "costs:read"
         ],
         "title": "Permission",
         "type": "string"
@@ -1069,7 +1070,9 @@
             "type": "string"
           },
           "unit_cost": {
-            "$ref": "#/components/schemas/MoneyJson"
+            "$ref": "#/components/schemas/MoneyJson",
+            "description": "Only for people with `costs:read`; service accounts never see it.",
+            "title": "Unit Cost"
           },
           "version": {
             "description": "Also sent as the ETag; send it back in If-Match to update.",
@@ -1084,7 +1087,6 @@
           "category_id",
           "unit",
           "list_price",
-          "unit_cost",
           "is_active",
           "version"
         ],
@@ -1156,7 +1158,7 @@
             "type": "string"
           },
           "scopes": {
-            "description": "Permissions the account acts with. Administration, the audit trail and catalog changes stay with people and cannot be granted.",
+            "description": "Permissions the account acts with. Administration, the audit trail, catalog changes and costs stay with people and cannot be granted.",
             "items": {
               "$ref": "#/components/schemas/Permission"
             },

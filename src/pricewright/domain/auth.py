@@ -37,19 +37,23 @@ class Permission(StrEnum):
     CATALOG_MANAGE = "catalog:manage"
     CUSTOMERS_READ = "customers:read"
     CUSTOMERS_MANAGE = "customers:manage"
+    COSTS_READ = "costs:read"
+    """Unit costs and the margins they reveal (ADR-0017)."""
 
 
 _SELLING = frozenset(
     {
         Permission.TENANT_READ,
         Permission.CATALOG_READ,
+        Permission.COSTS_READ,
         Permission.CUSTOMERS_READ,
         Permission.CUSTOMERS_MANAGE,
     }
 )
 
-# Brief §2: everyone sees the tenant's settings and the catalog and manages customers; only admins
-# change the settings and the catalog, and manage users.
+# Brief §2: everyone sees the tenant's settings and the catalog, with its costs (reps see margins on
+# quote lines, brief §3), and manages customers; only admins change the settings and the catalog,
+# and manage users.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
     Role.SALES_REP: _SELLING,
     Role.SALES_MANAGER: _SELLING,
@@ -58,8 +62,9 @@ ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
 
 
 # Some permissions stay with people, whatever a service account is granted: administering the
-# tenant, its users and its service accounts; reading the audit trail of what they do; and changing
-# the catalog, so a person approves every price change (decision D-02).
+# tenant, its users and its service accounts; reading the audit trail of what they do; changing the
+# catalog, so a person approves every price change (decision D-02); and reading costs, which an
+# integration such as an LLM drafting customer messages could leak (ADR-0017).
 PEOPLE_ONLY_PERMISSIONS = frozenset(
     {
         Permission.TENANT_MANAGE,
@@ -67,6 +72,7 @@ PEOPLE_ONLY_PERMISSIONS = frozenset(
         Permission.SERVICE_ACCOUNTS_MANAGE,
         Permission.AUDIT_READ,
         Permission.CATALOG_MANAGE,
+        Permission.COSTS_READ,
     }
 )
 GRANTABLE_SCOPES = frozenset(Permission) - PEOPLE_ONLY_PERMISSIONS
@@ -92,6 +98,10 @@ class Principal:
             return self.scopes & GRANTABLE_SCOPES
         return ROLE_PERMISSIONS[self.role]
 
+    def holds(self, permission: Permission) -> bool:
+        """For what a response shows rather than whether a request runs, such as costs."""
+        return permission in self.permissions
+
     def require(self, permission: Permission) -> None:
-        if permission not in self.permissions:
+        if not self.holds(permission):
             raise PermissionDeniedError(f"this action needs the {permission} permission")

@@ -74,3 +74,15 @@ def test_every_role_manages_customers(role: Role) -> None:
 
 def test_integrations_can_be_granted_customer_access() -> None:
     assert {Permission.CUSTOMERS_READ, Permission.CUSTOMERS_MANAGE} <= GRANTABLE_SCOPES
+
+
+@pytest.mark.parametrize("role", list(Role))
+def test_every_role_reads_costs(role: Role) -> None:
+    assert principal(role).holds(Permission.COSTS_READ)
+
+
+def test_integrations_never_read_costs() -> None:
+    caller = Principal(uuid.uuid7(), uuid.uuid7(), scopes=frozenset(Permission))
+
+    assert Permission.COSTS_READ not in GRANTABLE_SCOPES
+    assert not caller.holds(Permission.COSTS_READ)
