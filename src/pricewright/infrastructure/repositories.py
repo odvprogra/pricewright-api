@@ -410,7 +410,7 @@ class SqlAlchemyAuditEventRepository:
                 actor_type=event.actor_type.value,
                 actor_id=event.actor_id,
                 action=event.action.value,
-                resource_type=event.resource_type,
+                resource_type=event.resource_type.value,
                 resource_id=event.resource_id,
                 changes={name: list(values) for name, values in event.changes.items()},
                 request_id=event.request_id or current_request_id(),
@@ -422,7 +422,7 @@ class SqlAlchemyAuditEventRepository:
     ) -> list[AuditEvent]:
         query = select(AuditEventRecord).where(AuditEventRecord.tenant_id == self._scope.tenant_id)
         if where.resource_type is not None:
-            query = query.where(AuditEventRecord.resource_type == where.resource_type)
+            query = query.where(AuditEventRecord.resource_type == where.resource_type.value)
         if where.resource_id is not None:
             query = query.where(AuditEventRecord.resource_id == where.resource_id)
         if where.actor_id is not None:

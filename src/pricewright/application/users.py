@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from pricewright.application.audit import record, user_fields
-from pricewright.application.pagination import Page
+from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import Clock, PasswordHasher, UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.audit import AuditAction, changed, created
 from pricewright.domain.auth import Permission, Principal
@@ -69,15 +69,13 @@ async def create_user(
 
 
 async def list_users(
-    principal: Principal, *, after: UUID | None, limit: int, unit_of_work: UnitOfWorkFactory
+    principal: Principal, *, after: Keyset | None, limit: int, unit_of_work: UnitOfWorkFactory
 ) -> Page[User]:
     principal.require(Permission.USERS_MANAGE)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
-        users = await uow.users.page(after=after, limit=limit + 1)  # one extra: is there more?
-    page = users[:limit]
-    has_more = len(users) > limit
-    return Page(items=page, next_after=page[-1].id if has_more else None)
+        users = await uow.users.page(after=None if after is None else after.id, limit=limit + 1)
+    return page_of(users, limit, lambda user: Keyset(user.id))
 
 
 async def get_user(principal: Principal, user_id: UUID, *, unit_of_work: UnitOfWorkFactory) -> User:

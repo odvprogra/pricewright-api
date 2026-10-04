@@ -10,7 +10,7 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
-from pricewright.domain.audit import AuditAction, AuditEvent
+from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -113,7 +113,7 @@ class ApiKeyRepository(Protocol):
 class AuditEventFilter:
     """Which audit events to list; a field left as ``None`` matches every event."""
 
-    resource_type: str | None = None
+    resource_type: AuditResourceType | None = None
     resource_id: UUID | None = None
     actor_id: UUID | None = None
     action: AuditAction | None = None

@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from pricewright.application.ports import AuditEventFilter
-from pricewright.domain.audit import AuditAction, AuditEvent, Changes
+from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType, Changes
 from pricewright.domain.auth import Principal
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role
@@ -97,9 +97,13 @@ async def test_audit_events_are_filtered_by_resource_actor_and_action(
     )
 
     by_resource = await page(
-        session_factory, northfield, AuditEventFilter(resource_type="user", resource_id=user_id)
+        session_factory,
+        northfield,
+        AuditEventFilter(resource_type=AuditResourceType.USER, resource_id=user_id),
     )
-    by_type = await page(session_factory, northfield, AuditEventFilter(resource_type="user"))
+    by_type = await page(
+        session_factory, northfield, AuditEventFilter(resource_type=AuditResourceType.USER)
+    )
     by_actor = await page(session_factory, northfield, AuditEventFilter(actor_id=blair.subject_id))
     by_action = await page(
         session_factory, northfield, AuditEventFilter(action=AuditAction.USER_CREATED)

@@ -23,6 +23,13 @@ class ActorType(StrEnum):
     SERVICE_ACCOUNT = "service_account"
 
 
+class AuditResourceType(StrEnum):
+    TENANT = "tenant"
+    USER = "user"
+    SERVICE_ACCOUNT = "service_account"
+    API_KEY = "api_key"
+
+
 class AuditAction(StrEnum):
     """``resource.verb`` in the past tense, as GitHub and WorkOS name their audit events."""
 
@@ -35,8 +42,8 @@ class AuditAction(StrEnum):
     API_KEY_REVOKED = "api_key.revoked"
 
     @property
-    def resource_type(self) -> str:
-        return self.value.partition(".")[0]
+    def resource_type(self) -> AuditResourceType:
+        return AuditResourceType(self.value.partition(".")[0])
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +61,7 @@ class AuditEvent:
     """The API request behind it, stamped by the persistence adapter; None outside a request."""
 
     @property
-    def resource_type(self) -> str:
+    def resource_type(self) -> AuditResourceType:
         return self.action.resource_type
 
     @classmethod

@@ -7,9 +7,10 @@ Values are JSON scalars: decimals and times as strings, scopes space-delimited a
 from datetime import datetime
 from uuid import UUID
 
-from pricewright.application.ports import UnitOfWork
+from pricewright.application.pagination import Keyset, Page, page_of
+from pricewright.application.ports import AuditEventFilter, UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditValue, Changes
-from pricewright.domain.auth import Principal
+from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
@@ -29,6 +30,24 @@ async def record(
         await uow.audit_events.add(
             AuditEvent.record(principal, action, resource_id, changes, now=now)
         )
+
+
+async def list_audit_events(
+    principal: Principal,
+    where: AuditEventFilter,
+    *,
+    after: Keyset | None,
+    limit: int,
+    unit_of_work: UnitOfWorkFactory,
+) -> Page[AuditEvent]:
+    """The tenant's audit trail, newest first (admins only)."""
+    principal.require(Permission.AUDIT_READ)
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        events = await uow.audit_events.page(
+            where, before=None if after is None else after.id, limit=limit + 1
+        )
+    return page_of(events, limit, lambda event: Keyset(event.id))
 
 
 def _time(value: datetime | None) -> str | None:
