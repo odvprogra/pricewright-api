@@ -54,6 +54,46 @@ sequenceDiagram
     DB-->>U: another tenant's row is simply not found (404)
 ```
 
+## Data
+
+Every tenant-owned table carries `tenant_id`; children point to parents with composite keys, so a
+row can never reference another tenant's row (ADR-0006). Prices also carry the currency, tied to the
+tenant's by a composite key (ADR-0003). Products and customers are archived, never deleted
+(ADR-0016); audit events are append-only (ADR-0013).
+
+```mermaid
+erDiagram
+    tenants ||--o{ users : "tenant_id"
+    tenants ||--o{ service_accounts : "tenant_id"
+    service_accounts ||--o{ api_keys : "(tenant_id, service_account_id)"
+    users ||--o{ refresh_tokens : "(tenant_id, user_id)"
+    tenants ||--o{ product_categories : "tenant_id"
+    product_categories |o--o{ products : "(tenant_id, category_id)"
+    tenants ||--o{ products : "(tenant_id, currency)"
+    tenants ||--o{ customers : "tenant_id"
+    tenants ||--o{ audit_events : "tenant_id"
+```
+
+## Changing a record
+
+A change and its audit event commit together or not at all (ADR-0013); a stale `If-Match` loses the
+compare-and-set (ADR-0012).
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant U as Use case
+    participant W as Unit of work
+    participant DB as PostgreSQL
+    C->>U: PATCH /products/{id}, If-Match: "3"
+    U->>W: get product (tenant-scoped)
+    U->>U: version 3? apply the change, diff the fields
+    U->>W: save (UPDATE ... WHERE version = 3)
+    U->>W: add audit event (actor, changes, request ID)
+    W->>DB: COMMIT: both rows or neither
+    U-->>C: 200, ETag: "4"
+```
+
 ## Rules
 
 - Dependencies point inward; the domain imports no framework or infrastructure library. Enforced by
@@ -61,6 +101,11 @@ sequenceDiagram
 - Configuration is read only in `main.py` (the composition root) and passed in.
 - Every log line is structured JSON with a `request_id` when one exists.
 - Authorization is by permission (`resource:action`), never by role name; service accounts hold
-  non-administrative permissions as scopes (ADR-0007).
+  scopes, never the permissions reserved for people (administration, the audit trail, catalog
+  changes) (ADR-0007).
+- Every change appends its audit event in the same unit of work (ADR-0013).
+- Lists filter and sort through whitelisted parameters and page with keyset cursors bound to the
+  query (ADR-0014).
+- Money is a `Decimal` with its currency, never a float, and travels as a decimal string (ADR-0003).
 - Use cases bind the unit of work to the caller's tenant; only authentication reads across tenants
   (ADR-0006).

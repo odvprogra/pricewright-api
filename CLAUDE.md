@@ -22,7 +22,7 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **M2 — Catalog + customers**.
+- Work one milestone at a time. Current milestone: **M3 — Pricing engine**.
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.
@@ -54,7 +54,8 @@ src/pricewright/main.py          composition root
 
 Read first: `main.py` (wiring), `application/ports.py` (unit of work and repositories),
 `domain/auth.py` (principals and permissions), `api/dependencies.py` (who is calling),
-`api/concurrency.py` (ETag / If-Match), `tests/fakes.py`.
+`api/concurrency.py` (ETag / If-Match), `application/audit.py` (the audit trail),
+`api/pagination.py` (cursors), `domain/money.py`, `tests/fakes.py`.
 
 Rules the code relies on:
 
@@ -89,7 +90,8 @@ expected ADRs and their milestones are listed in the brief (§9).
 
 - Done: M0 — scaffold, release pipeline (v0.1.0). M1 — tenants, users, sign-in with rotating refresh
   tokens, role permissions, tenant settings with optimistic concurrency, user management, service
-  accounts with API keys, tenant isolation suite (v0.2.0)
-- In progress: M2 — catalog and customers (CRUD, cursor pagination, filters, audit events). Done so
-  far: errors documented as Problem Details in the spec, the oasdiff breaking-change check
-- Next: M3 — pricing engine
+  accounts with API keys, tenant isolation suite (v0.2.0). M2 — errors documented as Problem
+  Details, the oasdiff breaking-change check, money (ADR-0003), the audit trail (ADR-0013), list
+  queries (ADR-0014), product categories, products and customers (ADR-0016) (v0.3.0)
+- In progress: —
+- Next: M3 — pricing engine (pure domain, rules pipeline, `PriceBreakdown`, `POST /pricing/preview`)
