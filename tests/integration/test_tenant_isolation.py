@@ -38,7 +38,10 @@ async def bearer(client: httpx.AsyncClient, email: str, password: str) -> dict[s
 
 @pytest.fixture
 async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str) -> World:
-    """Northfield with a rep, a service account, a key and a category; Larkspur has its admin."""
+    """Northfield with a rep, an integration and its key, a category and a product.
+
+    Larkspur has only its admin.
+    """
     engine = create_engine(migrated_database_url)
     await register_tenant(
         RegisterTenant(
@@ -77,6 +80,18 @@ async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str
     category = await client.post(
         "/api/v1/product-categories", json={"name": "Fasteners"}, headers=northfield
     )
+    product = await client.post(
+        "/api/v1/products",
+        json={
+            "sku": "FAS-M6-100",
+            "name": "Hex bolt M6 x 100",
+            "category_id": category.json()["id"],
+            "unit": "XBX",
+            "list_price": {"amount": "12.50", "currency": "USD"},
+            "unit_cost": {"amount": "7.25", "currency": "USD"},
+        },
+        headers=northfield,
+    )
     return World(
         client=client,
         northfield_admin=northfield,
@@ -86,6 +101,7 @@ async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str
             "account_id": account.json()["id"],
             "key_id": key.json()["id"],
             "category_id": category.json()["id"],
+            "product_id": product.json()["id"],
         },
     )
 
@@ -122,6 +138,8 @@ async def test_attempts_from_another_tenant_change_nothing(world: World) -> None
         f"/api/v1/product-categories/{ids['category_id']}", headers=admin
     )
     assert (category.json()["name"], category.json()["version"]) == ("Fasteners", 1)
+    product = await world.client.get(f"/api/v1/products/{ids['product_id']}", headers=admin)
+    assert (product.json()["is_active"], product.json()["version"]) == (True, 1)
 
 
 async def test_lists_only_show_the_callers_tenant(world: World) -> None:
@@ -129,8 +147,12 @@ async def test_lists_only_show_the_callers_tenant(world: World) -> None:
     accounts = await world.client.get("/api/v1/service-accounts", headers=world.larkspur_admin)
     tenant = await world.client.get("/api/v1/tenant", headers=world.larkspur_admin)
     categories = await world.client.get("/api/v1/product-categories", headers=world.larkspur_admin)
+    products = await world.client.get(
+        "/api/v1/products", params={"sku": "FAS-M6-100"}, headers=world.larkspur_admin
+    )
 
     assert [user["email"] for user in users.json()["items"]] == [LARKSPUR_EMAIL]
     assert accounts.json()["items"] == []
     assert categories.json()["items"] == []
+    assert products.json()["items"] == []
     assert tenant.json()["name"] == "Larkspur Tool Co."

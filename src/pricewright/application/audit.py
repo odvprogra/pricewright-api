@@ -11,7 +11,7 @@ from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import AuditEventFilter, UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditValue, Changes
 from pricewright.domain.auth import Permission, Principal
-from pricewright.domain.catalog import ProductCategory
+from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import User
@@ -92,3 +92,16 @@ def api_key_fields(key: ApiKey) -> dict[str, AuditValue]:
 
 def category_fields(category: ProductCategory) -> dict[str, AuditValue]:
     return {"name": category.name}
+
+
+def product_fields(product: Product) -> dict[str, AuditValue]:
+    """Amounts as decimal strings; the currency is the tenant's and never changes."""
+    return {
+        "sku": product.sku,
+        "name": product.name,
+        "category_id": None if product.category_id is None else str(product.category_id),
+        "unit": product.unit.value,
+        "list_price": str(product.list_price.amount),
+        "unit_cost": str(product.unit_cost.amount),
+        "is_active": product.is_active,
+    }
