@@ -99,6 +99,29 @@ sequenceDiagram
     U-->>C: 200, ETag: "4"
 ```
 
+## Pricing a quote
+
+The engine is a pure function (ADR-0004): the use case loads what it needs, the domain prices it,
+and the response leaves out margins for callers without `costs:read` (ADR-0017).
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant U as preview_prices
+    participant W as Unit of work
+    participant E as price_quote (domain)
+    C->>U: POST /pricing/preview (customer, lines, priced_at?)
+    U->>W: tenant settings, customer, products by id
+    U->>W: rules effective at priced_at (default: now)
+    U->>E: customer, lines, settings, rules
+    E->>E: per line: volume tier → customer tier → promotion → override
+    E->>E: best rule per stage; unit price rounded to 4 places at each step
+    E->>E: line totals, tax once on the subtotal (minor units, half up)
+    E->>E: margin floor guard, value-weighted discount, approval reasons
+    E-->>U: priced quote with a breakdown per line
+    U-->>C: 200, margins only with costs:read
+```
+
 ## Rules
 
 - Dependencies point inward; the domain imports no framework or infrastructure library. Enforced by
@@ -112,5 +135,6 @@ sequenceDiagram
 - Lists filter and sort through whitelisted parameters and page with keyset cursors bound to the
   query (ADR-0014).
 - Money is a `Decimal` with its currency, never a float, and travels as a decimal string (ADR-0003).
+- Prices are computed only by the pricing engine, a pure function of the rules (ADR-0004).
 - Use cases bind the unit of work to the caller's tenant; only authentication reads across tenants
   (ADR-0006).

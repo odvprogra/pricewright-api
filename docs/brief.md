@@ -47,7 +47,8 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
 - **QuoteLine** — product, quantity, unit list price, applied adjustments, net unit price, line
   total, margin.
 - **PriceBreakdown** — value object explaining _why_ a line costs what it costs (ordered list of
-  applied rules with their effect). Shown in the UI.
+  applied rules with their effect). Shown in the UI
+  ([ADR-0004](adr/0004-pricing-waterfall-breakdown-and-approval-metric.md)).
 - **ApprovalRequest** — created when a quote needs approval; decision, decided_by, reason.
 - **Order** — created from an accepted quote; snapshot of lines and prices (never recomputed).
 - **AuditEvent** — who did what, when, before/after.

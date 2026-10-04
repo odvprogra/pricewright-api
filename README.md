@@ -35,7 +35,7 @@ Pricewright is built in milestones; this table shows what works today. The full 
 | Tenants, users, roles and service accounts with scoped API keys; strict tenant isolation  | M1        | Done   |
 | Catalog and customers: search, filters, sorting and cursor pages; money exact to 4 places | M2        | Done   |
 | Audit trail: every change with its actor, before/after values and request ID              | M2        | Done   |
-| Pricing engine: price waterfall with a per-line breakdown of every rule applied           | M3        |        |
+| Pricing engine: rules kept by managers; previews that explain every price, step by step   | M3        | Done   |
 | Quotes with revisions, expiration, approvals and optimistic locking                       | M4        |        |
 | Idempotent conversion of accepted quotes into orders                                      | M6        |        |
 | Transactional outbox, worker, quote PDFs and email notifications                          | M5        |        |
@@ -109,7 +109,7 @@ Configuration comes from environment variables; [.env.example](.env.example) doc
 
 | Level        | Location             | What it covers                                                                         |
 | ------------ | -------------------- | -------------------------------------------------------------------------------------- |
-| Unit         | `tests/unit`         | Domain rules and application use cases, no I/O                                         |
+| Unit         | `tests/unit`         | Domain rules and use cases, no I/O; hypothesis tests of the pricing invariants         |
 | Architecture | `tests/architecture` | Import contracts: dependencies point inward, the domain is pure                        |
 | Integration  | `tests/integration`  | Adapters against a real PostgreSQL (testcontainers); migrations reversible and in sync |
 | API          | `tests/e2e`          | HTTP behavior: Problem Details, request IDs, health, OpenAPI drift                     |
@@ -152,6 +152,12 @@ docs/                # product brief, architecture and ADRs
 - **The audit trail grows without bound.** A retention policy (and archiving old events to cheaper
   storage) is needed before real tenants run for years; production should also run the API under a
   database role that cannot `TRUNCATE` it (ADR-0013).
+- **Every pricing call reads the tenant's effective rules** (ADR-0018). That suits hundreds of
+  rules; with thousands, the next steps are loading only the rules of the lines' products and
+  categories, then a cache invalidated by rule changes.
+- **Pricing covers the common cases, not every ERP feature.** One rule per stage, cascading
+  (ADR-0004); no exclusive promotions, no _slab_ brackets, no volume counted across lines; validity
+  windows are UTC instants because tenants have no time zone yet.
 - **Text sorts need ICU.** Names sort with PostgreSQL's `unicode` collation (ADR-0014), which the
   official images and managed services provide.
 - **Deliberately out of scope:** invoicing, inventory, taxes beyond a flat rate per tenant,
