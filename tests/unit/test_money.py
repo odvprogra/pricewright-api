@@ -34,7 +34,7 @@ def test_money_rejects_amounts_beyond_numeric_18_4(amount: Decimal) -> None:
         Money(amount, "USD")
 
 
-@pytest.mark.parametrize("currency", ["usd", "US", "USDX", "", "U$D"])
+@pytest.mark.parametrize("currency", ["usd", "US", "USDX", "", "U$D", "ABC", "XAU", "CLF"])
 def test_money_rejects_a_currency_that_is_not_an_iso_code(currency: str) -> None:
     with pytest.raises(InvalidMoneyError, match="ISO 4217"):
         Money(Decimal(1), currency)

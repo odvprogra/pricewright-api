@@ -29,7 +29,7 @@ def test_tenant_settings_default_approval_threshold_is_fifteen_percent() -> None
     assert settings.approval_threshold == DEFAULT_APPROVAL_THRESHOLD == Decimal("0.15")
 
 
-@pytest.mark.parametrize("currency", ["usd", "US", "USDX", "", "U$D"])
+@pytest.mark.parametrize("currency", ["usd", "US", "USDX", "", "U$D", "ABC", "XXX", "UYW"])
 def test_tenant_settings_rejects_currency_that_is_not_an_iso_code(currency: str) -> None:
     with pytest.raises(InvalidTenantError, match="currency"):
         TenantSettings(currency=currency, tax_rate=Decimal(0))
