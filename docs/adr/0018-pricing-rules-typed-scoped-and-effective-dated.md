@@ -7,8 +7,9 @@
 
 Managers maintain the rules the pricing engine applies (brief §2): volume tiers for a product or a
 category, customer tier discounts, time-boxed promotions and a margin floor guard (brief §3). Within
-a stage of the waterfall the best discount wins (brief §4, rule 2). The brief also gave each rule a
-priority.
+a stage of the waterfall the best discount wins
+([ADR-0004](0004-pricing-waterfall-breakdown-and-approval-metric.md)). The brief also gave each rule
+a priority.
 
 How established systems store pricing rules:
 
