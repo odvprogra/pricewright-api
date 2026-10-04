@@ -22,12 +22,12 @@ from pricewright.application.catalog import (
 )
 from pricewright.application.ports import ProductQuery, ProductSort
 from pricewright.domain.catalog import (
-    KEEP,
     MAX_PRODUCT_NAME_LENGTH,
     MAX_SKU_LENGTH,
     Product,
     UnitOfMeasure,
 )
+from pricewright.domain.updates import KEEP
 
 router = APIRouter(prefix="/api/v1/products", tags=["catalog"])
 MAX_SEARCH_LENGTH = 100

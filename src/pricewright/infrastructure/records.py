@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     UniqueConstraint,
     func,
@@ -34,6 +35,13 @@ from pricewright.domain.catalog import (
     MAX_SKU_LENGTH,
     UnitOfMeasure,
 )
+from pricewright.domain.customers import (
+    MAX_ACCOUNT_NUMBER_LENGTH,
+    MAX_CUSTOMER_NAME_LENGTH,
+    MAX_PAYMENT_TERMS_DAYS,
+    MAX_TAX_ID_LENGTH,
+    CustomerTier,
+)
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
 from pricewright.infrastructure.database import Base
 
@@ -45,6 +53,7 @@ _MONEY = Numeric(18, 4)  # ADR-0003
 _ROLES = ", ".join(f"'{role}'" for role in Role)
 _ACTOR_TYPES = ", ".join(f"'{actor_type}'" for actor_type in ActorType)
 _UNITS = ", ".join(f"'{unit}'" for unit in UnitOfMeasure)
+_TIERS = ", ".join(f"'{tier}'" for tier in CustomerTier)
 # The API middleware accepts request IDs of up to 128 characters.
 _REQUEST_ID_LENGTH = 128
 
@@ -242,6 +251,45 @@ class ProductRecord(Base):
     currency: Mapped[str] = mapped_column(CHAR(3))
     list_price: Mapped[Decimal] = mapped_column(_MONEY)
     unit_cost: Mapped[Decimal] = mapped_column(_MONEY)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CustomerRecord(Base):
+    __tablename__ = "customers"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),  # target of quotes' composite foreign key (M4)
+        Index(
+            "uq_customers_tenant_id_lower_account_number",
+            "tenant_id",
+            func.lower(text("account_number")),
+            unique=True,
+        ),
+        Index(None, "tenant_id", "account_number", "id"),  # the list by account number
+        Index(None, "tenant_id", "name", "id"),  # the list by name
+        Index(None, "tenant_id", "tax_id"),  # matching documents to customers (ops-copilot)
+        CheckConstraint(f"tier IN ({_TIERS})", name="tier_is_known"),
+        CheckConstraint(
+            f"payment_terms_days BETWEEN 0 AND {MAX_PAYMENT_TERMS_DAYS}",
+            name="payment_terms_days_in_range",
+        ),
+        CheckConstraint("tax_id ~ '^[A-Z0-9]+$'", name="tax_id_is_compact"),
+        CheckConstraint("version >= 1", name="version_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    account_number: Mapped[str] = mapped_column(
+        String(MAX_ACCOUNT_NUMBER_LENGTH, collation=_UNICODE)
+    )
+    name: Mapped[str] = mapped_column(String(MAX_CUSTOMER_NAME_LENGTH, collation=_UNICODE))
+    tax_id: Mapped[str | None] = mapped_column(String(MAX_TAX_ID_LENGTH))
+    tier: Mapped[str] = mapped_column(String(10))
+    payment_terms_days: Mapped[int] = mapped_column(SmallInteger)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
     version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

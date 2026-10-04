@@ -15,9 +15,7 @@ from pricewright.application.ports import (
 from pricewright.domain.audit import AuditAction, changed, created
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import (
-    KEEP,
     CategoryNameTakenError,
-    Keep,
     Product,
     ProductCategory,
     SkuTakenError,
@@ -26,6 +24,7 @@ from pricewright.domain.catalog import (
 )
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.money import Money
+from pricewright.domain.updates import KEEP, Keep
 
 
 async def _ensure_name_is_free(uow: UnitOfWork, category: ProductCategory) -> None:

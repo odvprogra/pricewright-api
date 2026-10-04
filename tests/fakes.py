@@ -7,6 +7,7 @@ tenant scoping, explicit commits and unique emails.
 import copy
 import dataclasses
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
@@ -19,6 +20,9 @@ from pricewright.application.ports import (
     ApiKeyRepository,
     AuditEventFilter,
     AuditEventRepository,
+    CustomerQuery,
+    CustomerRepository,
+    CustomerSort,
     IdentityLookup,
     IssuedToken,
     ProductCategoryRepository,
@@ -34,6 +38,7 @@ from pricewright.application.ports import (
 from pricewright.domain.audit import AuditEvent
 from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.catalog import Product, ProductCategory
+from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -52,6 +57,7 @@ class InMemoryDatabase:
     audit_events: dict[UUID, AuditEvent] = field(default_factory=dict)
     product_categories: dict[UUID, ProductCategory] = field(default_factory=dict)
     products: dict[UUID, Product] = field(default_factory=dict)
+    customers: dict[UUID, Customer] = field(default_factory=dict)
 
 
 class FakeTenantRepository:
@@ -314,19 +320,16 @@ class FakeProductRepository:
         def key(value: str | None, product_id: UUID) -> tuple[str, UUID]:
             return ("" if query.sort is ProductSort.CREATED else text_key(value or "")), product_id
 
-        def product_key(product: Product) -> tuple[str, UUID]:
-            value = {ProductSort.SKU: product.sku, ProductSort.NAME: product.name}
-            return key(value.get(query.sort), product.id)
+        def value(product: Product) -> str | None:
+            return {ProductSort.SKU: product.sku, ProductSort.NAME: product.name}.get(query.sort)
 
-        ordered = sorted(filter(matches, self._owned()), key=product_key, reverse=query.descending)
-        if after is not None:
-            start = key(after.value, after.id)
-            ordered = [
-                p
-                for p in ordered
-                if (product_key(p) < start if query.descending else product_key(p) > start)
-            ]
-        return copy.deepcopy(ordered[:limit])
+        return keyset_page(
+            [p for p in self._owned() if matches(p)],
+            lambda product: key(value(product), product.id),
+            None if after is None else key(after.value, after.id),
+            descending=query.descending,
+            limit=limit,
+        )
 
     async def save(self, product: Product) -> None:
         stored = self._products.get(product.id)
@@ -336,6 +339,88 @@ class FakeProductRepository:
             raise StaleVersionError("the product was changed by someone else; reload it")
         product.version = stored.version + 1
         self._products[product.id] = copy.deepcopy(product)
+
+
+def keyset_page[T](
+    rows: list[T],
+    position: Callable[[T], tuple[str, UUID]],
+    after: tuple[str, UUID] | None,
+    *,
+    descending: bool,
+    limit: int,
+) -> list[T]:
+    """Sort by ``position`` and continue after ``after``, like the adapters' keyset queries."""
+    ordered = sorted(rows, key=position, reverse=descending)
+    if after is not None:
+        ordered = [
+            row
+            for row in ordered
+            if (position(row) < after if descending else position(row) > after)
+        ]
+    return copy.deepcopy(ordered[:limit])
+
+
+class FakeCustomerRepository:
+    def __init__(self, customers: dict[UUID, Customer], uow: FakeUnitOfWork) -> None:
+        self._customers = customers
+        self._uow = uow
+
+    def _owned(self) -> list[Customer]:
+        return [c for c in self._customers.values() if c.tenant_id == self._uow.tenant_id]
+
+    async def add(self, customer: Customer) -> None:
+        if customer.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a customer of the unit of work's tenant can be stored")
+        self._customers[customer.id] = customer
+
+    async def get(self, customer_id: UUID) -> Customer | None:
+        return copy.deepcopy(next((c for c in self._owned() if c.id == customer_id), None))
+
+    async def with_account_number(self, account_number: str) -> Customer | None:
+        wanted = account_number.lower()
+        found = next((c for c in self._owned() if c.account_number.lower() == wanted), None)
+        return copy.deepcopy(found)
+
+    async def page(
+        self, query: CustomerQuery, *, after: Keyset | None, limit: int
+    ) -> list[Customer]:
+        text = None if query.text is None else query.text.lower()
+
+        def matches(customer: Customer) -> bool:
+            return (
+                (
+                    text is None
+                    or text in customer.account_number.lower()
+                    or text in customer.name.lower()
+                )
+                and query.tax_id in {None, customer.tax_id}
+                and query.tier in {None, customer.tier}
+                and query.active in {None, customer.is_active}
+            )
+
+        def value(customer: Customer) -> str | None:
+            values = {CustomerSort.ACCOUNT_NUMBER: customer.account_number}
+            return (values | {CustomerSort.NAME: customer.name}).get(query.sort)
+
+        def key(sort_value: str | None, row_id: UUID) -> tuple[str, UUID]:
+            return text_key(sort_value or ""), row_id
+
+        return keyset_page(
+            [c for c in self._owned() if matches(c)],
+            lambda customer: key(value(customer), customer.id),
+            None if after is None else key(after.value, after.id),
+            descending=query.descending,
+            limit=limit,
+        )
+
+    async def save(self, customer: Customer) -> None:
+        stored = self._customers.get(customer.id)
+        if stored is None or stored.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a customer of the unit of work's tenant can be stored")
+        if stored.version != customer.version:
+            raise StaleVersionError("the customer was changed by someone else; reload it")
+        customer.version = stored.version + 1
+        self._customers[customer.id] = copy.deepcopy(customer)
 
 
 class FakeIdentityLookup:
@@ -367,6 +452,7 @@ class FakeUnitOfWork:
     audit_events: AuditEventRepository
     product_categories: ProductCategoryRepository
     products: ProductRepository
+    customers: CustomerRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -385,6 +471,7 @@ class FakeUnitOfWork:
             self._staged.product_categories, self
         )
         self.products = FakeProductRepository(self._staged.products, self)
+        self.customers = FakeCustomerRepository(self._staged.customers, self)
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
@@ -415,7 +502,9 @@ class FakeUnitOfWork:
         names = [(a.tenant_id, a.name) for a in staged.service_accounts.values()]
         categories = [(c.tenant_id, c.name.lower()) for c in staged.product_categories.values()]
         skus = [(p.tenant_id, p.sku.lower()) for p in staged.products.values()]
-        if any(len(keys) != len(set(keys)) for keys in (emails, names, categories, skus)):
+        accounts = [(c.tenant_id, c.account_number.lower()) for c in staged.customers.values()]
+        unique_keys = (emails, names, categories, skus, accounts)
+        if any(len(keys) != len(set(keys)) for keys in unique_keys):
             raise ConflictError("the change conflicts with an existing record")
         self._database.tenants = copy.deepcopy(self._staged.tenants)
         self._database.users = copy.deepcopy(self._staged.users)
@@ -425,6 +514,7 @@ class FakeUnitOfWork:
         self._database.audit_events = copy.deepcopy(self._staged.audit_events)
         self._database.product_categories = copy.deepcopy(self._staged.product_categories)
         self._database.products = copy.deepcopy(self._staged.products)
+        self._database.customers = copy.deepcopy(self._staged.customers)
 
 
 class FakePasswordHasher:
