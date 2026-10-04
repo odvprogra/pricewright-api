@@ -99,8 +99,8 @@ async def test_an_admin_adds_a_product_and_the_trail_records_it() -> None:
         "name": (None, "Hex bolt M6 x 100"),
         "category_id": (None, str(fixture.fasteners.id)),
         "unit": (None, "XBX"),
-        "list_price": (None, "12.50"),
-        "unit_cost": (None, "7.25"),
+        "list_price": (None, "12.5000"),
+        "unit_cost": (None, "7.2500"),
         "is_active": (None, True),
     }
 
@@ -182,9 +182,20 @@ async def test_a_product_is_edited_with_a_new_version_and_an_audit_event() -> No
     _, edit = sorted(fixture.database.audit_events.values(), key=lambda event: event.id)
     assert edit.action is AuditAction.PRODUCT_UPDATED
     assert edit.changes == {
-        "list_price": ("12.50", "13"),
+        "list_price": ("12.5000", "13.0000"),
         "category_id": (str(fixture.fasteners.id), None),
     }
+
+
+async def test_a_price_written_with_another_scale_is_no_change() -> None:
+    fixture = Fixture()
+    product = await fixture.add(bolts())  # 12.50, as a client sent it
+
+    await fixture.change(product, ProductChanges(list_price=usd("12.5000")))
+
+    assert [event.action for event in fixture.database.audit_events.values()] == [
+        AuditAction.PRODUCT_CREATED
+    ]
 
 
 async def test_archiving_a_product_keeps_it_readable() -> None:
