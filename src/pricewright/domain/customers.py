@@ -30,6 +30,10 @@ class AccountNumberTakenError(ConflictError):
     code = "account_number_taken"
 
 
+class UnknownCustomerError(RuleViolationError):
+    code = "unknown_customer"
+
+
 class CustomerTier(StrEnum):
     """Read by customer-tier discounts (M3)."""
 

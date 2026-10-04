@@ -1,7 +1,7 @@
 """Pricing rules: everyone reads them (``pricing:read``); managers and admins maintain them
 (``pricing:manage``). See ADR-0018 for what a rule is."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from http import HTTPStatus
@@ -9,11 +9,12 @@ from typing import Annotated, Self
 from uuid import UUID
 
 from fastapi import APIRouter, Header, Query, Response
-from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
+from pricewright.api.times import UtcDatetime
 from pricewright.application.ports import PricingRuleQuery, PricingRuleSort
 from pricewright.application.pricing_rules import (
     NewPricingRule,
@@ -56,9 +57,6 @@ _INVALID: dict[int | str, dict[str, object]] = {
 _RATE = "A fraction with up to 4 places: 0.125 is 12.5%."
 _RATE_PLACES = Decimal(1).scaleb(-RATE_DECIMAL_PLACES)
 _QUANTITY_PLACES = Decimal(1).scaleb(-QUANTITY_DECIMAL_PLACES)
-
-UtcDatetime = Annotated[AwareDatetime, AfterValidator(lambda moment: moment.astimezone(UTC))]
-"""A time with its offset, kept in UTC (handbook §5)."""
 
 
 class BracketJson(BaseModel):
