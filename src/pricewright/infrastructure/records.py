@@ -28,7 +28,12 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from pricewright.domain.audit import ActorType, AuditValue
-from pricewright.domain.catalog import MAX_CATEGORY_NAME_LENGTH
+from pricewright.domain.catalog import (
+    MAX_CATEGORY_NAME_LENGTH,
+    MAX_PRODUCT_NAME_LENGTH,
+    MAX_SKU_LENGTH,
+    UnitOfMeasure,
+)
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
 from pricewright.infrastructure.database import Base
 
@@ -36,8 +41,10 @@ _UUIDV7 = text("uuidv7()")
 # ICU's root collation: names sort as people read them on every server (ADR-0014).
 _UNICODE = "unicode"
 _RATE = Numeric(5, 4)
+_MONEY = Numeric(18, 4)  # ADR-0003
 _ROLES = ", ".join(f"'{role}'" for role in Role)
 _ACTOR_TYPES = ", ".join(f"'{actor_type}'" for actor_type in ActorType)
+_UNITS = ", ".join(f"'{unit}'" for unit in UnitOfMeasure)
 # The API middleware accepts request IDs of up to 128 characters.
 _REQUEST_ID_LENGTH = 128
 
@@ -52,6 +59,8 @@ class TenantRecord(Base):
             name="approval_threshold_in_range",
         ),
         CheckConstraint("version >= 1", name="version_positive"),
+        # Target of the composite foreign keys that keep every price in the tenant's currency.
+        UniqueConstraint("id", "currency"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
@@ -197,6 +206,43 @@ class ProductCategoryRecord(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(String(MAX_CATEGORY_NAME_LENGTH, collation=_UNICODE))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ProductRecord(Base):
+    __tablename__ = "products"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),  # target of quote lines' composite foreign key (M4)
+        # The tenant's currency (ADR-0003); this key also proves the tenant exists.
+        ForeignKeyConstraint(["tenant_id", "currency"], ["tenants.id", "tenants.currency"]),
+        # A category of the same tenant (ADR-0006); a product may have none.
+        ForeignKeyConstraint(
+            ["tenant_id", "category_id"], ["product_categories.tenant_id", "product_categories.id"]
+        ),
+        Index("uq_products_tenant_id_lower_sku", "tenant_id", func.lower(text("sku")), unique=True),
+        Index(None, "tenant_id", "sku", "id"),  # the list by SKU
+        Index(None, "tenant_id", "name", "id"),  # the list by name
+        Index(None, "tenant_id", "category_id"),
+        CheckConstraint(f"unit IN ({_UNITS})", name="unit_is_known"),
+        CheckConstraint("list_price >= 0", name="list_price_not_negative"),
+        CheckConstraint("unit_cost >= 0", name="unit_cost_not_negative"),
+        CheckConstraint("version >= 1", name="version_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
+    tenant_id: Mapped[uuid.UUID]
+    sku: Mapped[str] = mapped_column(String(MAX_SKU_LENGTH, collation=_UNICODE))
+    name: Mapped[str] = mapped_column(String(MAX_PRODUCT_NAME_LENGTH, collation=_UNICODE))
+    category_id: Mapped[uuid.UUID | None]
+    unit: Mapped[str] = mapped_column(String(3))
+    currency: Mapped[str] = mapped_column(CHAR(3))
+    list_price: Mapped[Decimal] = mapped_column(_MONEY)
+    unit_cost: Mapped[Decimal] = mapped_column(_MONEY)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
     version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

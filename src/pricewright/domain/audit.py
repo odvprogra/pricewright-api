@@ -29,6 +29,7 @@ class AuditResourceType(StrEnum):
     SERVICE_ACCOUNT = "service_account"
     API_KEY = "api_key"
     PRODUCT_CATEGORY = "product_category"
+    PRODUCT = "product"
 
 
 class AuditAction(StrEnum):
@@ -43,6 +44,8 @@ class AuditAction(StrEnum):
     API_KEY_REVOKED = "api_key.revoked"
     PRODUCT_CATEGORY_CREATED = "product_category.created"
     PRODUCT_CATEGORY_UPDATED = "product_category.updated"
+    PRODUCT_CREATED = "product.created"
+    PRODUCT_UPDATED = "product.updated"
 
     @property
     def resource_type(self) -> AuditResourceType:

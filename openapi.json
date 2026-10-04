@@ -109,7 +109,9 @@
           "api_key.issued",
           "api_key.revoked",
           "product_category.created",
-          "product_category.updated"
+          "product_category.updated",
+          "product.created",
+          "product.updated"
         ],
         "title": "AuditAction",
         "type": "string"
@@ -155,7 +157,9 @@
               "api_key.issued",
               "api_key.revoked",
               "product_category.created",
-              "product_category.updated"
+              "product_category.updated",
+              "product.created",
+              "product.updated"
             ],
             "title": "Action",
             "type": "string"
@@ -211,7 +215,8 @@
               "user",
               "service_account",
               "api_key",
-              "product_category"
+              "product_category",
+              "product"
             ],
             "title": "Resource Type",
             "type": "string"
@@ -237,7 +242,8 @@
           "user",
           "service_account",
           "api_key",
-          "product_category"
+          "product_category",
+          "product"
         ],
         "title": "AuditResourceType",
         "type": "string"

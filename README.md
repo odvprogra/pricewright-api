@@ -77,6 +77,7 @@ generates its client from the `openapi.json` attached to it. Details in
 | [ADR-0013](docs/adr/0013-append-only-audit-events-in-the-same-transaction.md) Append-only audit events                       | Every change commits with its actor, before/after values and request ID, or not at all              |
 | [ADR-0014](docs/adr/0014-list-queries-with-whitelisted-filters-sort-and-keyset-cursors.md) Keyset cursors bound to the query | Stable pages under concurrent writes; a cursor reused with other filters is a 422, not a wrong page |
 | [ADR-0015](docs/adr/0015-open-ended-values-in-responses.md) Open-ended values in responses                                   | Growing value sets (audit actions, scopes) never break generated clients                            |
+| [ADR-0016](docs/adr/0016-catalog-and-customer-master-data.md) Archived, never deleted; keyed by SKU and account number       | Quotes never point at nothing; other systems rely on codes; retries cannot duplicate records        |
 
 ## Run it locally
 
