@@ -59,7 +59,8 @@ sequenceDiagram
 Every tenant-owned table carries `tenant_id`; children point to parents with composite keys, so a
 row can never reference another tenant's row (ADR-0006). Prices also carry the currency, tied to the
 tenant's by a composite key (ADR-0003). Products and customers are archived, never deleted
-(ADR-0016); audit events are append-only (ADR-0013).
+(ADR-0016); pricing rules are deactivated or end-dated (ADR-0018); audit events are append-only
+(ADR-0013).
 
 ```mermaid
 erDiagram
@@ -71,6 +72,10 @@ erDiagram
     product_categories |o--o{ products : "(tenant_id, category_id)"
     tenants ||--o{ products : "(tenant_id, currency)"
     tenants ||--o{ customers : "tenant_id"
+    tenants ||--o{ pricing_rules : "tenant_id"
+    products |o--o{ pricing_rules : "(tenant_id, product_id)"
+    product_categories |o--o{ pricing_rules : "(tenant_id, category_id)"
+    pricing_rules ||--o{ pricing_rule_brackets : "(tenant_id, rule_id)"
     tenants ||--o{ audit_events : "tenant_id"
 ```
 
