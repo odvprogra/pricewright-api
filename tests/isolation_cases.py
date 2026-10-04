@@ -38,4 +38,11 @@ CASES = (
         json={"name": "Hijacked"},
         headers={"If-Match": '"1"'},
     ),
+    IsolationCase("GET", "/api/v1/products/{product_id}"),
+    IsolationCase(
+        "PATCH",
+        "/api/v1/products/{product_id}",
+        json={"is_active": False},
+        headers={"If-Match": '"1"'},
+    ),
 )

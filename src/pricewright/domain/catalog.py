@@ -65,6 +65,7 @@ class _Keep(Enum):
 
 KEEP = _Keep.KEEP
 """Leaves an optional field as it is, where ``None`` means "clear it"."""
+type Keep = Literal[_Keep.KEEP]
 
 
 def _category_name(name: str) -> str:
