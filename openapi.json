@@ -380,8 +380,8 @@
           "payment_terms_days": {
             "default": 30,
             "description": "Net days to pay: 0 is due on receipt.",
-            "maximum": 365.0,
-            "minimum": 0.0,
+            "maximum": 365,
+            "minimum": 0,
             "title": "Payment Terms Days",
             "type": "integer"
           },
@@ -571,8 +571,8 @@
             "anyOf": [
               {
                 "description": "Net days to pay: 0 is due on receipt.",
-                "maximum": 365.0,
-                "minimum": 0.0,
+                "maximum": 365,
+                "minimum": 0,
                 "type": "integer"
               },
               {

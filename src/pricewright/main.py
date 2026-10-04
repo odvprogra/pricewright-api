@@ -58,8 +58,22 @@ def app_factory() -> FastAPI:
     return build_app(Settings())
 
 
+def _whole_numbers_as_integers(value: object) -> object:
+    """FastAPI types numeric limits as floats (``365.0``); JSON tools that rewrite the file, such as
+    a release bot bumping its version, print them as ``365``. Writing them that way keeps the
+    committed spec stable."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _whole_numbers_as_integers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_whole_numbers_as_integers(item) for item in value]
+    return value
+
+
 def render_openapi(app: FastAPI) -> str:
-    return json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
+    spec = _whole_numbers_as_integers(app.openapi())
+    return json.dumps(spec, indent=2, sort_keys=True) + "\n"
 
 
 def write_openapi(path: Path = Path("openapi.json")) -> None:
