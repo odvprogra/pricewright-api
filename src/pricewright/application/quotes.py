@@ -10,13 +10,21 @@ from datetime import UTC, date, timedelta
 from uuid import UUID
 
 from pricewright.application.audit import quote_fields, record
-from pricewright.application.ports import Clock, UnitOfWorkFactory
+from pricewright.application.pagination import Keyset, Page, page_of
+from pricewright.application.ports import (
+    Clock,
+    QuoteQuery,
+    QuoteSort,
+    QuoteSummary,
+    UnitOfWorkFactory,
+)
 from pricewright.application.pricing import pricing_context, tenant_of
 from pricewright.domain.actors import Actor
-from pricewright.domain.audit import AuditAction, created
+from pricewright.domain.audit import AuditAction, changed, created
 from pricewright.domain.auth import Permission, Principal
-from pricewright.domain.errors import NotFoundError
+from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.quotes import LineChange, Quote, quote_number
+from pricewright.domain.updates import KEEP, Keep
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,4 +76,60 @@ async def get_quote(
         quote = await uow.quotes.get(quote_id)
     if quote is None:
         raise NotFoundError("no such quote")
+    return quote
+
+
+def _position(quote: QuoteSummary, sort: QuoteSort) -> Keyset:
+    value = quote.valid_until.isoformat() if sort is QuoteSort.VALID_UNTIL else None
+    return Keyset(quote.id, value)
+
+
+async def list_quotes(
+    principal: Principal,
+    query: QuoteQuery,
+    *,
+    after: Keyset | None,
+    limit: int,
+    unit_of_work: UnitOfWorkFactory,
+) -> Page[QuoteSummary]:
+    principal.require(Permission.QUOTES_READ)
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quotes = await uow.quotes.page(query, after=after, limit=limit + 1)
+    return page_of(quotes, limit, lambda quote: _position(quote, query.sort))
+
+
+@dataclass(frozen=True, slots=True)
+class QuoteTerms:
+    """``valid_until`` left as ``None`` keeps its value; notes keep theirs with ``KEEP``."""
+
+    valid_until: date | None = None
+    notes: str | Keep | None = KEEP
+
+
+async def change_quote_terms(
+    principal: Principal,
+    quote_id: UUID,
+    terms: QuoteTerms,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """A draft's validity and notes; they do not change prices (ADR-0019)."""
+    principal.require(Permission.QUOTES_MANAGE)
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await uow.quotes.get(quote_id)
+        if quote is None:
+            raise NotFoundError("no such quote")
+        if quote.version != expected_version:
+            raise StaleVersionError("the quote was changed by someone else; reload it")
+        before = quote_fields(quote)
+        quote.change_terms(valid_until=terms.valid_until, notes=terms.notes, now=now)
+        await uow.quotes.save(quote)
+        edits = changed(before, quote_fields(quote))
+        await record(uow, principal, AuditAction.QUOTE_UPDATED, quote.id, edits, now=now)
+        await uow.commit()
     return quote

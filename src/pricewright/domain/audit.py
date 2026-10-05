@@ -54,6 +54,7 @@ class AuditAction(StrEnum):
     PRICING_RULE_CREATED = "pricing_rule.created"
     PRICING_RULE_UPDATED = "pricing_rule.updated"
     QUOTE_CREATED = "quote.created"
+    QUOTE_UPDATED = "quote.updated"
 
     @property
     def resource_type(self) -> AuditResourceType:

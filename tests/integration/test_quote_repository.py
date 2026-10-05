@@ -11,6 +11,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from pricewright.application.pagination import Keyset
+from pricewright.application.ports import QuoteQuery, QuoteSort
 from pricewright.domain.actors import Actor
 from pricewright.domain.catalog import Product, UnitOfMeasure
 from pricewright.domain.customers import Customer, CustomerTier
@@ -384,3 +386,62 @@ async def test_quote_lines_go_with_their_quote(session_factory: Sessions) -> Non
         await session.rollback()
 
     assert remaining == 0
+
+
+async def page(
+    sessions: Sessions, stock: Stock, query: QuoteQuery, after: Keyset | None = None
+) -> list[uuid.UUID]:
+    async with SqlAlchemyUnitOfWork(sessions) as uow:
+        uow.bind_tenant(stock.tenant.id)
+        found = await uow.quotes.page(query, after=after, limit=10)
+    return [quote.id for quote in found]
+
+
+async def test_quote_list_filters_and_sorts_with_keyset_pages(session_factory: Sessions) -> None:
+    northfield = await stock(session_factory)
+    first, second, third = (draft(northfield, f"NF-2026-00000{n}") for n in (1, 2, 3))
+    first.valid_until, second.valid_until, third.valid_until = (
+        date(2026, 12, 31),
+        date(2026, 10, 20),
+        date(2026, 10, 20),
+    )
+    third.created_by = Actor.person(northfield.manager.id)
+    second.cancel(reason="Customer declined", now=NOW)
+    for quote in (first, second, third):
+        await add(session_factory, northfield, quote)
+    by_date = QuoteQuery(sort=QuoteSort.VALID_UNTIL, descending=False)
+
+    assert await page(session_factory, northfield, QuoteQuery()) == [third.id, second.id, first.id]
+    assert await page(session_factory, northfield, by_date) == [second.id, third.id, first.id]
+    assert await page(
+        session_factory, northfield, by_date, after=Keyset(second.id, "2026-10-20")
+    ) == [third.id, first.id]
+    assert await page(session_factory, northfield, QuoteQuery(status=QuoteStatus.CANCELLED)) == [
+        second.id
+    ]
+    assert await page(
+        session_factory, northfield, QuoteQuery(created_by=northfield.manager.id)
+    ) == [third.id]
+    assert await page(session_factory, northfield, QuoteQuery(number="NF-2026-000001")) == [
+        first.id
+    ]
+    assert await page(
+        session_factory, northfield, QuoteQuery(customer_id=northfield.customer.id)
+    ) == [third.id, second.id, first.id]
+
+
+async def test_quote_list_summaries_carry_the_totals(session_factory: Sessions) -> None:
+    northfield = await stock(session_factory)
+    quote = draft(northfield)
+    await add(session_factory, northfield, quote)
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.tenant.id)
+        [summary] = await uow.quotes.page(QuoteQuery(), after=None, limit=10)
+
+    assert (summary.display_number, summary.status, summary.total) == (
+        "NF-2026-000001",
+        QuoteStatus.DRAFT,
+        quote.totals.total,
+    )
+    assert (summary.created_by, summary.version) == (quote.created_by, 1)

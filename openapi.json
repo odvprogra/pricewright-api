@@ -134,7 +134,8 @@
           "customer.updated",
           "pricing_rule.created",
           "pricing_rule.updated",
-          "quote.created"
+          "quote.created",
+          "quote.updated"
         ],
         "title": "AuditAction",
         "type": "string"
@@ -187,7 +188,8 @@
               "customer.updated",
               "pricing_rule.created",
               "pricing_rule.updated",
-              "quote.created"
+              "quote.created",
+              "quote.updated"
             ],
             "title": "Action",
             "type": "string"
@@ -2105,6 +2107,44 @@
         "title": "QuoteLineJson",
         "type": "object"
       },
+      "QuoteOrder": {
+        "enum": [
+          "-created_at",
+          "created_at",
+          "valid_until",
+          "-valid_until"
+        ],
+        "title": "QuoteOrder",
+        "type": "string"
+      },
+      "QuotePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteSummaryJson"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "QuotePage",
+        "type": "object"
+      },
       "QuoteResponse": {
         "properties": {
           "allowed_actions": {
@@ -2364,6 +2404,119 @@
         ],
         "title": "QuoteStatus",
         "type": "string"
+      },
+      "QuoteSummaryJson": {
+        "description": "A quote as lists show it: no lines.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/ActorJson"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "title": "Customer Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "net_subtotal": {
+            "$ref": "#/components/schemas/MoneyJson"
+          },
+          "number": {
+            "examples": [
+              "NF-2026-000123-R2"
+            ],
+            "title": "Number",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QuoteStatus"
+          },
+          "status_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Changed At"
+          },
+          "total": {
+            "$ref": "#/components/schemas/MoneyJson"
+          },
+          "valid_until": {
+            "format": "date",
+            "title": "Valid Until",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "revision",
+          "customer_id",
+          "status",
+          "valid_until",
+          "net_subtotal",
+          "total",
+          "created_by",
+          "created_at",
+          "status_changed_at",
+          "version"
+        ],
+        "title": "QuoteSummaryJson",
+        "type": "object"
+      },
+      "QuoteTermsPatch": {
+        "additionalProperties": false,
+        "description": "Only the fields sent change; `notes: null` removes them. Only drafts change.",
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Today or later.",
+            "title": "Valid Until"
+          }
+        },
+        "title": "QuoteTermsPatch",
+        "type": "object"
       },
       "RefreshTokenRequest": {
         "properties": {
@@ -5007,6 +5160,180 @@
       }
     },
     "/api/v1/quotes": {
+      "get": {
+        "operationId": "read_quotes_api_v1_quotes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/QuoteStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "description": "Every revision of this number, written without `-R2`.",
+            "in": "query",
+            "name": "number",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 24,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Every revision of this number, written without `-R2`.",
+              "examples": [
+                "NF-2026-000123"
+              ],
+              "title": "Number"
+            }
+          },
+          {
+            "description": "The user or service account that created it.",
+            "in": "query",
+            "name": "created_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The user or service account that created it.",
+              "title": "Created By"
+            }
+          },
+          {
+            "description": "`-` sorts descending.",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/QuoteOrder",
+              "default": "-created_at",
+              "description": "`-` sorts descending."
+            }
+          },
+          {
+            "description": "Page size, 1 to 100.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Page size, 1 to 100.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "`next_cursor` from the previous page, with the same filters and sort; omit it for the first page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page, with the same filters and sort; omit it for the first page.",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Needs `quotes:read`, or `quotes:manage` for changes"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List quotes, newest first by default",
+        "tags": [
+          "quotes"
+        ]
+      },
       "post": {
         "operationId": "add_quote_api_v1_quotes_post",
         "requestBody": {
@@ -5145,6 +5472,138 @@
           }
         ],
         "summary": "One quote, line by line",
+        "tags": [
+          "quotes"
+        ]
+      },
+      "patch": {
+        "operationId": "update_quote_api_v1_quotes__quote_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteTermsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Needs `quotes:read`, or `quotes:manage` for changes"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such quote in this tenant (ADR-0009)"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Only drafts change (`quote_not_editable`)"
+          },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is stale: someone else changed the quote; reload it"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "428": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is required"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change a draft's validity or notes",
         "tags": [
           "quotes"
         ]

@@ -422,6 +422,11 @@ class QuoteRecord(Base):
         ),
         UniqueConstraint("tenant_id", "supersedes_id"),
         UniqueConstraint("tenant_id", "superseded_by_id"),
+        # The list's sorts and filters (ADR-0014); by creation, the primary key serves.
+        Index(None, "tenant_id", "valid_until", "id"),
+        Index(None, "tenant_id", "status", "id"),
+        Index(None, "tenant_id", "customer_id", "id"),
+        Index(None, "tenant_id", "created_by_id", "id"),
         CheckConstraint(f"status IN ({_QUOTE_STATUSES})", name="status_is_known"),
         CheckConstraint("revision >= 1", name="revision_positive"),
         CheckConstraint(
