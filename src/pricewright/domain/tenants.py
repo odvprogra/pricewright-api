@@ -12,11 +12,13 @@ DEFAULT_APPROVAL_THRESHOLD = Decimal("0.15")
 # Rates are stored as NUMERIC(5, 4): 0.0725 is 7.25%. More places would be rounded silently.
 RATE_DECIMAL_PLACES = 4
 MAX_NAME_LENGTH = 200
-# Dynamics 365 Sales numbers quotes with the prefix QUO until an administrator changes it.
+# Dynamics 365 Sales numbers quotes QUO-… and orders ORD-… until an administrator changes the
+# prefixes (one per record type, as SAP assigns a number range per document type).
 DEFAULT_QUOTE_PREFIX = "QUO"
-MAX_QUOTE_PREFIX_LENGTH = 5
-# A letter, then letters or digits: no hyphen, which separates the parts of a quote number.
-QUOTE_PREFIX_PATTERN = re.compile(r"[A-Z][A-Z0-9]{1,4}")
+DEFAULT_ORDER_PREFIX = "ORD"
+MAX_NUMBER_PREFIX_LENGTH = 5
+# A letter, then letters or digits: no hyphen, which separates the parts of a document number.
+NUMBER_PREFIX_PATTERN = re.compile(r"[A-Z][A-Z0-9]{1,4}")
 # Odoo and Salesforce CPQ propose a quote's expiration from a default validity in days.
 DEFAULT_QUOTE_VALIDITY_DAYS = 30
 MAX_QUOTE_VALIDITY_DAYS = 365
@@ -37,8 +39,8 @@ def _require_rate(value: Decimal, name: str, *, low: Decimal, high: Decimal, hig
 
 @dataclass(frozen=True, slots=True)
 class TenantSettings:
-    """Commercial settings read by pricing (tax), approvals (discount threshold) and quotes (number
-    prefix, default validity)."""
+    """Commercial settings read by pricing (tax), approvals (discount threshold), quotes (number
+    prefix, default validity) and orders (number prefix)."""
 
     currency: str
     tax_rate: Decimal
@@ -47,6 +49,8 @@ class TenantSettings:
     """Starts every quote number: ``NF`` gives ``NF-2026-000123``."""
     quote_validity_days: int = DEFAULT_QUOTE_VALIDITY_DAYS
     """How long a new quote is valid unless the rep sets another date."""
+    order_prefix: str = DEFAULT_ORDER_PREFIX
+    """Starts every order number: ``ORD`` gives ``ORD-2026-000045``."""
 
     def __post_init__(self) -> None:
         if not is_iso_4217(self.currency):
@@ -59,10 +63,17 @@ class TenantSettings:
             high=Decimal(1),
             high_ok=True,
         )
-        if not QUOTE_PREFIX_PATTERN.fullmatch(self.quote_prefix):
-            raise InvalidTenantError(
-                "quote_prefix must be 2 to 5 upper-case letters or digits, starting with a letter"
-            )
+        for name, prefix in (
+            ("quote_prefix", self.quote_prefix),
+            ("order_prefix", self.order_prefix),
+        ):
+            if not NUMBER_PREFIX_PATTERN.fullmatch(prefix):
+                raise InvalidTenantError(
+                    f"{name} must be 2 to 5 upper-case letters or digits, starting with a letter"
+                )
+        if self.order_prefix == self.quote_prefix:
+            # NF-2026-000001 would name a quote and an order at once.
+            raise InvalidTenantError("order_prefix must differ from quote_prefix")
         if not 1 <= self.quote_validity_days <= MAX_QUOTE_VALIDITY_DAYS:
             raise InvalidTenantError(
                 f"quote_validity_days must be from 1 to {MAX_QUOTE_VALIDITY_DAYS}"
@@ -100,9 +111,10 @@ class Tenant:
         approval_threshold: Decimal | None = None,
         quote_prefix: str | None = None,
         quote_validity_days: int | None = None,
+        order_prefix: str | None = None,
     ) -> None:
-        """Rename, adjust rates or quote settings. The currency is fixed: every stored price is in
-        it. A new quote prefix numbers new quotes only; issued numbers never change."""
+        """Rename, adjust rates, quote or order settings. The currency is fixed: every stored price
+        is in it. A new prefix numbers new documents only; issued numbers never change."""
         current = self.settings
         settings = replace(
             current,
@@ -114,6 +126,7 @@ class Tenant:
             quote_validity_days=(
                 current.quote_validity_days if quote_validity_days is None else quote_validity_days
             ),
+            order_prefix=current.order_prefix if order_prefix is None else order_prefix,
         )
         self.name = self.name if name is None else _valid_name(name)
         self.settings = settings

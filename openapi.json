@@ -3201,6 +3201,21 @@
             ],
             "title": "Name"
           },
+          "order_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Like `quote_prefix`, and different from it. Numbers new orders only.",
+            "examples": [
+              "SO"
+            ],
+            "title": "Order Prefix"
+          },
           "quote_prefix": {
             "anyOf": [
               {
@@ -3269,6 +3284,14 @@
             "title": "Name",
             "type": "string"
           },
+          "order_prefix": {
+            "description": "Starts every new order number: ORD gives ORD-2026-000045.",
+            "examples": [
+              "ORD"
+            ],
+            "title": "Order Prefix",
+            "type": "string"
+          },
           "quote_prefix": {
             "description": "Starts every new quote number: NF gives NF-2026-000123.",
             "examples": [
@@ -3302,6 +3325,7 @@
           "approval_threshold",
           "quote_prefix",
           "quote_validity_days",
+          "order_prefix",
           "version"
         ],
         "title": "TenantResponse",
@@ -8263,7 +8287,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Change the tenant's name, rates or quote settings (admins)",
+        "summary": "Change the tenant's name, rates, or quote and order settings (admins)",
         "tags": [
           "tenant"
         ]

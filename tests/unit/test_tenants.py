@@ -6,6 +6,7 @@ from hypothesis import strategies as st
 
 from pricewright.domain.tenants import (
     DEFAULT_APPROVAL_THRESHOLD,
+    DEFAULT_ORDER_PREFIX,
     DEFAULT_QUOTE_PREFIX,
     DEFAULT_QUOTE_VALIDITY_DAYS,
     InvalidTenantError,
@@ -38,6 +39,12 @@ def test_tenant_settings_default_quote_settings_follow_dynamics_365_and_odoo() -
     assert (DEFAULT_QUOTE_PREFIX, DEFAULT_QUOTE_VALIDITY_DAYS) == ("QUO", 30)
 
 
+def test_tenant_settings_default_order_prefix_follows_dynamics_365() -> None:
+    settings = TenantSettings(currency="USD", tax_rate=Decimal("0.07"))
+
+    assert settings.order_prefix == DEFAULT_ORDER_PREFIX == "ORD"
+
+
 @pytest.mark.parametrize("prefix", ["NF", "LT", "QUO", "A1B2C"])
 def test_tenant_settings_accepts_a_quote_prefix_of_letters_and_digits(prefix: str) -> None:
     settings = TenantSettings(currency="USD", tax_rate=Decimal(0), quote_prefix=prefix)
@@ -49,6 +56,25 @@ def test_tenant_settings_accepts_a_quote_prefix_of_letters_and_digits(prefix: st
 def test_tenant_settings_rejects_a_quote_prefix_that_would_blur_the_number(prefix: str) -> None:
     with pytest.raises(InvalidTenantError, match="quote_prefix"):
         TenantSettings(currency="USD", tax_rate=Decimal(0), quote_prefix=prefix)
+
+
+@pytest.mark.parametrize("prefix", ["", "N", "nfo", "NF-O", "1NF", "NFSUPP"])
+def test_tenant_settings_rejects_an_order_prefix_that_would_blur_the_number(prefix: str) -> None:
+    with pytest.raises(InvalidTenantError, match="order_prefix must be 2 to 5"):
+        TenantSettings(currency="USD", tax_rate=Decimal(0), order_prefix=prefix)
+
+
+@pytest.mark.parametrize(("quote_prefix", "order_prefix"), [("NF", "NF"), ("ORD", "ORD")])
+def test_tenant_settings_never_number_quotes_and_orders_alike(
+    quote_prefix: str, order_prefix: str
+) -> None:
+    with pytest.raises(InvalidTenantError, match="order_prefix must differ from quote_prefix"):
+        TenantSettings(
+            currency="USD",
+            tax_rate=Decimal(0),
+            quote_prefix=quote_prefix,
+            order_prefix=order_prefix,
+        )
 
 
 @pytest.mark.parametrize("days", [1, 365])
@@ -132,6 +158,17 @@ def test_tenant_change_of_a_rate_keeps_the_quote_settings() -> None:
     tenant.change(tax_rate=Decimal("0.08"))
 
     assert (tenant.settings.quote_prefix, tenant.settings.quote_validity_days) == ("NF", 45)
+
+
+def test_tenant_change_sets_the_order_prefix() -> None:
+    tenant = northfield()
+
+    tenant.change(order_prefix="NFO")
+
+    assert (tenant.settings.quote_prefix, tenant.settings.order_prefix) == ("QUO", "NFO")
+    with pytest.raises(InvalidTenantError, match="differ"):
+        tenant.change(quote_prefix="NFO")
+    assert tenant.settings.quote_prefix == "QUO"
 
 
 def test_tenant_change_rejects_invalid_values_and_changes_nothing() -> None:

@@ -76,6 +76,7 @@ VALID_TENANT: dict[str, object] = {
     "approval_threshold": Decimal("0.15"),
     "quote_prefix": "NF",
     "quote_validity_days": 30,
+    "order_prefix": "NFO",
 }
 
 
@@ -87,6 +88,8 @@ VALID_TENANT: dict[str, object] = {
         ("approval_threshold", 2, "approval_threshold_in_range"),
         ("quote_prefix", "N-F", "quote_prefix_is_valid"),
         ("quote_validity_days", 0, "quote_validity_days_in_range"),
+        ("order_prefix", "nfo", "order_prefix_is_valid"),
+        ("order_prefix", "NF", "prefixes_differ"),
     ],
 )
 async def test_database_rejects_tenant_settings_the_domain_forbids(

@@ -31,6 +31,9 @@ class TenantResponse(BaseModel):
     quote_validity_days: int = Field(
         description="How long a new quote is valid unless the rep sets another date."
     )
+    order_prefix: str = Field(
+        description="Starts every new order number: ORD gives ORD-2026-000045.", examples=["ORD"]
+    )
     version: int = Field(description="Also sent as the ETag; send it back in If-Match to update.")
 
     @classmethod
@@ -43,6 +46,7 @@ class TenantResponse(BaseModel):
             approval_threshold=tenant.settings.approval_threshold,
             quote_prefix=tenant.settings.quote_prefix,
             quote_validity_days=tenant.settings.quote_validity_days,
+            order_prefix=tenant.settings.order_prefix,
             version=tenant.version,
         )
 
@@ -62,6 +66,11 @@ class TenantPatch(BaseModel):
         examples=["NF"],
     )
     quote_validity_days: int | None = Field(default=None, description="From 1 to 365.")
+    order_prefix: str | None = Field(
+        default=None,
+        description="Like `quote_prefix`, and different from it. Numbers new orders only.",
+        examples=["SO"],
+    )
 
     @model_validator(mode="after")
     def _changes_something(self) -> Self:
@@ -85,7 +94,7 @@ async def read_tenant(
 
 @router.patch(
     "/tenant",
-    summary="Change the tenant's name, rates or quote settings (admins)",
+    summary="Change the tenant's name, rates, or quote and order settings (admins)",
     responses={
         401: {"description": "Missing or invalid access token"},
         403: {"description": "Only admins change the tenant (`tenant:manage`)"},
@@ -108,6 +117,7 @@ async def update_tenant(
             approval_threshold=body.approval_threshold,
             quote_prefix=body.quote_prefix,
             quote_validity_days=body.quote_validity_days,
+            order_prefix=body.order_prefix,
         ),
         expected_version=expected_version(if_match),
         unit_of_work=services.unit_of_work,

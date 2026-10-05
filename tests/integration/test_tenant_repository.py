@@ -25,6 +25,7 @@ async def test_tenant_repository_save_stores_changes_and_bumps_the_version(
             tax_rate=Decimal("0.0725"),
             quote_prefix="NF",
             quote_validity_days=45,
+            order_prefix="NFO",
         )
         await uow.tenants.save(tenant)
         await uow.commit()

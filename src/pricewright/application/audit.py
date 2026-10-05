@@ -76,6 +76,7 @@ def tenant_fields(tenant: Tenant) -> dict[str, AuditValue]:
         "approval_threshold": _decimal(tenant.settings.approval_threshold, RATE_DECIMAL_PLACES),
         "quote_prefix": tenant.settings.quote_prefix,
         "quote_validity_days": tenant.settings.quote_validity_days,
+        "order_prefix": tenant.settings.order_prefix,
     }
 
 
