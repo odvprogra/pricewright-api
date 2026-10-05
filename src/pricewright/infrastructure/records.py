@@ -563,6 +563,7 @@ class ApprovalRequestRecord(Base):
             postgresql_where=text("status = 'pending'"),
         ),
         Index(None, "tenant_id", "quote_id"),
+        Index(None, "tenant_id", "status", "id"),  # the inbox: by status, oldest first
         CheckConstraint(f"status IN ({_APPROVAL_STATUSES})", name="status_is_known"),
         CheckConstraint(
             f"requested_by_type IN ({_ACTOR_TYPES})", name="requested_by_type_is_known"

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from pricewright import __version__
 from pricewright.api import (
+    approvals,
     audit,
     auth,
     customers,
@@ -60,6 +61,7 @@ def create_app(
     app.include_router(pricing_rules.router)
     app.include_router(pricing.router)
     app.include_router(quotes.router)
+    app.include_router(approvals.router)
     app.include_router(audit.router)
     register_problem_handlers(app)
     app.add_middleware(RequestContextMiddleware)

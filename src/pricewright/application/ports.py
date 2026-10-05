@@ -19,6 +19,7 @@ from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.money import Money
 from pricewright.domain.pricing_rules import PricingRule, RuleKind
+from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus
 from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import Quote
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
@@ -320,6 +321,14 @@ class QuoteSummary:
         return self.number if self.revision == 1 else f"{self.number}-R{self.revision}"
 
 
+@dataclass(frozen=True, slots=True)
+class ApprovalSummary:
+    """An approval request and the quote it is about, as the approval inbox shows them."""
+
+    request: ApprovalRequest
+    quote: QuoteSummary
+
+
 class QuoteRepository(Protocol):
     """Quotes of the unit of work's tenant only (ADR-0006), with their lines and approvals."""
 
@@ -344,6 +353,16 @@ class QuoteRepository(Protocol):
 
         The keyset holds the sort value (the ISO date for ``valid_until``, none when sorted by
         creation) and the id.
+        """
+        ...
+
+    async def approval_page(
+        self, status: ApprovalStatus, *, today: date, after: UUID | None, limit: int
+    ) -> list[ApprovalSummary]:
+        """Up to ``limit`` requests with ``status``, oldest first, after the request ``after``.
+
+        Pending requests of offers that expired before ``today`` are left out: they can only be
+        revised (ADR-0005), so nobody decides on them.
         """
         ...
 

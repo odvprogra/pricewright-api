@@ -91,4 +91,13 @@ CASES = (
         json={"reason": "Hijacked"},
         headers={"If-Match": '"1"'},
     ),
+    IsolationCase(
+        "POST", "/api/v1/quotes/{quote_id}/approve", json={}, headers={"If-Match": '"1"'}
+    ),
+    IsolationCase(
+        "POST",
+        "/api/v1/quotes/{quote_id}/reject",
+        json={"comment": "Hijacked"},
+        headers={"If-Match": '"1"'},
+    ),
 )

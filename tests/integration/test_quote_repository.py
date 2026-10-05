@@ -20,6 +20,7 @@ from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.money import Money
 from pricewright.domain.pricing import PriceOverride, RateOverride
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
+from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import LineChange, PricingContext, Quote
 from pricewright.domain.tenants import Tenant
@@ -445,3 +446,30 @@ async def test_quote_list_summaries_carry_the_totals(session_factory: Sessions) 
         quote.totals.total,
     )
     assert (summary.created_by, summary.version) == (quote.created_by, 1)
+
+
+async def test_approval_inbox_joins_requests_to_their_quotes(session_factory: Sessions) -> None:
+    northfield, larkspur = await stock(session_factory), await stock(session_factory, "Larkspur")
+    rep = Actor.person(northfield.rep.id)
+    waiting, expired, decided = (draft(northfield, f"NF-2026-00000{n}") for n in (1, 2, 3))
+    for quote in (waiting, expired, decided):
+        quote.submit(by=rep, context=northfield.pricing())
+    expired.valid_until = date(2026, 10, 20)
+    decided.approve(by=Actor.person(northfield.director.id), comment=None, now=NOW)
+    for quote in (waiting, expired, decided):
+        await add(session_factory, northfield, quote)
+
+    async def inbox(
+        stock: Stock, status: ApprovalStatus, after: uuid.UUID | None = None
+    ) -> list[str]:
+        async with SqlAlchemyUnitOfWork(session_factory) as uow:
+            uow.bind_tenant(stock.tenant.id)
+            found = await uow.quotes.approval_page(
+                status, today=date(2026, 10, 25), after=after, limit=10
+            )
+        return [item.quote.display_number for item in found]
+
+    assert await inbox(northfield, ApprovalStatus.PENDING) == ["NF-2026-000001"]
+    assert await inbox(northfield, ApprovalStatus.APPROVED) == ["NF-2026-000003"]
+    assert await inbox(northfield, ApprovalStatus.PENDING, waiting.approvals[0].id) == []
+    assert await inbox(larkspur, ApprovalStatus.APPROVED) == []

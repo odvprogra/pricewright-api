@@ -79,7 +79,7 @@ async def api_key(client: httpx.AsyncClient, *scopes: str) -> dict[str, str]:
     admin = bearer(Role.ADMIN)
     account = await client.post(
         "/api/v1/service-accounts",
-        json={"name": "erp-mcp-server", "scopes": list(scopes)},
+        json={"name": f"integration {uuid.uuid7()}", "scopes": list(scopes)},
         headers=admin,
     )
     key = await client.post(

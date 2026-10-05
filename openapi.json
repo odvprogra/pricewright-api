@@ -116,6 +116,150 @@
         "title": "ApiKeyResponse",
         "type": "object"
       },
+      "ApprovalInboxItem": {
+        "properties": {
+          "approval_threshold": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Approval Threshold",
+            "type": "string"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it was decided or withdrawn.",
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person who approved or rejected it.",
+            "title": "Decided By"
+          },
+          "discount": {
+            "description": "1 - net / list subtotal when submitted (D-06).",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Discount",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "list_subtotal": {
+            "$ref": "#/components/schemas/MoneyJson"
+          },
+          "net_subtotal": {
+            "$ref": "#/components/schemas/MoneyJson"
+          },
+          "quote": {
+            "$ref": "#/components/schemas/QuoteSummaryJson"
+          },
+          "reasons": {
+            "description": "New reasons may appear; handle unknown ones.",
+            "examples": [
+              [
+                "discount_above_threshold",
+                "line_below_margin_floor"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "$ref": "#/components/schemas/ActorJson"
+          },
+          "status": {
+            "description": "New statuses may appear; handle unknown ones.",
+            "examples": [
+              "pending",
+              "approved",
+              "rejected",
+              "withdrawn"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "requested_by",
+          "requested_at",
+          "reasons",
+          "discount",
+          "approval_threshold",
+          "list_subtotal",
+          "net_subtotal",
+          "decided_by",
+          "decided_at",
+          "comment",
+          "quote"
+        ],
+        "title": "ApprovalInboxItem",
+        "type": "object"
+      },
+      "ApprovalPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalInboxItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ApprovalPage",
+        "type": "object"
+      },
       "ApprovalRequestJson": {
         "description": "What was asked when the quote was submitted, and what was decided (ADR-0020).",
         "properties": {
@@ -229,6 +373,38 @@
         "title": "ApprovalRequestJson",
         "type": "object"
       },
+      "ApprovalStatus": {
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "withdrawn"
+        ],
+        "title": "ApprovalStatus",
+        "type": "string"
+      },
+      "ApproveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Strategic account"
+            ],
+            "title": "Comment"
+          }
+        },
+        "title": "ApproveRequest",
+        "type": "object"
+      },
       "AuditAction": {
         "description": "``resource.verb`` in the past tense, as GitHub and WorkOS name their audit events.",
         "enum": [
@@ -257,7 +433,9 @@
           "quote.sent",
           "quote.accepted",
           "quote.cancelled",
-          "quote.revised"
+          "quote.revised",
+          "quote.approved",
+          "quote.rejected"
         ],
         "title": "AuditAction",
         "type": "string"
@@ -320,7 +498,9 @@
               "quote.sent",
               "quote.accepted",
               "quote.cancelled",
-              "quote.revised"
+              "quote.revised",
+              "quote.approved",
+              "quote.rejected"
             ],
             "title": "Action",
             "type": "string"
@@ -1470,6 +1650,7 @@
           "quotes:read",
           "quotes:manage",
           "quotes:send",
+          "quotes:approve",
           "quotes:override"
         ],
         "title": "Permission",
@@ -2789,6 +2970,26 @@
         "title": "RefreshTokenRequest",
         "type": "object"
       },
+      "RejectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "description": "What to change before the quote is submitted again.",
+            "examples": [
+              "Keep the bolts above a 20% margin."
+            ],
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Comment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comment"
+        ],
+        "title": "RejectRequest",
+        "type": "object"
+      },
       "Role": {
         "enum": [
           "sales_rep",
@@ -3299,6 +3500,107 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/approval-requests": {
+      "get": {
+        "operationId": "read_approval_requests_api_v1_approval_requests_get",
+        "parameters": [
+          {
+            "description": "Pending by default; a pending request leaves the inbox when its offer expires, since the quote can then only be revised.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalStatus",
+              "default": "pending",
+              "description": "Pending by default; a pending request leaves the inbox when its offer expires, since the quote can then only be revised."
+            }
+          },
+          {
+            "description": "Page size, 1 to 100.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Page size, 1 to 100.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "`next_cursor` from the previous page, with the same filters and sort; omit it for the first page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`next_cursor` from the previous page, with the same filters and sort; omit it for the first page.",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Needs `quotes:read`"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The approval inbox: requests waiting for a decision, oldest first",
+        "tags": [
+          "quotes"
+        ]
+      }
+    },
     "/api/v1/audit-events": {
       "get": {
         "operationId": "read_audit_events_api_v1_audit_events_get",
@@ -5988,6 +6290,140 @@
         ]
       }
     },
+    "/api/v1/quotes/{quote_id}/approve": {
+      "post": {
+        "operationId": "approve_api_v1_quotes__quote_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Needs `quotes:approve` (`permission_denied`), or the caller built or submitted the quote (`self_approval`, ADR-0020)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such quote in this tenant (ADR-0009)"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The quote's status does not allow it (`invalid_transition`), its validity passed (`quote_expired`), or it has no lines (`quote_empty`)"
+          },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is stale: someone else changed the quote; reload it"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "428": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is required"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve a quote pending approval (someone who did not build it)",
+        "tags": [
+          "quotes"
+        ]
+      }
+    },
     "/api/v1/quotes/{quote_id}/cancel": {
       "post": {
         "operationId": "cancel_api_v1_quotes__quote_id__cancel_post",
@@ -6653,6 +7089,140 @@
           }
         ],
         "summary": "Withdraw a pending approval request; the quote is a draft again",
+        "tags": [
+          "quotes"
+        ]
+      }
+    },
+    "/api/v1/quotes/{quote_id}/reject": {
+      "post": {
+        "operationId": "reject_api_v1_quotes__quote_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Needs `quotes:approve` (`permission_denied`), or the caller built or submitted the quote (`self_approval`, ADR-0020)"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such quote in this tenant (ADR-0009)"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The quote's status does not allow it (`invalid_transition`), its validity passed (`quote_expired`), or it has no lines (`quote_empty`)"
+          },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is stale: someone else changed the quote; reload it"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "428": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is required"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reject a quote pending approval, saying what to change",
         "tags": [
           "quotes"
         ]

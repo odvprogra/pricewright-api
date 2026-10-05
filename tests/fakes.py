@@ -9,7 +9,7 @@ import dataclasses
 import uuid
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import TracebackType
 from typing import Self
 from uuid import UUID
@@ -18,6 +18,7 @@ from pricewright.api.dependencies import Services
 from pricewright.application.pagination import Keyset
 from pricewright.application.ports import (
     ApiKeyRepository,
+    ApprovalSummary,
     AuditEventFilter,
     AuditEventRepository,
     CustomerQuery,
@@ -48,6 +49,7 @@ from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.pricing_rules import PricingRule
+from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quotes import Quote
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -493,6 +495,23 @@ class FakeCustomerRepository:
         self._customers[customer.id] = copy.deepcopy(customer)
 
 
+def _summary(quote: Quote) -> QuoteSummary:
+    return QuoteSummary(
+        id=quote.id,
+        number=quote.number,
+        revision=quote.revision,
+        customer_id=quote.customer_id,
+        status=quote.status,
+        valid_until=quote.valid_until,
+        net_subtotal=quote.totals.net_subtotal,
+        total=quote.totals.total,
+        created_by=quote.created_by,
+        created_at=quote.created_at,
+        status_changed_at=quote.status_changed_at,
+        version=quote.version,
+    )
+
+
 class FakeQuoteRepository:
     def __init__(
         self,
@@ -548,23 +567,24 @@ class FakeQuoteRepository:
             descending=query.descending,
             limit=limit,
         )
-        return [
-            QuoteSummary(
-                id=quote.id,
-                number=quote.number,
-                revision=quote.revision,
-                customer_id=quote.customer_id,
-                status=quote.status,
-                valid_until=quote.valid_until,
-                net_subtotal=quote.totals.net_subtotal,
-                total=quote.totals.total,
-                created_by=quote.created_by,
-                created_at=quote.created_at,
-                status_changed_at=quote.status_changed_at,
-                version=quote.version,
-            )
-            for quote in found
-        ]
+        return [_summary(quote) for quote in found]
+
+    async def approval_page(
+        self, status: ApprovalStatus, *, today: date, after: UUID | None, limit: int
+    ) -> list[ApprovalSummary]:
+        owned = [q for q in self._quotes.values() if q.tenant_id == self._uow.tenant_id]
+        found = sorted(
+            (
+                ApprovalSummary(request, _summary(quote))
+                for quote in owned
+                for request in quote.approvals
+                if request.status is status
+                and (status is not ApprovalStatus.PENDING or quote.valid_until >= today)
+                and (after is None or request.id > after)
+            ),
+            key=lambda item: item.request.id,
+        )
+        return copy.deepcopy(found[:limit])
 
     async def save(self, quote: Quote) -> None:
         self._require_own(quote)
