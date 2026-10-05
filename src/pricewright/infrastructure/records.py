@@ -43,6 +43,7 @@ from pricewright.domain.customers import (
     MAX_TAX_ID_LENGTH,
     CustomerTier,
 )
+from pricewright.domain.idempotency import MAX_KEY_LENGTH as MAX_IDEMPOTENCY_KEY_LENGTH
 from pricewright.domain.pricing import MAX_REASON_LENGTH as MAX_OVERRIDE_REASON_LENGTH
 from pricewright.domain.pricing_rules import MAX_RULE_NAME_LENGTH, RuleKind
 from pricewright.domain.quote_approvals import MAX_COMMENT_LENGTH, ApprovalStatus
@@ -604,3 +605,30 @@ class QuoteNumberCounterRecord(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
     year: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     last_value: Mapped[int] = mapped_column(Integer)
+
+
+class IdempotencyKeyRecord(Base):
+    """What a request with an Idempotency-Key created, per tenant, caller and key (ADR-0022).
+
+    The resource id has no foreign key: it points to several tables, like an audit event's.
+    """
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        CheckConstraint(f"actor_type IN ({_ACTOR_TYPES})", name="actor_type_is_known"),
+        CheckConstraint("idempotency_key <> ''", name="key_not_empty"),
+        CheckConstraint("fingerprint ~ '^[0-9a-f]{64}$'", name="fingerprint_is_sha256"),
+        CheckConstraint("expires_at > created_at", name="expires_after_creation"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    actor_type: Mapped[str] = mapped_column(String(20), primary_key=True)
+    actor_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(
+        String(MAX_IDEMPOTENCY_KEY_LENGTH), primary_key=True
+    )
+    fingerprint: Mapped[str] = mapped_column(CHAR(64))
+    resource_type: Mapped[str] = mapped_column(String(30))
+    resource_id: Mapped[uuid.UUID]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

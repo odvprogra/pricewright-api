@@ -11,6 +11,7 @@ from pricewright.application.ports import (
     ApiKeyRepository,
     AuditEventRepository,
     CustomerRepository,
+    IdempotencyKeyRepository,
     IdentityLookup,
     PricingRuleRepository,
     ProductCategoryRepository,
@@ -22,6 +23,7 @@ from pricewright.application.ports import (
     UserRepository,
 )
 from pricewright.domain.errors import ConflictError
+from pricewright.infrastructure.idempotency import SqlAlchemyIdempotencyKeyRepository
 from pricewright.infrastructure.quotes import SqlAlchemyQuoteRepository
 from pricewright.infrastructure.repositories import (
     SqlAlchemyApiKeyRepository,
@@ -55,6 +57,7 @@ class SqlAlchemyUnitOfWork:
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
     quotes: QuoteRepository
+    idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -75,6 +78,7 @@ class SqlAlchemyUnitOfWork:
         self.customers = SqlAlchemyCustomerRepository(self._session, self._scope)
         self.pricing_rules = SqlAlchemyPricingRuleRepository(self._session, self._scope)
         self.quotes = SqlAlchemyQuoteRepository(self._session, self._scope)
+        self.idempotency_keys = SqlAlchemyIdempotencyKeyRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
         return self
 

@@ -24,6 +24,7 @@ from pricewright.application.ports import (
     CustomerQuery,
     CustomerRepository,
     CustomerSort,
+    IdempotencyKeyRepository,
     IdentityLookup,
     IssuedToken,
     PricingRuleQuery,
@@ -43,11 +44,13 @@ from pricewright.application.ports import (
     UnitOfWork,
     UserRepository,
 )
+from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditEvent
 from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
+from pricewright.domain.idempotency import IdempotencyKeyInUseError, IdempotencyRecord
 from pricewright.domain.pricing_rules import PricingRule
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quotes import Quote
@@ -56,6 +59,27 @@ from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
 from pricewright.infrastructure.logging import current_request_id
+
+type _KeyScope = tuple[UUID, Actor, str]
+"""An idempotency key's tenant, caller and value."""
+
+
+class HeldKeys:
+    """Idempotency keys held by open units of work, like PostgreSQL's advisory locks: shared by
+    every unit of work on the database and never copied with it."""
+
+    def __init__(self) -> None:
+        self._holders: dict[_KeyScope, object] = {}
+
+    def __deepcopy__(self, memo: dict[int, object]) -> Self:
+        return self
+
+    def hold(self, scope: _KeyScope, holder: object) -> bool:
+        return self._holders.setdefault(scope, holder) is holder
+
+    def release(self, holder: object) -> None:
+        for scope in [scope for scope, held_by in self._holders.items() if held_by is holder]:
+            del self._holders[scope]
 
 
 @dataclass
@@ -73,6 +97,9 @@ class InMemoryDatabase:
     quotes: dict[UUID, Quote] = field(default_factory=dict)
     quote_numbers: dict[tuple[UUID, int], int] = field(default_factory=dict)
     """The last quote number issued, per tenant and year."""
+    idempotency_keys: dict[_KeyScope, IdempotencyRecord] = field(default_factory=dict)
+    held_keys: HeldKeys = field(default_factory=HeldKeys, compare=False)
+    """Locks, not data: two databases with the same rows are equal whoever holds what."""
 
 
 class FakeTenantRepository:
@@ -597,6 +624,42 @@ class FakeQuoteRepository:
         self._quotes[quote.id] = copy.deepcopy(quote)
 
 
+class FakeIdempotencyKeyRepository:
+    """Holds keys for the unit of work until it ends, without waiting, like the adapter."""
+
+    def __init__(
+        self,
+        records: dict[_KeyScope, IdempotencyRecord],
+        held: HeldKeys,
+        uow: FakeUnitOfWork,
+    ) -> None:
+        self._records = records
+        self._held = held
+        self._uow = uow
+
+    async def claim(self, actor: Actor, key: str, *, now: datetime) -> IdempotencyRecord | None:
+        scope = self._hold(actor, key)
+        record = self._records.get(scope)
+        return None if record is None or record.has_expired(now) else record
+
+    async def add(self, record: IdempotencyRecord) -> None:
+        if record.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("an idempotency key can only be added to the unit of work's tenant")
+        scope = self._hold(record.actor, record.key)
+        current = self._records.get(scope)
+        if current is not None and not current.has_expired(record.created_at):
+            raise RuntimeError("this Idempotency-Key already remembers an unexpired request")
+        self._records[scope] = record
+
+    def _hold(self, actor: Actor, key: str) -> _KeyScope:
+        scope = (self._uow.tenant_id, actor, key)
+        if not self._held.hold(scope, self._uow):
+            raise IdempotencyKeyInUseError(
+                "a request with this Idempotency-Key is still in progress; retry once it finishes"
+            )
+        return scope
+
+
 class FakeIdentityLookup:
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -629,6 +692,7 @@ class FakeUnitOfWork:
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
     quotes: QuoteRepository
+    idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -650,6 +714,9 @@ class FakeUnitOfWork:
         self.customers = FakeCustomerRepository(self._staged.customers, self)
         self.pricing_rules = FakePricingRuleRepository(self._staged.pricing_rules, self)
         self.quotes = FakeQuoteRepository(self._staged.quotes, self._staged.quote_numbers, self)
+        self.idempotency_keys = FakeIdempotencyKeyRepository(
+            self._staged.idempotency_keys, self._staged.held_keys, self
+        )
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
@@ -660,6 +727,7 @@ class FakeUnitOfWork:
         traceback: TracebackType | None,
     ) -> None:
         del self._staged
+        self._database.held_keys.release(self)  # like a transaction-level lock, committed or not
 
     @property
     def tenant_id(self) -> UUID:
