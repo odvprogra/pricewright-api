@@ -4,26 +4,29 @@ Every use case binds the unit of work to the caller's tenant (ADR-0006), saves w
 caller read (ADR-0012) and records its audit event in the same unit of work (ADR-0013).
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import UUID
 
-from pricewright.application.audit import quote_fields, record
+from pricewright.application.audit import quote_fields, quote_line_fields, record
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
     Clock,
     QuoteQuery,
     QuoteSort,
     QuoteSummary,
+    UnitOfWork,
     UnitOfWorkFactory,
 )
 from pricewright.application.pricing import pricing_context, tenant_of
 from pricewright.domain.actors import Actor
-from pricewright.domain.audit import AuditAction, changed, created
+from pricewright.domain.audit import AuditAction, changed, created, removed
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
-from pricewright.domain.quotes import LineChange, Quote, quote_number
+from pricewright.domain.pricing import ManualOverride
+from pricewright.domain.quotes import LineChange, PricingContext, Quote, quote_number
 from pricewright.domain.updates import KEEP, Keep
 
 
@@ -36,11 +39,20 @@ class NewQuote:
     lines: Sequence[LineChange] = field(default_factory=tuple)
 
 
+def _require_override_rights(
+    principal: Principal, overrides: Iterable[ManualOverride | Keep | None]
+) -> None:
+    """Setting or clearing an override is a price decision: people with ``quotes:override``."""
+    if any(override is not KEEP and override is not None for override in overrides):
+        principal.require(Permission.QUOTES_OVERRIDE)
+
+
 async def create_quote(
     principal: Principal, new: NewQuote, *, unit_of_work: UnitOfWorkFactory, clock: Clock
 ) -> Quote:
     """A draft numbered ``{prefix}-{year}-{sequence}`` (ADR-0021), its lines priced now."""
     principal.require(Permission.QUOTES_MANAGE)
+    _require_override_rights(principal, (line.override for line in new.lines))
     now = clock()
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
@@ -77,6 +89,25 @@ async def get_quote(
     if quote is None:
         raise NotFoundError("no such quote")
     return quote
+
+
+async def _quote_at(uow: UnitOfWork, quote_id: UUID, expected_version: int) -> Quote:
+    """The quote, if it is still at the version the caller read (ADR-0012)."""
+    quote = await uow.quotes.get(quote_id)
+    if quote is None:
+        raise NotFoundError("no such quote")
+    if quote.version != expected_version:
+        raise StaleVersionError("the quote was changed by someone else; reload it")
+    return quote
+
+
+async def _repricing(
+    uow: UnitOfWork, principal: Principal, quote: Quote, *, extra: UUID | None, now: datetime
+) -> PricingContext:
+    """What pricing every line of ``quote`` (and an ``extra`` product) needs now (ADR-0019)."""
+    tenant = await tenant_of(uow, principal.tenant_id)
+    products = {line.product_id for line in quote.lines} | ({extra} if extra else set())
+    return await pricing_context(uow, tenant, quote.customer_id, products, at=now)
 
 
 def _position(quote: QuoteSummary, sort: QuoteSort) -> Keyset:
@@ -121,15 +152,108 @@ async def change_quote_terms(
     now = clock()
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
-        quote = await uow.quotes.get(quote_id)
-        if quote is None:
-            raise NotFoundError("no such quote")
-        if quote.version != expected_version:
-            raise StaleVersionError("the quote was changed by someone else; reload it")
+        quote = await _quote_at(uow, quote_id, expected_version)
         before = quote_fields(quote)
         quote.change_terms(valid_until=terms.valid_until, notes=terms.notes, now=now)
         await uow.quotes.save(quote)
         edits = changed(before, quote_fields(quote))
         await record(uow, principal, AuditAction.QUOTE_UPDATED, quote.id, edits, now=now)
+        await uow.commit()
+    return quote
+
+
+async def add_quote_line(
+    principal: Principal,
+    quote_id: UUID,
+    change: LineChange,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Add a line to a draft; every line is priced again (ADR-0019)."""
+    principal.require(Permission.QUOTES_MANAGE)
+    _require_override_rights(principal, [change.override])
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        context = await _repricing(uow, principal, quote, extra=change.product_id, now=now)
+        before = quote_fields(quote)
+        line = quote.add_line(change, by=Actor.of(principal), context=context)
+        await uow.quotes.save(quote)
+        changes = {**created(quote_line_fields(line)), **changed(before, quote_fields(quote))}
+        await record(uow, principal, AuditAction.QUOTE_LINE_ADDED, quote.id, changes, now=now)
+        await uow.commit()
+    return quote
+
+
+@dataclass(frozen=True, slots=True)
+class LineEdit:
+    """``quantity`` left as ``None`` keeps its value; the override keeps it with ``KEEP``, and
+    ``None`` removes it."""
+
+    quantity: Decimal | None = None
+    override: ManualOverride | Keep | None = KEEP
+
+
+async def change_quote_line(
+    principal: Principal,
+    quote_id: UUID,
+    line_id: UUID,
+    edit: LineEdit,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    principal.require(Permission.QUOTES_MANAGE)
+    if edit.override is not KEEP:
+        principal.require(Permission.QUOTES_OVERRIDE)  # clearing one is a price decision too
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        context = await _repricing(uow, principal, quote, extra=None, now=now)
+        before, line_before = quote_fields(quote), quote_line_fields(quote.line(line_id))
+        line = quote.change_line(
+            line_id,
+            quantity=edit.quantity,
+            override=edit.override,
+            by=Actor.of(principal),
+            context=context,
+        )
+        await uow.quotes.save(quote)
+        changes = {
+            "line_id": (str(line_id), str(line_id)),
+            **changed(line_before, quote_line_fields(line)),
+            **changed(before, quote_fields(quote)),
+        }
+        await record(uow, principal, AuditAction.QUOTE_LINE_CHANGED, quote.id, changes, now=now)
+        await uow.commit()
+    return quote
+
+
+async def remove_quote_line(
+    principal: Principal,
+    quote_id: UUID,
+    line_id: UUID,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Remove a line from a draft; the rest are priced again."""
+    principal.require(Permission.QUOTES_MANAGE)
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        context = await _repricing(uow, principal, quote, extra=None, now=now)
+        before = quote_fields(quote)
+        line = quote.remove_line(line_id, context=context)
+        await uow.quotes.save(quote)
+        changes = {**removed(quote_line_fields(line)), **changed(before, quote_fields(quote))}
+        await record(uow, principal, AuditAction.QUOTE_LINE_REMOVED, quote.id, changes, now=now)
         await uow.commit()
     return quote

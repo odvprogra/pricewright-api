@@ -16,10 +16,11 @@ from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.money import AMOUNT_DECIMAL_PLACES
+from pricewright.domain.pricing import ManualOverride, RateOverride
 from pricewright.domain.pricing_rules import RATE_DECIMAL_PLACES as RULE_RATE_PLACES
 from pricewright.domain.pricing_rules import PricingRule
 from pricewright.domain.quantities import QUANTITY_DECIMAL_PLACES
-from pricewright.domain.quotes import Quote
+from pricewright.domain.quotes import Quote, QuoteLine
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.tenants import RATE_DECIMAL_PLACES, Tenant
 from pricewright.domain.users import User
@@ -170,4 +171,24 @@ def quote_fields(quote: Quote) -> dict[str, AuditValue]:
         "net_subtotal": _decimal(totals.net_subtotal.amount, AMOUNT_DECIMAL_PLACES),
         "tax": _decimal(totals.tax.amount, AMOUNT_DECIMAL_PLACES),
         "total": _decimal(totals.total.amount, AMOUNT_DECIMAL_PLACES),
+    }
+
+
+def _override(override: ManualOverride | None) -> str | None:
+    """``rate 0.1000: reason`` or ``price 75.5000: reason``."""
+    if override is None:
+        return None
+    if isinstance(override, RateOverride):
+        return f"rate {_decimal(override.rate, RULE_RATE_PLACES)}: {override.reason}"
+    return f"price {_decimal(override.unit_price.amount, AMOUNT_DECIMAL_PLACES)}: {override.reason}"
+
+
+def quote_line_fields(line: QuoteLine) -> dict[str, AuditValue]:
+    """A line event always names its line; the rest are the fields people change or check."""
+    return {
+        "line_id": str(line.id),
+        "sku": line.sku,
+        "quantity": _decimal(line.quantity, QUANTITY_DECIMAL_PLACES),
+        "override": _override(line.override),
+        "net_total": _decimal(line.pricing.net_total.amount, AMOUNT_DECIMAL_PLACES),
     }

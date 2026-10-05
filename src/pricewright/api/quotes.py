@@ -19,18 +19,28 @@ from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_curs
 from pricewright.api.pricing import MarginFloorJson, MarginJson, StepJson, ratio
 from pricewright.application.ports import QuoteQuery, QuoteSort, QuoteSummary
 from pricewright.application.quotes import (
+    LineEdit,
     NewQuote,
     QuoteTerms,
+    add_quote_line,
+    change_quote_line,
     change_quote_terms,
     create_quote,
     get_quote,
     list_quotes,
+    remove_quote_line,
 )
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import UnitOfMeasure
-from pricewright.domain.pricing import ApprovalReason, PriceOverride, RateOverride
+from pricewright.domain.pricing import (
+    MAX_REASON_LENGTH,
+    ApprovalReason,
+    ManualOverride,
+    PriceOverride,
+    RateOverride,
+)
 from pricewright.domain.quantities import QUANTITY_DECIMAL_PLACES
 from pricewright.domain.quote_lifecycle import QuoteAction, QuoteStatus
 from pricewright.domain.quotes import (
@@ -60,6 +70,12 @@ _CONDITIONAL: dict[int | str, dict[str, object]] = {
     428: {"description": "If-Match is required"},
 }
 _NUMBER_LENGTH = 24
+_LINE_ERRORS: dict[int | str, dict[str, object]] = {
+    403: {"description": "Needs `quotes:manage`, and `quotes:override` for overrides"},
+    404: {"description": "No such quote, or no such line on it (ADR-0009)"},
+    409: {"description": "Only drafts change (`quote_not_editable`)"},
+    422: {"description": "Invalid line or override, or an unknown or archived product"},
+}
 
 
 class ActorJson(BaseModel):
@@ -237,11 +253,43 @@ class QuoteResponse(BaseModel):
         )
 
 
+class OverrideRequest(BaseModel):
+    """A manual override, with a reason: a rate off what the rules left, or the net unit price.
+    Needs `quotes:override` (sales managers and admins)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rate: Decimal | None = Field(
+        default=None, description="More than 0 and at most 1, up to 4 places.", examples=["0.1"]
+    )
+    unit_price: MoneyJson | None = Field(default=None, description="The net unit price itself.")
+    reason: str = Field(min_length=1, max_length=MAX_REASON_LENGTH, examples=["Matching a bid"])
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> Self:
+        if (self.rate is None) == (self.unit_price is None):
+            raise ValueError("send either rate or unit_price")
+        return self
+
+    def to_override(self) -> ManualOverride:
+        if self.unit_price is not None:
+            return PriceOverride(self.unit_price.to_money(), self.reason)
+        return RateOverride(self.rate or Decimal(0), self.reason)
+
+
+_QUANTITY = "More than 0, up to 3 decimal places."
+
+
 class NewLineJson(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     product_id: UUID
-    quantity: Decimal = Field(description="More than 0, up to 3 decimal places.", examples=["10"])
+    quantity: Decimal = Field(description=_QUANTITY, examples=["10"])
+    override: OverrideRequest | None = None
+
+    def change(self) -> LineChange:
+        override = None if self.override is None else self.override.to_override()
+        return LineChange(self.product_id, self.quantity, override)
 
 
 class CreateQuoteRequest(BaseModel):
@@ -282,7 +330,7 @@ async def add_quote(
             customer_id=body.customer_id,
             valid_until=body.valid_until,
             notes=body.notes,
-            lines=[LineChange(line.product_id, line.quantity) for line in body.lines],
+            lines=[line.change() for line in body.lines],
         ),
         unit_of_work=services.unit_of_work,
         clock=services.clock,
@@ -440,6 +488,103 @@ async def update_quote(
         principal,
         quote_id,
         body.terms(),
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+@router.post(
+    "/{quote_id}/lines",
+    summary="Add a line to a draft; every line is priced again",
+    description="Returns the quote with its new ETag; the new line is the last one.",
+    responses=_ERRORS | _CONDITIONAL | _LINE_ERRORS,
+)
+async def add_line(
+    quote_id: UUID,
+    body: NewLineJson,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> QuoteResponse:
+    quote = await add_quote_line(
+        principal,
+        quote_id,
+        body.change(),
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+class LinePatch(BaseModel):
+    """Only the fields sent change; `override: null` removes the override."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    quantity: Decimal | None = Field(default=None, description=_QUANTITY)
+    override: OverrideRequest | None = None
+
+    @model_validator(mode="after")
+    def _changes_something(self) -> Self:
+        if self.model_fields_set == set():
+            raise ValueError("send at least one field to change")
+        return self
+
+    def edit(self) -> LineEdit:
+        if "override" not in self.model_fields_set:
+            return LineEdit(quantity=self.quantity)
+        override = None if self.override is None else self.override.to_override()
+        return LineEdit(quantity=self.quantity, override=override)
+
+
+@router.patch(
+    "/{quote_id}/lines/{line_id}",
+    summary="Change a line's quantity or override; every line is priced again",
+    responses=_ERRORS | _CONDITIONAL | _LINE_ERRORS,
+)
+async def update_line(
+    quote_id: UUID,
+    line_id: UUID,
+    body: LinePatch,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> QuoteResponse:
+    quote = await change_quote_line(
+        principal,
+        quote_id,
+        line_id,
+        body.edit(),
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+@router.delete(
+    "/{quote_id}/lines/{line_id}",
+    summary="Remove a line from a draft; the rest are priced again",
+    description="Returns the quote with its new ETag.",
+    responses=_ERRORS | _CONDITIONAL | _LINE_ERRORS,
+)
+async def delete_line(
+    quote_id: UUID,
+    line_id: UUID,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> QuoteResponse:
+    quote = await remove_quote_line(
+        principal,
+        quote_id,
+        line_id,
         expected_version=expected_version(if_match),
         unit_of_work=services.unit_of_work,
         clock=services.clock,

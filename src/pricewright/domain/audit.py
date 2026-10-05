@@ -55,6 +55,9 @@ class AuditAction(StrEnum):
     PRICING_RULE_UPDATED = "pricing_rule.updated"
     QUOTE_CREATED = "quote.created"
     QUOTE_UPDATED = "quote.updated"
+    QUOTE_LINE_ADDED = "quote.line_added"
+    QUOTE_LINE_CHANGED = "quote.line_changed"
+    QUOTE_LINE_REMOVED = "quote.line_removed"
 
     @property
     def resource_type(self) -> AuditResourceType:
@@ -105,6 +108,11 @@ class AuditEvent:
 def created(values: Mapping[str, AuditValue]) -> Changes:
     """A new record: every field with a first value goes from nothing to it."""
     return {name: (None, value) for name, value in values.items() if value is not None}
+
+
+def removed(values: Mapping[str, AuditValue]) -> Changes:
+    """A record gone: every field with a last value goes from it to nothing."""
+    return {name: (value, None) for name, value in values.items() if value is not None}
 
 
 def changed(before: Mapping[str, AuditValue], after: Mapping[str, AuditValue]) -> Changes:
