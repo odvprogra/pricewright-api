@@ -30,6 +30,7 @@ class TenantChanges:
     approval_threshold: Decimal | None = None
     quote_prefix: str | None = None
     quote_validity_days: int | None = None
+    order_prefix: str | None = None
 
 
 async def change_tenant(
@@ -56,6 +57,7 @@ async def change_tenant(
             approval_threshold=changes.approval_threshold,
             quote_prefix=changes.quote_prefix,
             quote_validity_days=changes.quote_validity_days,
+            order_prefix=changes.order_prefix,
         )
         await uow.tenants.save(tenant)
         await record(

@@ -3,7 +3,8 @@
 Tenants are onboarded by an operator, not through the API (brief §2 has no platform role):
 
     pricewright-admin create-tenant --name "Northfield Supply" --currency USD --tax-rate 0.0725 \\
-        --quote-prefix NF --admin-email avery@northfield.example --admin-name "Avery Admin"
+        --quote-prefix NF --order-prefix NFO --admin-email avery@northfield.example \\
+        --admin-name "Avery Admin"
 
 The admin password is prompted for, or read from standard input with ``--password-stdin`` (scripts,
 seeds). It is never an argument, so it cannot end up in the shell history or the process list.
@@ -21,6 +22,7 @@ from pricewright.application.ports import PasswordHasher, UnitOfWorkFactory
 from pricewright.domain.errors import DomainError
 from pricewright.domain.tenants import (
     DEFAULT_APPROVAL_THRESHOLD,
+    DEFAULT_ORDER_PREFIX,
     DEFAULT_QUOTE_PREFIX,
     DEFAULT_QUOTE_VALIDITY_DAYS,
 )
@@ -67,6 +69,11 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_QUOTE_VALIDITY_DAYS,
         help="how long a new quote is valid",
     )
+    create.add_argument(
+        "--order-prefix",
+        default=DEFAULT_ORDER_PREFIX,
+        help="starts every order number, e.g. NFO for NFO-2026-000045; not the quote prefix",
+    )
     create.add_argument("--admin-email", required=True)
     create.add_argument("--admin-name", required=True)
     create.add_argument(
@@ -103,6 +110,7 @@ async def run(
             approval_threshold=args.approval_threshold,
             quote_prefix=args.quote_prefix,
             quote_validity_days=args.quote_validity_days,
+            order_prefix=args.order_prefix,
             admin_email=args.admin_email,
             admin_full_name=args.admin_name,
             admin_password=_admin_password(args, console),

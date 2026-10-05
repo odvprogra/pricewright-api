@@ -46,6 +46,7 @@ async def test_tenant_returns_the_settings_with_rates_as_strings(
         "approval_threshold": "0.15",
         "quote_prefix": "QUO",
         "quote_validity_days": 30,
+        "order_prefix": "ORD",
         "version": 1,
     }
 
@@ -87,6 +88,7 @@ async def test_admin_changes_the_tenant_with_the_current_etag(client: httpx.Asyn
         "approval_threshold": "0.15",
         "quote_prefix": "QUO",
         "quote_validity_days": 30,
+        "order_prefix": "ORD",
         "version": 2,
     }
 
@@ -96,6 +98,13 @@ async def test_admin_changes_the_quote_settings(client: httpx.AsyncClient) -> No
 
     assert response.status_code == 200
     assert (response.json()["quote_prefix"], response.json()["quote_validity_days"]) == ("NF", 45)
+
+
+async def test_admin_changes_the_order_prefix(client: httpx.AsyncClient) -> None:
+    response = await patch(client, {"order_prefix": "NFO"})
+
+    assert response.status_code == 200
+    assert response.json()["order_prefix"] == "NFO"
 
 
 async def test_a_second_change_with_the_old_etag_is_a_412(client: httpx.AsyncClient) -> None:
@@ -133,8 +142,19 @@ async def test_a_sales_manager_cannot_change_the_tenant(client: httpx.AsyncClien
         {"quote_prefix": "N-F"},
         {"quote_validity_days": 0},
         {"quote_validity_days": "a month"},
+        {"order_prefix": "nfo"},
+        {"order_prefix": "QUO"},
     ],
-    ids=["empty", "currency", "out-of-range", "prefix", "validity", "validity-type"],
+    ids=[
+        "empty",
+        "currency",
+        "out-of-range",
+        "prefix",
+        "validity",
+        "validity-type",
+        "order-prefix",
+        "same-prefixes",
+    ],
 )
 async def test_invalid_changes_are_a_422(
     client: httpx.AsyncClient, body: dict[str, object]

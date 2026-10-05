@@ -51,9 +51,9 @@ from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import MAX_NOTES_LENGTH
 from pricewright.domain.quotes import MAX_REASON_LENGTH as MAX_CANCEL_REASON_LENGTH
 from pricewright.domain.tenants import (
-    MAX_QUOTE_PREFIX_LENGTH,
+    MAX_NUMBER_PREFIX_LENGTH,
     MAX_QUOTE_VALIDITY_DAYS,
-    QUOTE_PREFIX_PATTERN,
+    NUMBER_PREFIX_PATTERN,
 )
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
 from pricewright.infrastructure.database import Base
@@ -90,8 +90,12 @@ class TenantRecord(Base):
             name="approval_threshold_in_range",
         ),
         CheckConstraint(
-            f"quote_prefix ~ '^{QUOTE_PREFIX_PATTERN.pattern}$'", name="quote_prefix_is_valid"
+            f"quote_prefix ~ '^{NUMBER_PREFIX_PATTERN.pattern}$'", name="quote_prefix_is_valid"
         ),
+        CheckConstraint(
+            f"order_prefix ~ '^{NUMBER_PREFIX_PATTERN.pattern}$'", name="order_prefix_is_valid"
+        ),
+        CheckConstraint("order_prefix <> quote_prefix", name="prefixes_differ"),
         CheckConstraint(
             f"quote_validity_days BETWEEN 1 AND {MAX_QUOTE_VALIDITY_DAYS}",
             name="quote_validity_days_in_range",
@@ -106,8 +110,9 @@ class TenantRecord(Base):
     currency: Mapped[str] = mapped_column(CHAR(3))
     tax_rate: Mapped[Decimal] = mapped_column(_RATE)
     approval_threshold: Mapped[Decimal] = mapped_column(_RATE)
-    quote_prefix: Mapped[str] = mapped_column(String(MAX_QUOTE_PREFIX_LENGTH))
+    quote_prefix: Mapped[str] = mapped_column(String(MAX_NUMBER_PREFIX_LENGTH))
     quote_validity_days: Mapped[int] = mapped_column(SmallInteger)
+    order_prefix: Mapped[str] = mapped_column(String(MAX_NUMBER_PREFIX_LENGTH))
     version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

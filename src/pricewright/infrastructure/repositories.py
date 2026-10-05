@@ -90,6 +90,7 @@ class SqlAlchemyTenantRepository:
                 approval_threshold=tenant.settings.approval_threshold,
                 quote_prefix=tenant.settings.quote_prefix,
                 quote_validity_days=tenant.settings.quote_validity_days,
+                order_prefix=tenant.settings.order_prefix,
                 version=tenant.version,
             )
         )
@@ -107,6 +108,7 @@ class SqlAlchemyTenantRepository:
                 approval_threshold=record.approval_threshold,
                 quote_prefix=record.quote_prefix,
                 quote_validity_days=record.quote_validity_days,
+                order_prefix=record.order_prefix,
             ),
             version=record.version,
         )
@@ -122,6 +124,7 @@ class SqlAlchemyTenantRepository:
                 approval_threshold=tenant.settings.approval_threshold,
                 quote_prefix=tenant.settings.quote_prefix,
                 quote_validity_days=tenant.settings.quote_validity_days,
+                order_prefix=tenant.settings.order_prefix,
                 version=TenantRecord.version + 1,
             )
             .returning(TenantRecord.version)
