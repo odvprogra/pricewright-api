@@ -15,7 +15,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricewright.application.pagination import Keyset
-from pricewright.application.ports import QuoteQuery, QuoteSort, QuoteSummary
+from pricewright.application.ports import (
+    ApprovalSummary,
+    QuoteQuery,
+    QuoteSort,
+    QuoteSummary,
+)
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.catalog import UnitOfMeasure
@@ -394,6 +399,28 @@ class SqlAlchemyQuoteRepository:
             select(QuoteRecord).where(*conditions).order_by(*order).limit(limit)
         )
         return [_to_summary(record) for record in records]
+
+    async def approval_page(
+        self, status: ApprovalStatus, *, today: date, after: UUID | None, limit: int
+    ) -> list[ApprovalSummary]:
+        tenant_id = self._scope.tenant_id
+        request, quote = ApprovalRequestRecord, QuoteRecord
+        conditions: list[ColumnElement[bool]] = [
+            request.tenant_id == tenant_id,
+            request.status == status.value,
+        ]
+        if status is ApprovalStatus.PENDING:
+            conditions.append(quote.valid_until >= today)  # an expired offer is only revised
+        if after is not None:
+            conditions.append(request.id > after)
+        rows = await self._session.execute(
+            select(request, quote)
+            .join(quote, (quote.tenant_id == request.tenant_id) & (quote.id == request.quote_id))
+            .where(*conditions)
+            .order_by(request.id)
+            .limit(limit)
+        )
+        return [ApprovalSummary(_to_approval(r), _to_summary(q)) for r, q in rows]
 
     async def save(self, quote: Quote) -> None:
         self._require_own(quote)

@@ -185,6 +185,9 @@ async def test_lists_only_show_the_callers_tenant(world: World) -> None:
     )
     rules = await world.client.get("/api/v1/pricing-rules", headers=world.larkspur_admin)
     quotes = await world.client.get("/api/v1/quotes", headers=world.larkspur_admin)
+    inbox = await world.client.get(
+        "/api/v1/approval-requests", params={"status": "withdrawn"}, headers=world.larkspur_admin
+    )
 
     assert [user["email"] for user in users.json()["items"]] == [LARKSPUR_EMAIL]
     assert accounts.json()["items"] == []
@@ -193,6 +196,7 @@ async def test_lists_only_show_the_callers_tenant(world: World) -> None:
     assert customers.json()["items"] == []
     assert rules.json()["items"] == []
     assert quotes.json()["items"] == []
+    assert inbox.json()["items"] == []
     assert tenant.json()["name"] == "Larkspur Tool Co."
 
 

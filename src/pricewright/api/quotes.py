@@ -24,6 +24,7 @@ from pricewright.application.quotes import (
     QuoteTerms,
     accept_quote,
     add_quote_line,
+    approve_quote,
     cancel_quote,
     change_quote_line,
     change_quote_terms,
@@ -31,6 +32,7 @@ from pricewright.application.quotes import (
     get_quote,
     list_quotes,
     recall_quote,
+    reject_quote,
     remove_quote_line,
     revise_quote,
     send_quote,
@@ -48,7 +50,11 @@ from pricewright.domain.pricing import (
     RateOverride,
 )
 from pricewright.domain.quantities import QUANTITY_DECIMAL_PLACES
-from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus
+from pricewright.domain.quote_approvals import (
+    MAX_COMMENT_LENGTH,
+    ApprovalRequest,
+    ApprovalStatus,
+)
 from pricewright.domain.quote_lifecycle import QuoteAction, QuoteStatus
 from pricewright.domain.quotes import (
     MAX_NOTES_LENGTH,
@@ -802,3 +808,78 @@ async def revise(
     )
     response.headers["Location"] = f"{router.prefix}/{successor.id}"
     return _respond(response, successor, principal, services.clock())
+
+
+class ApproveRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    comment: str | None = Field(
+        default=None, max_length=MAX_COMMENT_LENGTH, examples=["Strategic account"]
+    )
+
+
+class RejectRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    comment: str = Field(
+        min_length=1,
+        max_length=MAX_COMMENT_LENGTH,
+        description="What to change before the quote is submitted again.",
+        examples=["Keep the bolts above a 20% margin."],
+    )
+
+
+_DECISIONS = _TRANSITIONS | {
+    403: {
+        "description": "Needs `quotes:approve` (`permission_denied`), or the caller built or "
+        "submitted the quote (`self_approval`, ADR-0020)"
+    }
+}
+
+
+@router.post(
+    "/{quote_id}/approve",
+    summary="Approve a quote pending approval (someone who did not build it)",
+    responses=_DECISIONS,
+)
+async def approve(
+    quote_id: UUID,
+    body: ApproveRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    quote = await approve_quote(
+        principal,
+        quote_id,
+        body.comment,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+@router.post(
+    "/{quote_id}/reject",
+    summary="Reject a quote pending approval, saying what to change",
+    responses=_DECISIONS,
+)
+async def reject(
+    quote_id: UUID,
+    body: RejectRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    quote = await reject_quote(
+        principal,
+        quote_id,
+        body.comment,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())

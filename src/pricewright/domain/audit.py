@@ -64,6 +64,8 @@ class AuditAction(StrEnum):
     QUOTE_ACCEPTED = "quote.accepted"
     QUOTE_CANCELLED = "quote.cancelled"
     QUOTE_REVISED = "quote.revised"
+    QUOTE_APPROVED = "quote.approved"
+    QUOTE_REJECTED = "quote.rejected"
 
     @property
     def resource_type(self) -> AuditResourceType:

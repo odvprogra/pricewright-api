@@ -13,6 +13,7 @@ from uuid import UUID
 from pricewright.application.audit import quote_fields, quote_line_fields, record
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
+    ApprovalSummary,
     Clock,
     QuoteQuery,
     QuoteSort,
@@ -26,6 +27,7 @@ from pricewright.domain.audit import AuditAction, changed, created, removed
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.pricing import ManualOverride
+from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quotes import LineChange, PricingContext, Quote, quote_number
 from pricewright.domain.updates import KEEP, Keep
 
@@ -424,3 +426,92 @@ async def revise_quote(
         await record(uow, principal, AuditAction.QUOTE_CREATED, successor.id, fields, now=now)
         await uow.commit()
     return successor
+
+
+async def _decide(
+    principal: Principal,
+    quote_id: UUID,
+    action: AuditAction,
+    decide: Callable[[Quote, Actor, datetime], None],
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """A person with ``quotes:approve`` who did not build the quote decides (ADR-0020)."""
+    principal.require(Permission.QUOTES_APPROVE)
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        before = quote_fields(quote)
+        decide(quote, Actor.of(principal), now)
+        await uow.quotes.save(quote)
+        changes = dict(changed(before, quote_fields(quote)))
+        if (comment := quote.approvals[-1].comment) is not None:
+            changes["approval_comment"] = (None, comment)
+        await record(uow, principal, action, quote.id, changes, now=now)
+        await uow.commit()
+    return quote
+
+
+async def approve_quote(
+    principal: Principal,
+    quote_id: UUID,
+    comment: str | None,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    return await _decide(
+        principal,
+        quote_id,
+        AuditAction.QUOTE_APPROVED,
+        lambda quote, by, now: quote.approve(by=by, comment=comment, now=now),
+        expected_version=expected_version,
+        unit_of_work=unit_of_work,
+        clock=clock,
+    )
+
+
+async def reject_quote(
+    principal: Principal,
+    quote_id: UUID,
+    comment: str,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Reject with a comment saying what to change; the rep revises or cancels the quote."""
+    return await _decide(
+        principal,
+        quote_id,
+        AuditAction.QUOTE_REJECTED,
+        lambda quote, by, now: quote.reject(by=by, comment=comment, now=now),
+        expected_version=expected_version,
+        unit_of_work=unit_of_work,
+        clock=clock,
+    )
+
+
+async def list_approval_requests(
+    principal: Principal,
+    status: ApprovalStatus,
+    *,
+    after: Keyset | None,
+    limit: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Page[ApprovalSummary]:
+    """The approval inbox: requests with ``status``, oldest first; pending ones of expired offers
+    are left out, since they can only be revised."""
+    principal.require(Permission.QUOTES_READ)
+    today = clock().astimezone(UTC).date()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        found = await uow.quotes.approval_page(
+            status, today=today, after=None if after is None else after.id, limit=limit + 1
+        )
+    return page_of(found, limit, lambda item: Keyset(item.request.id))

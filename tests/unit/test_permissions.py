@@ -116,6 +116,14 @@ def test_every_role_sends_quotes_but_integrations_never_do(role: Role) -> None:
     assert Permission.QUOTES_SEND not in GRANTABLE_SCOPES
 
 
+def test_only_managers_and_admins_approve_quotes_and_never_integrations() -> None:
+    assert principal(Role.SALES_MANAGER).holds(Permission.QUOTES_APPROVE)
+    assert principal(Role.ADMIN).holds(Permission.QUOTES_APPROVE)
+    with pytest.raises(PermissionDeniedError, match="quotes:approve"):
+        principal(Role.SALES_REP).require(Permission.QUOTES_APPROVE)
+    assert Permission.QUOTES_APPROVE not in GRANTABLE_SCOPES
+
+
 def test_only_managers_and_admins_override_prices_and_never_integrations() -> None:
     assert principal(Role.SALES_MANAGER).holds(Permission.QUOTES_OVERRIDE)
     assert principal(Role.ADMIN).holds(Permission.QUOTES_OVERRIDE)
