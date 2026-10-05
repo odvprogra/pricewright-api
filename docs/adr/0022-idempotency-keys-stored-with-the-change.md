@@ -53,9 +53,10 @@ Practice:
 - **Replay:** the same key with the same fingerprint gets 201, the same `Location` and the
   resource's current representation and `ETag`, marked `Idempotent-Replayed: true`, and records no
   audit event. The same key with another fingerprint is a 422 (`idempotency_key_reused`).
-- **Order of checks:** authentication and permission, then the headers (a missing `If-Match` is
-  still a 428), then the key, then the resource (404, 412) and the business rules. A replay ignores
-  a stale `If-Match`, as RFC 9110 allows: the client never saw the version its own request created.
+- **Order of checks:** authentication, then the request itself (a missing `If-Match` is still a 428,
+  a malformed key a 422), then the permission, then the key, then the resource (404, 412) and the
+  business rules. A replay ignores a stale `If-Match`, as RFC 9110 allows: the client never saw the
+  version its own request created.
 - **Expiry:** 24 hours. An expired record counts as absent and is replaced by the next request with
   its key; the worker (M5) purges them.
 

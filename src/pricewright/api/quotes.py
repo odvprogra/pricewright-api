@@ -8,12 +8,13 @@ from http import HTTPStatus
 from typing import Annotated, Self
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, Response
+from fastapi import APIRouter, Header, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
+from pricewright.api.idempotency import IdempotencyKey, idempotent_request, mark_replayed
 from pricewright.api.money import MoneyJson
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.pricing import MarginFloorJson, MarginJson, StepJson, ratio
@@ -376,16 +377,22 @@ def _respond(response: Response, quote: Quote, caller: Principal, now: datetime)
     summary="Start a draft quote, optionally with its first lines, priced by the engine",
     responses=_ERRORS
     | {
+        409: {"description": "A request with this Idempotency-Key is still running"},
         422: {
-            "description": "Invalid quote, or an unknown or archived customer or product of this "
-            "tenant"
-        }
+            "description": "Invalid quote, an unknown or archived customer or product of this "
+            "tenant, or an Idempotency-Key that is invalid or was used for a different request"
+        },
     },
 )
 async def add_quote(
-    body: CreateQuoteRequest, principal: PrincipalDep, services: ServicesDep, response: Response
+    body: CreateQuoteRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    request: Request,
+    response: Response,
+    idempotency_key: IdempotencyKey = None,
 ) -> QuoteResponse:
-    quote = await create_quote(
+    created = await create_quote(
         principal,
         NewQuote(
             customer_id=body.customer_id,
@@ -395,8 +402,11 @@ async def add_quote(
         ),
         unit_of_work=services.unit_of_work,
         clock=services.clock,
+        idempotency=idempotent_request(idempotency_key, request, body),
     )
+    quote = created.value
     response.headers["Location"] = f"{router.prefix}/{quote.id}"
+    mark_replayed(response, created.replayed)
     return _respond(response, quote, principal, services.clock())
 
 

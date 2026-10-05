@@ -1,5 +1,6 @@
 """Creating and reading quotes through the use cases, with in-memory fakes."""
 
+import hashlib
 import uuid
 from collections.abc import Callable
 from datetime import date, timedelta
@@ -7,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 
+from pricewright.application.idempotency import Created
 from pricewright.application.pagination import Keyset
 from pricewright.application.ports import QuoteQuery, QuoteSort, UnitOfWork
 from pricewright.application.quotes import (
@@ -23,6 +25,12 @@ from pricewright.domain.auth import Permission, PermissionDeniedError, Principal
 from pricewright.domain.catalog import Product, UnitOfMeasure, UnknownProductError
 from pricewright.domain.customers import Customer, CustomerTier, UnknownCustomerError
 from pricewright.domain.errors import NotFoundError, StaleVersionError
+from pricewright.domain.idempotency import (
+    KEY_LIFETIME,
+    IdempotencyKeyInUseError,
+    IdempotencyKeyReusedError,
+    IdempotentRequest,
+)
 from pricewright.domain.money import Money
 from pricewright.domain.pricing import ArchivedCustomerError, Stage
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
@@ -96,11 +104,20 @@ class Fixture:
         return Principal(self.northfield.id, uuid.uuid7(), scopes=frozenset(scopes))
 
     async def create(self, new: NewQuote | None = None, caller: Principal | None = None) -> Quote:
+        return (await self.created(new, caller)).value
+
+    async def created(
+        self,
+        new: NewQuote | None = None,
+        caller: Principal | None = None,
+        idempotency: IdempotentRequest | None = None,
+    ) -> Created[Quote]:
         return await create_quote(
             caller or self.rep,
             new or NewQuote(self.acme.id, lines=[LineChange(self.bolts.id, Decimal(10))]),
             unit_of_work=self.unit_of_work,
             clock=self.clock,
+            idempotency=idempotency,
         )
 
 
@@ -170,6 +187,100 @@ async def test_an_integration_with_quotes_manage_creates_drafts(f: Fixture) -> N
 async def test_create_quote_needs_quotes_manage(f: Fixture) -> None:
     with pytest.raises(PermissionDeniedError, match="quotes:manage"):
         await f.create(caller=f.integration(Permission.QUOTES_READ))
+
+    assert f.database.quotes == {}
+
+
+KEY = str(uuid.uuid4())  # generated: gitleaks flags literal keys
+
+
+def same_request(body: str = "the draft") -> IdempotentRequest:
+    """A fingerprint stands for the method, path and body the API hashes."""
+    return IdempotentRequest(KEY, hashlib.sha256(body.encode()).hexdigest())
+
+
+async def test_create_quote_retried_with_its_key_returns_the_first_draft(f: Fixture) -> None:
+    first = await f.created(idempotency=same_request())
+    retry = await f.created(idempotency=same_request())
+
+    assert (first.replayed, retry.replayed) == (False, True)
+    assert retry.value == first.value
+    assert list(f.database.quotes) == [first.value.id]
+    assert f.database.quote_numbers == {(f.northfield.id, 2026): 1}
+    assert len(f.database.audit_events) == 1  # a replay changes nothing, so it records nothing
+
+
+async def test_create_quote_replays_the_draft_as_it_is_now(f: Fixture) -> None:
+    first = await f.created(idempotency=same_request())
+    f.clock.advance(timedelta(hours=1))
+    await change_quote_terms(
+        f.rep,
+        first.value.id,
+        QuoteTerms(notes="Rush order"),
+        expected_version=1,
+        unit_of_work=f.unit_of_work,
+        clock=f.clock,
+    )
+
+    retry = await f.created(idempotency=same_request())
+
+    assert (retry.value.id, retry.value.notes, retry.value.version) == (
+        first.value.id,
+        "Rush order",
+        2,
+    )
+
+
+async def test_create_quote_refuses_a_key_reused_for_another_request(f: Fixture) -> None:
+    await f.created(idempotency=same_request())
+
+    with pytest.raises(IdempotencyKeyReusedError, match="different request"):
+        await f.created(
+            NewQuote(f.acme.id, notes="Another draft"), idempotency=same_request("another draft")
+        )
+
+    assert len(f.database.quotes) == 1
+
+
+async def test_create_quote_keys_belong_to_their_caller(f: Fixture) -> None:
+    other_rep = Principal(f.northfield.id, uuid.uuid7(), Role.SALES_REP)
+
+    mine = await f.created(idempotency=same_request())
+    theirs = await f.created(caller=other_rep, idempotency=same_request())
+
+    assert not theirs.replayed
+    assert theirs.value.id != mine.value.id
+
+
+async def test_create_quote_key_is_free_again_after_24_hours(f: Fixture) -> None:
+    first = await f.created(idempotency=same_request())
+    f.clock.advance(KEY_LIFETIME)
+
+    later = await f.created(idempotency=same_request())
+
+    assert not later.replayed
+    assert later.value.id != first.value.id
+
+
+async def test_create_quote_refused_keeps_no_key(f: Fixture) -> None:
+    f.database.customers[f.acme.id].change(is_active=False)
+    with pytest.raises(ArchivedCustomerError):
+        await f.created(idempotency=same_request())
+    f.database.customers[f.acme.id].change(is_active=True)
+
+    retry = await f.created(idempotency=same_request())
+
+    assert not retry.replayed  # the failure changed nothing: its retry is a new attempt
+    assert f.database.idempotency_keys.keys() == {(f.northfield.id, Actor.of(f.rep), KEY)}
+
+
+async def test_create_quote_with_a_key_in_use_is_refused_at_once(f: Fixture) -> None:
+    async with f.unit_of_work() as running:
+        running.bind_tenant(f.northfield.id)
+        await running.idempotency_keys.claim(Actor.of(f.rep), KEY, now=f.clock.now)
+
+        with pytest.raises(IdempotencyKeyInUseError, match="in progress"):
+            await f.created(idempotency=same_request())
 
     assert f.database.quotes == {}
 

@@ -11,6 +11,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from pricewright.application.audit import quote_fields, quote_line_fields, record
+from pricewright.application.idempotency import Created, earlier_creation, remember_creation
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
     ApprovalSummary,
@@ -23,9 +24,10 @@ from pricewright.application.ports import (
 )
 from pricewright.application.pricing import pricing_context, tenant_of
 from pricewright.domain.actors import Actor
-from pricewright.domain.audit import AuditAction, changed, created, removed
+from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created, removed
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
+from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.pricing import ManualOverride
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quotes import LineChange, PricingContext, Quote, quote_number
@@ -50,14 +52,24 @@ def _require_override_rights(
 
 
 async def create_quote(
-    principal: Principal, new: NewQuote, *, unit_of_work: UnitOfWorkFactory, clock: Clock
-) -> Quote:
-    """A draft numbered ``{prefix}-{year}-{sequence}`` (ADR-0021), its lines priced now."""
+    principal: Principal,
+    new: NewQuote,
+    *,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+    idempotency: IdempotentRequest | None = None,
+) -> Created[Quote]:
+    """A draft numbered ``{prefix}-{year}-{sequence}`` (ADR-0021), its lines priced now.
+
+    A retry with the same ``Idempotency-Key`` gets the draft the first request created (ADR-0022).
+    """
     principal.require(Permission.QUOTES_MANAGE)
     _require_override_rights(principal, (line.override for line in new.lines))
     now = clock()
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return Created(await _quote(uow, earlier), replayed=True)
         tenant = await tenant_of(uow, principal.tenant_id)
         context = await pricing_context(
             uow, tenant, new.customer_id, {line.product_id for line in new.lines}, at=now
@@ -77,7 +89,17 @@ async def create_quote(
         await uow.quotes.add(quote)
         changes = created(quote_fields(quote))
         await record(uow, principal, AuditAction.QUOTE_CREATED, quote.id, changes, now=now)
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.QUOTE, quote.id, now=now
+        )
         await uow.commit()
+    return Created(quote)
+
+
+async def _quote(uow: UnitOfWork, quote_id: UUID) -> Quote:
+    quote = await uow.quotes.get(quote_id)
+    if quote is None:
+        raise NotFoundError("no such quote")
     return quote
 
 
@@ -87,17 +109,12 @@ async def get_quote(
     principal.require(Permission.QUOTES_READ)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
-        quote = await uow.quotes.get(quote_id)
-    if quote is None:
-        raise NotFoundError("no such quote")
-    return quote
+        return await _quote(uow, quote_id)
 
 
 async def _quote_at(uow: UnitOfWork, quote_id: UUID, expected_version: int) -> Quote:
     """The quote, if it is still at the version the caller read (ADR-0012)."""
-    quote = await uow.quotes.get(quote_id)
-    if quote is None:
-        raise NotFoundError("no such quote")
+    quote = await _quote(uow, quote_id)
     if quote.version != expected_version:
         raise StaleVersionError("the quote was changed by someone else; reload it")
     return quote
