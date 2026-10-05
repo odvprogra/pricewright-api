@@ -105,6 +105,10 @@ EXPIRABLE = frozenset({_S.PENDING_APPROVAL, _S.APPROVED, _S.SENT})
 """Offers in flight. A draft is not an offer yet: submitting it needs a future ``valid_until``."""
 
 
+def _label(status: QuoteStatus) -> str:
+    return status.value.replace("_", " ")
+
+
 def has_passed(valid_until: date, now: datetime) -> bool:
     """A quote is valid through the whole of its ``valid_until`` day, in UTC until tenants have
     time zones (ADR-0018)."""
@@ -126,8 +130,9 @@ def allowed_actions(
     An expired offer allows what ``EXPIRED`` allows, plus persisting the expiry, so the answer is
     the same before and after the job persists the status (decision D-08).
     """
-    if effective_status(status, valid_until, now) is _S.EXPIRED:
-        return frozenset(TRANSITIONS[_S.EXPIRED]) | {_A.EXPIRE}
+    effective = effective_status(status, valid_until, now)
+    if effective is not status:
+        return frozenset(TRANSITIONS[effective]) | {_A.EXPIRE}
     return frozenset(TRANSITIONS[status]) - {_A.EXPIRE}
 
 
@@ -148,4 +153,4 @@ def targets(
         raise InvalidTransitionError(f"the quote is valid until {valid_until.isoformat()}")
     if effective is not status and action in TRANSITIONS[status]:
         raise QuoteExpiredError(f"the quote expired on {valid_until.isoformat()}; revise it")
-    raise InvalidTransitionError(f"a {status.value} quote cannot {action.value}")
+    raise InvalidTransitionError(f"cannot {action.value} a quote that is {_label(status)}")

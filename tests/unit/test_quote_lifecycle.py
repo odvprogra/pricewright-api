@@ -87,7 +87,10 @@ def test_quote_lifecycle_cancels_every_open_quote(status: QuoteStatus) -> None:
 def test_quote_lifecycle_refuses_an_action_its_status_does_not_allow(
     status: QuoteStatus, action: QuoteAction
 ) -> None:
-    with pytest.raises(InvalidTransitionError, match=f"a {status} quote cannot {action}") as error:
+    label = status.replace("_", " ")
+    with pytest.raises(
+        InvalidTransitionError, match=f"cannot {action} a quote that is {label}"
+    ) as error:
         targets(status, action, valid_until=VALID, now=NOW)
 
     assert isinstance(error.value, ConflictError)  # a 409 at the API edge
@@ -135,6 +138,12 @@ def test_quote_lifecycle_expire_persists_what_the_clock_decided(status: QuoteSta
 def test_quote_lifecycle_expire_before_the_date_is_refused() -> None:
     with pytest.raises(InvalidTransitionError, match="valid until 2026-11-14"):
         targets(QuoteStatus.SENT, QuoteAction.EXPIRE, valid_until=VALID, now=NOW)
+
+
+def test_quote_lifecycle_persisted_expiry_cannot_expire_again() -> None:
+    assert allowed_actions(QuoteStatus.EXPIRED, valid_until=PAST, now=NOW) == {QuoteAction.REVISE}
+    with pytest.raises(InvalidTransitionError, match="cannot expire a quote that is expired"):
+        targets(QuoteStatus.EXPIRED, QuoteAction.EXPIRE, valid_until=PAST, now=NOW)
 
 
 @pytest.mark.parametrize("status", [QuoteStatus.DRAFT, QuoteStatus.REJECTED, QuoteStatus.ACCEPTED])
