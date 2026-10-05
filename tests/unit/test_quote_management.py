@@ -32,6 +32,7 @@ from pricewright.domain.idempotency import (
     IdempotentRequest,
 )
 from pricewright.domain.money import Money
+from pricewright.domain.numbering import NumberSeries
 from pricewright.domain.pricing import ArchivedCustomerError, Stage
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
 from pricewright.domain.quote_lifecycle import QuoteStatus
@@ -131,7 +132,7 @@ async def test_create_quote_numbers_drafts_per_tenant_and_year(f: Fixture) -> No
     second = await f.create()
 
     assert (first.number, second.number) == ("NF-2026-000001", "NF-2026-000002")
-    assert f.database.quote_numbers == {(f.northfield.id, 2026): 2}
+    assert f.database.document_numbers == {(f.northfield.id, NumberSeries.QUOTE, 2026): 2}
 
 
 async def test_create_quote_prices_its_lines_now_and_stores_it(f: Fixture) -> None:
@@ -206,7 +207,7 @@ async def test_create_quote_retried_with_its_key_returns_the_first_draft(f: Fixt
     assert (first.replayed, retry.replayed) == (False, True)
     assert retry.value == first.value
     assert list(f.database.quotes) == [first.value.id]
-    assert f.database.quote_numbers == {(f.northfield.id, 2026): 1}
+    assert f.database.document_numbers == {(f.northfield.id, NumberSeries.QUOTE, 2026): 1}
     assert len(f.database.audit_events) == 1  # a replay changes nothing, so it records nothing
 
 
@@ -300,7 +301,7 @@ async def test_a_refused_quote_takes_no_number(
     with pytest.raises((UnknownCustomerError, UnknownProductError, InvalidQuoteError)):
         await f.create(new(f))
 
-    assert (f.database.quotes, f.database.quote_numbers) == ({}, {})
+    assert (f.database.quotes, f.database.document_numbers) == ({}, {})
     assert (await f.create()).number == "NF-2026-000001"
 
 

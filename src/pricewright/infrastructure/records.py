@@ -44,6 +44,9 @@ from pricewright.domain.customers import (
     CustomerTier,
 )
 from pricewright.domain.idempotency import MAX_KEY_LENGTH as MAX_IDEMPOTENCY_KEY_LENGTH
+from pricewright.domain.numbering import NumberSeries
+from pricewright.domain.orders import MAX_CANCEL_REASON_LENGTH as MAX_ORDER_CANCEL_REASON_LENGTH
+from pricewright.domain.orders import MAX_CUSTOMER_REFERENCE_LENGTH, OrderStatus
 from pricewright.domain.pricing import MAX_REASON_LENGTH as MAX_OVERRIDE_REASON_LENGTH
 from pricewright.domain.pricing_rules import MAX_RULE_NAME_LENGTH, RuleKind
 from pricewright.domain.quote_approvals import MAX_COMMENT_LENGTH, ApprovalStatus
@@ -71,10 +74,27 @@ _RULE_KINDS = ", ".join(f"'{kind}'" for kind in RuleKind)
 _QUOTE_STATUSES = ", ".join(f"'{status}'" for status in QuoteStatus)
 _APPROVAL_STATUSES = ", ".join(f"'{status}'" for status in ApprovalStatus)
 _OVERRIDE_KINDS = "'rate', 'price'"
+_ORDER_STATUSES = ", ".join(f"'{status}'" for status in OrderStatus)
+_NUMBER_SERIES = ", ".join(f"'{series}'" for series in NumberSeries)
+# A line's margin floor and override are stored whole or not at all (quote and order lines).
+_MARGIN_FLOOR_WHOLE = (
+    "(margin_floor_rule_id IS NULL) = (margin_floor_rate IS NULL) "
+    "AND (margin_floor_rate IS NULL) = (margin_floor_label IS NULL)"
+)
+_OVERRIDE_WHOLE = (
+    "CASE override_kind "
+    "WHEN 'rate' THEN override_rate IS NOT NULL AND override_unit_price IS NULL "
+    "WHEN 'price' THEN override_unit_price IS NOT NULL AND override_rate IS NULL "
+    "ELSE override_rate IS NULL AND override_unit_price IS NULL END "
+    "AND (override_kind IS NULL) = (override_reason IS NULL) "
+    "AND (override_kind IS NULL) = (override_by IS NULL)"
+)
 # A discount is 1 - net / list: negative when an override raises prices far above the list.
 _DISCOUNT = Numeric(21, 4)
 # Prefix (5), year (4), sequence (6 or more) and two hyphens.
 _QUOTE_NUMBER_LENGTH = 24
+# A number and its revision as people read it: NF-2026-000123-R2.
+_REVISION_NUMBER_LENGTH = 32
 _QUANTITY = Numeric(10, 3)  # domain/quantities.py
 # The API middleware accepts request IDs of up to 128 characters.
 _REQUEST_ID_LENGTH = 128
@@ -428,6 +448,20 @@ class QuoteRecord(Base):
         ),
         UniqueConstraint("tenant_id", "supersedes_id"),
         UniqueConstraint("tenant_id", "superseded_by_id"),
+        # Checked at commit too: converting saves the quote (compare-and-set), then adds its order.
+        # Orders point back to quotes; use_alter breaks the cycle when sorting tables.
+        ForeignKeyConstraint(
+            ["tenant_id", "order_id"],
+            ["orders.tenant_id", "orders.id"],
+            name="fk_quotes_tenant_id_order_id_orders",
+            deferrable=True,
+            initially="DEFERRED",
+            use_alter=True,
+        ),
+        UniqueConstraint("tenant_id", "order_id"),
+        CheckConstraint(
+            "(status = 'converted') = (order_id IS NOT NULL)", name="converted_links_its_order"
+        ),
         # The list's sorts and filters (ADR-0014); by creation, the primary key serves.
         Index(None, "tenant_id", "valid_until", "id"),
         Index(None, "tenant_id", "status", "id"),
@@ -477,6 +511,7 @@ class QuoteRecord(Base):
     cancel_reason: Mapped[str | None] = mapped_column(String(MAX_CANCEL_REASON_LENGTH))
     supersedes_id: Mapped[uuid.UUID | None]
     superseded_by_id: Mapped[uuid.UUID | None]
+    order_id: Mapped[uuid.UUID | None]
     list_subtotal: Mapped[Decimal] = mapped_column(_MONEY)
     net_subtotal: Mapped[Decimal] = mapped_column(_MONEY)
     tax_rate: Mapped[Decimal] = mapped_column(_RATE)
@@ -505,21 +540,9 @@ class QuoteLineRecord(Base):
         CheckConstraint(f"unit IN ({_UNITS})", name="unit_is_known"),
         CheckConstraint("quantity > 0", name="quantity_positive"),
         CheckConstraint("jsonb_typeof(steps) = 'array'", name="steps_are_a_list"),
-        CheckConstraint(
-            "(margin_floor_rule_id IS NULL) = (margin_floor_rate IS NULL) "
-            "AND (margin_floor_rate IS NULL) = (margin_floor_label IS NULL)",
-            name="margin_floor_whole",
-        ),
+        CheckConstraint(_MARGIN_FLOOR_WHOLE, name="margin_floor_whole"),
         CheckConstraint(f"override_kind IN ({_OVERRIDE_KINDS})", name="override_kind_is_known"),
-        CheckConstraint(
-            "CASE override_kind "
-            "WHEN 'rate' THEN override_rate IS NOT NULL AND override_unit_price IS NULL "
-            "WHEN 'price' THEN override_unit_price IS NOT NULL AND override_rate IS NULL "
-            "ELSE override_rate IS NULL AND override_unit_price IS NULL END "
-            "AND (override_kind IS NULL) = (override_reason IS NULL) "
-            "AND (override_kind IS NULL) = (override_by IS NULL)",
-            name="override_whole",
-        ),
+        CheckConstraint(_OVERRIDE_WHOLE, name="override_whole"),
         CheckConstraint(f"added_by_type IN ({_ACTOR_TYPES})", name="added_by_type_is_known"),
     )
 
@@ -601,13 +624,116 @@ class ApprovalRequestRecord(Base):
     comment: Mapped[str | None] = mapped_column(String(MAX_COMMENT_LENGTH))
 
 
-class QuoteNumberCounterRecord(Base):
-    """The last quote number issued per tenant and year (ADR-0021); a rollback takes it back."""
+class OrderRecord(Base):
+    """An order: an accepted quote's snapshot and the customer as it was (ADR-0023)."""
 
-    __tablename__ = "quote_number_counters"
-    __table_args__ = (CheckConstraint("last_value >= 1", name="last_value_positive"),)
+    __tablename__ = "orders"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),  # target of the lines and the quote's link
+        UniqueConstraint("tenant_id", "number"),
+        UniqueConstraint("tenant_id", "quote_id"),  # one quote, one order
+        # The tenant's currency (ADR-0003); this key also proves the tenant exists.
+        ForeignKeyConstraint(["tenant_id", "currency"], ["tenants.id", "tenants.currency"]),
+        ForeignKeyConstraint(["tenant_id", "quote_id"], ["quotes.tenant_id", "quotes.id"]),
+        ForeignKeyConstraint(["tenant_id", "customer_id"], ["customers.tenant_id", "customers.id"]),
+        CheckConstraint(f"status IN ({_ORDER_STATUSES})", name="status_is_known"),
+        CheckConstraint(
+            "(status = 'cancelled') = (cancel_reason IS NOT NULL)", name="cancelled_with_a_reason"
+        ),
+        CheckConstraint(f"created_by_type IN ({_ACTOR_TYPES})", name="created_by_type_is_known"),
+        CheckConstraint(
+            f"customer_payment_terms_days BETWEEN 0 AND {MAX_PAYMENT_TERMS_DAYS}",
+            name="payment_terms_in_range",
+        ),
+        CheckConstraint("customer_reference <> ''", name="customer_reference_not_empty"),
+        CheckConstraint("total = net_subtotal + tax", name="total_adds_up"),
+        CheckConstraint("version >= 1", name="version_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    tenant_id: Mapped[uuid.UUID]
+    number: Mapped[str] = mapped_column(String(_QUOTE_NUMBER_LENGTH))
+    quote_id: Mapped[uuid.UUID]
+    quote_number: Mapped[str] = mapped_column(String(_REVISION_NUMBER_LENGTH))
+    customer_id: Mapped[uuid.UUID]
+    customer_account_number: Mapped[str] = mapped_column(String(MAX_ACCOUNT_NUMBER_LENGTH))
+    customer_name: Mapped[str] = mapped_column(String(MAX_CUSTOMER_NAME_LENGTH))
+    customer_tax_id: Mapped[str | None] = mapped_column(String(MAX_TAX_ID_LENGTH))
+    customer_payment_terms_days: Mapped[int] = mapped_column(SmallInteger)
+    customer_reference: Mapped[str | None] = mapped_column(String(MAX_CUSTOMER_REFERENCE_LENGTH))
+    currency: Mapped[str] = mapped_column(CHAR(3))
+    list_subtotal: Mapped[Decimal] = mapped_column(_MONEY)
+    net_subtotal: Mapped[Decimal] = mapped_column(_MONEY)
+    tax_rate: Mapped[Decimal] = mapped_column(_RATE)
+    tax: Mapped[Decimal] = mapped_column(_MONEY)
+    total: Mapped[Decimal] = mapped_column(_MONEY)
+    priced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(20))
+    status_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str | None] = mapped_column(String(MAX_ORDER_CANCEL_REASON_LENGTH))
+    created_by_type: Mapped[str] = mapped_column(String(20))
+    created_by_id: Mapped[uuid.UUID]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OrderLineRecord(Base):
+    """An accepted quote line, copied unchanged: the same columns as ``quote_lines``."""
+
+    __tablename__ = "order_lines"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),
+        ForeignKeyConstraint(["tenant_id", "order_id"], ["orders.tenant_id", "orders.id"]),
+        ForeignKeyConstraint(["tenant_id", "product_id"], ["products.tenant_id", "products.id"]),
+        ForeignKeyConstraint(["tenant_id", "currency"], ["tenants.id", "tenants.currency"]),
+        UniqueConstraint("tenant_id", "order_id", "position"),
+        CheckConstraint(f"unit IN ({_UNITS})", name="unit_is_known"),
+        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint("jsonb_typeof(steps) = 'array'", name="steps_are_a_list"),
+        CheckConstraint(_MARGIN_FLOOR_WHOLE, name="margin_floor_whole"),
+        CheckConstraint(f"override_kind IN ({_OVERRIDE_KINDS})", name="override_kind_is_known"),
+        CheckConstraint(_OVERRIDE_WHOLE, name="override_whole"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    tenant_id: Mapped[uuid.UUID]
+    order_id: Mapped[uuid.UUID]
+    position: Mapped[int] = mapped_column(SmallInteger)
+    product_id: Mapped[uuid.UUID]
+    sku: Mapped[str] = mapped_column(String(MAX_SKU_LENGTH))
+    product_name: Mapped[str] = mapped_column(String(MAX_PRODUCT_NAME_LENGTH))
+    unit: Mapped[str] = mapped_column(String(3))
+    quantity: Mapped[Decimal] = mapped_column(_QUANTITY)
+    currency: Mapped[str] = mapped_column(CHAR(3))
+    list_unit_price: Mapped[Decimal] = mapped_column(_MONEY)
+    steps: Mapped[list[dict[str, str | None]]] = mapped_column(JSONB)
+    list_total: Mapped[Decimal] = mapped_column(_MONEY)
+    net_total: Mapped[Decimal] = mapped_column(_MONEY)
+    cost_total: Mapped[Decimal] = mapped_column(_MONEY)
+    margin_floor_rule_id: Mapped[uuid.UUID | None]
+    margin_floor_label: Mapped[str | None] = mapped_column(String(MAX_RULE_NAME_LENGTH))
+    margin_floor_rate: Mapped[Decimal | None] = mapped_column(_RATE)
+    override_kind: Mapped[str | None] = mapped_column(String(5))
+    override_rate: Mapped[Decimal | None] = mapped_column(_RATE)
+    override_unit_price: Mapped[Decimal | None] = mapped_column(_MONEY)
+    override_reason: Mapped[str | None] = mapped_column(String(MAX_OVERRIDE_REASON_LENGTH))
+    override_by: Mapped[uuid.UUID | None]
+
+
+class DocumentNumberCounterRecord(Base):
+    """The last number issued per tenant, series and year (ADR-0021); a rollback takes it back."""
+
+    __tablename__ = "document_number_counters"
+    __table_args__ = (
+        CheckConstraint(f"series IN ({_NUMBER_SERIES})", name="series_is_known"),
+        CheckConstraint("last_value >= 1", name="last_value_positive"),
+    )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    series: Mapped[str] = mapped_column(String(10), primary_key=True)
     year: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     last_value: Mapped[int] = mapped_column(Integer)
 

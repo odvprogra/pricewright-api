@@ -4,7 +4,16 @@ Quotes and orders are numbered alike, each in its own series with its own prefix
 number range per document type and Dynamics 365 a prefix per record type.
 """
 
+from enum import StrEnum
+
 SEQUENCE_DIGITS = 6
+
+
+class NumberSeries(StrEnum):
+    """A tenant counts each series apart, per year."""
+
+    QUOTE = "quote"
+    ORDER = "order"
 
 
 def document_number(prefix: str, year: int, sequence: int) -> str:

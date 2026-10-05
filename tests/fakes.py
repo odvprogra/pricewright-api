@@ -27,6 +27,7 @@ from pricewright.application.ports import (
     IdempotencyKeyRepository,
     IdentityLookup,
     IssuedToken,
+    OrderRepository,
     PricingRuleQuery,
     PricingRuleRepository,
     PricingRuleSort,
@@ -51,6 +52,8 @@ from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.idempotency import IdempotencyKeyInUseError, IdempotencyRecord
+from pricewright.domain.numbering import NumberSeries
+from pricewright.domain.orders import Order
 from pricewright.domain.pricing_rules import PricingRule
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quotes import Quote
@@ -95,8 +98,9 @@ class InMemoryDatabase:
     customers: dict[UUID, Customer] = field(default_factory=dict)
     pricing_rules: dict[UUID, PricingRule] = field(default_factory=dict)
     quotes: dict[UUID, Quote] = field(default_factory=dict)
-    quote_numbers: dict[tuple[UUID, int], int] = field(default_factory=dict)
-    """The last quote number issued, per tenant and year."""
+    orders: dict[UUID, Order] = field(default_factory=dict)
+    document_numbers: dict[tuple[UUID, NumberSeries, int], int] = field(default_factory=dict)
+    """The last number issued, per tenant, series and year."""
     idempotency_keys: dict[_KeyScope, IdempotencyRecord] = field(default_factory=dict)
     held_keys: HeldKeys = field(default_factory=HeldKeys, compare=False)
     """Locks, not data: two databases with the same rows are equal whoever holds what."""
@@ -543,7 +547,7 @@ class FakeQuoteRepository:
     def __init__(
         self,
         quotes: dict[UUID, Quote],
-        numbers: dict[tuple[UUID, int], int],
+        numbers: dict[tuple[UUID, NumberSeries, int], int],
         uow: FakeUnitOfWork,
     ) -> None:
         self._quotes = quotes
@@ -555,10 +559,7 @@ class FakeQuoteRepository:
             raise RuntimeError("only a quote of the unit of work's tenant can be stored")
 
     async def allocate_number(self, year: int) -> int:
-        # Like the adapter, a number is only kept when the unit of work commits.
-        key = (self._uow.tenant_id, year)
-        self._numbers[key] = self._numbers.get(key, 0) + 1
-        return self._numbers[key]
+        return allocate(self._numbers, (self._uow.tenant_id, NumberSeries.QUOTE, year))
 
     async def add(self, quote: Quote) -> None:
         self._require_own(quote)
@@ -660,6 +661,57 @@ class FakeIdempotencyKeyRepository:
         return scope
 
 
+class FakeOrderRepository:
+    def __init__(
+        self,
+        orders: dict[UUID, Order],
+        numbers: dict[tuple[UUID, NumberSeries, int], int],
+        uow: FakeUnitOfWork,
+    ) -> None:
+        self._orders = orders
+        self._numbers = numbers
+        self._uow = uow
+
+    def _require_own(self, order: Order) -> None:
+        if order.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only an order of the unit of work's tenant can be stored")
+
+    async def allocate_number(self, year: int) -> int:
+        return allocate(self._numbers, (self._uow.tenant_id, NumberSeries.ORDER, year))
+
+    async def add(self, order: Order) -> None:
+        self._require_own(order)
+        if order.id in self._orders:
+            raise RuntimeError("an order with this id is already stored")
+        self._orders[order.id] = copy.deepcopy(order)
+
+    async def get(self, order_id: UUID) -> Order | None:
+        order = self._orders.get(order_id)
+        if order is None or order.tenant_id != self._uow.tenant_id:
+            return None
+        return copy.deepcopy(order)
+
+    async def save(self, order: Order) -> None:
+        self._require_own(order)
+        stored = self._orders.get(order.id)
+        if stored is None:
+            raise RuntimeError("only an existing order can be saved")
+        if stored.version != order.version:
+            raise StaleVersionError("the order was changed by someone else; reload it")
+        if stored.lines != order.lines:
+            raise RuntimeError("an order's lines never change")
+        order.version = stored.version + 1
+        self._orders[order.id] = copy.deepcopy(order)
+
+
+def allocate(
+    numbers: dict[tuple[UUID, NumberSeries, int], int], key: tuple[UUID, NumberSeries, int]
+) -> int:
+    """Like the adapter, a number is only kept when the unit of work commits."""
+    numbers[key] = numbers.get(key, 0) + 1
+    return numbers[key]
+
+
 class FakeIdentityLookup:
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -692,6 +744,7 @@ class FakeUnitOfWork:
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
     quotes: QuoteRepository
+    orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
 
@@ -713,7 +766,8 @@ class FakeUnitOfWork:
         self.products = FakeProductRepository(self._staged.products, self)
         self.customers = FakeCustomerRepository(self._staged.customers, self)
         self.pricing_rules = FakePricingRuleRepository(self._staged.pricing_rules, self)
-        self.quotes = FakeQuoteRepository(self._staged.quotes, self._staged.quote_numbers, self)
+        self.quotes = FakeQuoteRepository(self._staged.quotes, self._staged.document_numbers, self)
+        self.orders = FakeOrderRepository(self._staged.orders, self._staged.document_numbers, self)
         self.idempotency_keys = FakeIdempotencyKeyRepository(
             self._staged.idempotency_keys, self._staged.held_keys, self
         )
@@ -753,12 +807,33 @@ class FakeUnitOfWork:
         revisions = [(q.tenant_id, q.number, q.revision) for q in quotes]
         links = [(q.tenant_id, q.superseded_by_id) for q in quotes if q.superseded_by_id]
         links_back = [(q.tenant_id, q.supersedes_id) for q in quotes if q.supersedes_id]
-        unique_keys = (emails, names, categories, skus, accounts, revisions, links, links_back)
+        conversions = [(q.tenant_id, q.order_id) for q in quotes if q.order_id]
+        orders = staged.orders.values()
+        order_numbers = [(o.tenant_id, o.number) for o in orders]
+        orders_per_quote = [(o.tenant_id, o.quote_id) for o in orders]
+        unique_keys = (
+            emails,
+            names,
+            categories,
+            skus,
+            accounts,
+            revisions,
+            links,
+            links_back,
+            conversions,
+            order_numbers,
+            orders_per_quote,
+        )
         if any(len(keys) != len(set(keys)) for keys in unique_keys):
             raise ConflictError("the change conflicts with an existing record")
-        # The deferred foreign key: a superseded revision points to a stored successor.
+        # The deferred foreign keys: a superseded revision points to a stored successor, and a
+        # converted quote to its stored order.
         if any(successor not in staged.quotes for _, successor in links):
             raise RuntimeError("a superseded quote points to a revision that does not exist")
+        if any(order not in staged.orders for _, order in conversions):
+            raise RuntimeError("a converted quote points to an order that does not exist")
+        if any(order.quote_id not in staged.quotes for order in orders):
+            raise RuntimeError("an order points to a quote that does not exist")
         for table in dataclasses.fields(InMemoryDatabase):  # every table, new ones included
             setattr(self._database, table.name, copy.deepcopy(getattr(staged, table.name)))
 

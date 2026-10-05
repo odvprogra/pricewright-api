@@ -19,6 +19,7 @@ from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.idempotency import IdempotencyRecord
 from pricewright.domain.money import Money
+from pricewright.domain.orders import Order
 from pricewright.domain.pricing_rules import PricingRule, RuleKind
 from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus
 from pricewright.domain.quote_lifecycle import QuoteStatus
@@ -375,6 +376,31 @@ class QuoteRepository(Protocol):
         ...
 
 
+class OrderRepository(Protocol):
+    """Orders of the unit of work's tenant only (ADR-0006), with their lines (ADR-0023)."""
+
+    async def allocate_number(self, year: int) -> int:
+        """The tenant's next order number in ``year``, in a series of its own (ADR-0021).
+
+        Like quote numbers: concurrent allocations wait, and a rollback takes the number back.
+        """
+        ...
+
+    async def add(self, order: Order) -> None:
+        """Store a new order. Converting saves the quote first, so its version decides between
+        concurrent conversions, then adds the order."""
+        ...
+
+    async def get(self, order_id: UUID) -> Order | None: ...
+
+    async def save(self, order: Order) -> None:
+        """Store a change of status and bump ``order.version``, atomically; lines never change.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``order.version``.
+        """
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEventFilter:
     """Which audit events to list; a field left as ``None`` matches every event."""
@@ -478,6 +504,7 @@ class UnitOfWork(Protocol):
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
     quotes: QuoteRepository
+    orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
 
