@@ -28,6 +28,8 @@ class TenantChanges:
     name: str | None = None
     tax_rate: Decimal | None = None
     approval_threshold: Decimal | None = None
+    quote_prefix: str | None = None
+    quote_validity_days: int | None = None
 
 
 async def change_tenant(
@@ -52,6 +54,8 @@ async def change_tenant(
             name=changes.name,
             tax_rate=changes.tax_rate,
             approval_threshold=changes.approval_threshold,
+            quote_prefix=changes.quote_prefix,
+            quote_validity_days=changes.quote_validity_days,
         )
         await uow.tenants.save(tenant)
         await record(

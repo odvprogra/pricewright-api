@@ -116,6 +116,18 @@ async def test_change_tenant_records_who_changed_which_settings() -> None:
     assert event.changes == {"tax_rate": ("0.0725", "0.0800")}  # the unchanged name is left out
 
 
+async def test_change_tenant_records_new_quote_settings() -> None:
+    database = InMemoryDatabase(tenants={NORTHFIELD.id: copy.deepcopy(NORTHFIELD)})
+
+    changed = await change(
+        database, Role.ADMIN, TenantChanges(quote_prefix="NF", quote_validity_days=45)
+    )
+
+    assert (changed.settings.quote_prefix, changed.settings.quote_validity_days) == ("NF", 45)
+    [event] = database.audit_events.values()
+    assert event.changes == {"quote_prefix": ("QUO", "NF"), "quote_validity_days": (30, 45)}
+
+
 async def test_change_tenant_that_changes_nothing_records_no_event() -> None:
     stored = copy.deepcopy(NORTHFIELD)
     stored.change(tax_rate=Decimal("0.0800"))  # as PostgreSQL returns NUMERIC(5, 4)

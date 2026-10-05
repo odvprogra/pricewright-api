@@ -69,11 +69,31 @@ async def test_unit_of_work_outside_its_context_refuses_to_commit(
         await uow.commit()
 
 
+VALID_TENANT: dict[str, object] = {
+    "name": "Northfield",
+    "currency": "USD",
+    "tax_rate": Decimal("0.0725"),
+    "approval_threshold": Decimal("0.15"),
+    "quote_prefix": "NF",
+    "quote_validity_days": 30,
+}
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "constraint"),
+    [
+        ("currency", "usd", "currency_is_iso_4217"),
+        ("tax_rate", 1, "tax_rate_in_range"),
+        ("approval_threshold", 2, "approval_threshold_in_range"),
+        ("quote_prefix", "N-F", "quote_prefix_is_valid"),
+        ("quote_validity_days", 0, "quote_validity_days_in_range"),
+    ],
+)
 async def test_database_rejects_tenant_settings_the_domain_forbids(
-    session_factory: Sessions,
+    session_factory: Sessions, field: str, value: object, constraint: str
 ) -> None:
     async with session_factory() as session:
-        session.add(TenantRecord(name="Bad", currency="usd", tax_rate=1, approval_threshold=2))
+        session.add(TenantRecord(**(VALID_TENANT | {field: value})))
 
-        with pytest.raises(IntegrityError, match="ck_tenants_"):
+        with pytest.raises(IntegrityError, match=f"ck_tenants_{constraint}"):
             await session.commit()

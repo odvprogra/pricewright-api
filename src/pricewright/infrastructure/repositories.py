@@ -88,6 +88,8 @@ class SqlAlchemyTenantRepository:
                 currency=tenant.settings.currency,
                 tax_rate=tenant.settings.tax_rate,
                 approval_threshold=tenant.settings.approval_threshold,
+                quote_prefix=tenant.settings.quote_prefix,
+                quote_validity_days=tenant.settings.quote_validity_days,
                 version=tenant.version,
             )
         )
@@ -103,6 +105,8 @@ class SqlAlchemyTenantRepository:
                 currency=record.currency,
                 tax_rate=record.tax_rate,
                 approval_threshold=record.approval_threshold,
+                quote_prefix=record.quote_prefix,
+                quote_validity_days=record.quote_validity_days,
             ),
             version=record.version,
         )
@@ -116,6 +120,8 @@ class SqlAlchemyTenantRepository:
                 name=tenant.name,
                 tax_rate=tenant.settings.tax_rate,
                 approval_threshold=tenant.settings.approval_threshold,
+                quote_prefix=tenant.settings.quote_prefix,
+                quote_validity_days=tenant.settings.quote_validity_days,
                 version=TenantRecord.version + 1,
             )
             .returning(TenantRecord.version)

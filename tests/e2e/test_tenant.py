@@ -44,6 +44,8 @@ async def test_tenant_returns_the_settings_with_rates_as_strings(
         "currency": "USD",
         "tax_rate": "0.0725",
         "approval_threshold": "0.15",
+        "quote_prefix": "QUO",
+        "quote_validity_days": 30,
         "version": 1,
     }
 
@@ -83,8 +85,17 @@ async def test_admin_changes_the_tenant_with_the_current_etag(client: httpx.Asyn
         "currency": "USD",
         "tax_rate": "0.08",
         "approval_threshold": "0.15",
+        "quote_prefix": "QUO",
+        "quote_validity_days": 30,
         "version": 2,
     }
+
+
+async def test_admin_changes_the_quote_settings(client: httpx.AsyncClient) -> None:
+    response = await patch(client, {"quote_prefix": "NF", "quote_validity_days": 45})
+
+    assert response.status_code == 200
+    assert (response.json()["quote_prefix"], response.json()["quote_validity_days"]) == ("NF", 45)
 
 
 async def test_a_second_change_with_the_old_etag_is_a_412(client: httpx.AsyncClient) -> None:
@@ -115,8 +126,15 @@ async def test_a_sales_manager_cannot_change_the_tenant(client: httpx.AsyncClien
 
 @pytest.mark.parametrize(
     "body",
-    [{}, {"currency": "EUR"}, {"tax_rate": "1.5"}],
-    ids=["empty", "currency", "out-of-range"],
+    [
+        {},
+        {"currency": "EUR"},
+        {"tax_rate": "1.5"},
+        {"quote_prefix": "N-F"},
+        {"quote_validity_days": 0},
+        {"quote_validity_days": "a month"},
+    ],
+    ids=["empty", "currency", "out-of-range", "prefix", "validity", "validity-type"],
 )
 async def test_invalid_changes_are_a_422(
     client: httpx.AsyncClient, body: dict[str, object]

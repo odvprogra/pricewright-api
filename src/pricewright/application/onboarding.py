@@ -6,7 +6,13 @@ from uuid import UUID
 
 from pricewright.application.ports import PasswordHasher, UnitOfWorkFactory
 from pricewright.application.users import NewUser, ensure_email_is_free, prepare_user
-from pricewright.domain.tenants import DEFAULT_APPROVAL_THRESHOLD, Tenant, TenantSettings
+from pricewright.domain.tenants import (
+    DEFAULT_APPROVAL_THRESHOLD,
+    DEFAULT_QUOTE_PREFIX,
+    DEFAULT_QUOTE_VALIDITY_DAYS,
+    Tenant,
+    TenantSettings,
+)
 from pricewright.domain.users import Role
 
 
@@ -19,6 +25,8 @@ class RegisterTenant:
     admin_full_name: str
     admin_password: str = field(repr=False)
     approval_threshold: Decimal = DEFAULT_APPROVAL_THRESHOLD
+    quote_prefix: str = DEFAULT_QUOTE_PREFIX
+    quote_validity_days: int = DEFAULT_QUOTE_VALIDITY_DAYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +45,8 @@ async def register_tenant(
             currency=command.currency,
             tax_rate=command.tax_rate,
             approval_threshold=command.approval_threshold,
+            quote_prefix=command.quote_prefix,
+            quote_validity_days=command.quote_validity_days,
         ),
     )
     admin = await prepare_user(

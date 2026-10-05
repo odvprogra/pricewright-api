@@ -2042,6 +2042,33 @@
             ],
             "title": "Name"
           },
+          "quote_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "2 to 5 upper-case letters or digits, starting with a letter. Numbers new quotes only: issued numbers never change.",
+            "examples": [
+              "NF"
+            ],
+            "title": "Quote Prefix"
+          },
+          "quote_validity_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From 1 to 365.",
+            "title": "Quote Validity Days"
+          },
           "tax_rate": {
             "anyOf": [
               {
@@ -2083,6 +2110,19 @@
             "title": "Name",
             "type": "string"
           },
+          "quote_prefix": {
+            "description": "Starts every new quote number: NF gives NF-2026-000123.",
+            "examples": [
+              "NF"
+            ],
+            "title": "Quote Prefix",
+            "type": "string"
+          },
+          "quote_validity_days": {
+            "description": "How long a new quote is valid unless the rep sets another date.",
+            "title": "Quote Validity Days",
+            "type": "integer"
+          },
           "tax_rate": {
             "description": "Flat tax rate applied to quotes, e.g. 0.0725.",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -2101,6 +2141,8 @@
           "currency",
           "tax_rate",
           "approval_threshold",
+          "quote_prefix",
+          "quote_validity_days",
           "version"
         ],
         "title": "TenantResponse",
@@ -5043,7 +5085,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Change the tenant's name or rates (admins)",
+        "summary": "Change the tenant's name, rates or quote settings (admins)",
         "tags": [
           "tenant"
         ]

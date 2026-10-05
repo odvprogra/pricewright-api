@@ -65,6 +65,20 @@ async def test_create_tenant_reads_the_password_from_stdin() -> None:
     assert admin.password_hash == FakePasswordHasher.PREFIX + PASSWORD
 
 
+async def test_create_tenant_takes_the_quote_settings_or_their_defaults() -> None:
+    with_prefix, defaulted = InMemoryDatabase(), InMemoryDatabase()
+    argv = [*CREATE_NORTHFIELD, "--password-stdin"]
+
+    settings = ["--quote-prefix", "NF", "--quote-validity-days", "45"]
+    await run([*argv, *settings], Terminal(stdin=PASSWORD + "\n"), with_prefix)
+    await run(argv, Terminal(stdin=PASSWORD + "\n"), defaulted)
+
+    [given] = with_prefix.tenants.values()
+    [default] = defaulted.tenants.values()
+    assert (given.settings.quote_prefix, given.settings.quote_validity_days) == ("NF", 45)
+    assert (default.settings.quote_prefix, default.settings.quote_validity_days) == ("QUO", 30)
+
+
 async def test_create_tenant_prompts_twice_for_the_password() -> None:
     database, terminal = InMemoryDatabase(), Terminal(answers=(PASSWORD, PASSWORD))
 

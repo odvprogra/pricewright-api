@@ -3,7 +3,7 @@
 Tenants are onboarded by an operator, not through the API (brief §2 has no platform role):
 
     pricewright-admin create-tenant --name "Northfield Supply" --currency USD --tax-rate 0.0725 \\
-        --admin-email avery@northfield.example --admin-name "Avery Admin"
+        --quote-prefix NF --admin-email avery@northfield.example --admin-name "Avery Admin"
 
 The admin password is prompted for, or read from standard input with ``--password-stdin`` (scripts,
 seeds). It is never an argument, so it cannot end up in the shell history or the process list.
@@ -19,7 +19,11 @@ from typing import TextIO
 from pricewright.application.onboarding import RegisterTenant, register_tenant
 from pricewright.application.ports import PasswordHasher, UnitOfWorkFactory
 from pricewright.domain.errors import DomainError
-from pricewright.domain.tenants import DEFAULT_APPROVAL_THRESHOLD
+from pricewright.domain.tenants import (
+    DEFAULT_APPROVAL_THRESHOLD,
+    DEFAULT_QUOTE_PREFIX,
+    DEFAULT_QUOTE_VALIDITY_DAYS,
+)
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -52,6 +56,17 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--currency", required=True, help="ISO 4217 code, e.g. USD")
     create.add_argument("--tax-rate", required=True, type=_decimal, help="0.0725 for 7.25%%")
     create.add_argument("--approval-threshold", type=_decimal, default=DEFAULT_APPROVAL_THRESHOLD)
+    create.add_argument(
+        "--quote-prefix",
+        default=DEFAULT_QUOTE_PREFIX,
+        help="starts every quote number, e.g. NF for NF-2026-000123",
+    )
+    create.add_argument(
+        "--quote-validity-days",
+        type=int,
+        default=DEFAULT_QUOTE_VALIDITY_DAYS,
+        help="how long a new quote is valid",
+    )
     create.add_argument("--admin-email", required=True)
     create.add_argument("--admin-name", required=True)
     create.add_argument(
@@ -86,6 +101,8 @@ async def run(
             currency=args.currency,
             tax_rate=args.tax_rate,
             approval_threshold=args.approval_threshold,
+            quote_prefix=args.quote_prefix,
+            quote_validity_days=args.quote_validity_days,
             admin_email=args.admin_email,
             admin_full_name=args.admin_name,
             admin_password=_admin_password(args, console),
