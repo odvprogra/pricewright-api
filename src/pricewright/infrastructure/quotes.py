@@ -6,7 +6,6 @@ need, so nothing depends on how the ORM orders a flush across tables.
 
 from collections.abc import Sequence
 from datetime import date
-from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -26,87 +25,23 @@ from pricewright.domain.audit import ActorType
 from pricewright.domain.catalog import UnitOfMeasure
 from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.money import Money
-from pricewright.domain.pricing import (
-    Adjustment,
-    ApprovalReason,
-    ManualOverride,
-    MarginFloor,
-    PriceBreakdown,
-    PricedLine,
-    PriceOverride,
-    RateOverride,
-    Stage,
-)
+from pricewright.domain.numbering import NumberSeries
+from pricewright.domain.pricing import ApprovalReason
 from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus
 from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import Quote, QuoteLine, QuoteTotals
+from pricewright.infrastructure.line_snapshots import override_of, priced_line, snapshot_values
+from pricewright.infrastructure.numbering import allocate_number
 from pricewright.infrastructure.records import (
     ApprovalRequestRecord,
     QuoteLineRecord,
-    QuoteNumberCounterRecord,
     QuoteRecord,
 )
 from pricewright.infrastructure.repositories import TenantScope
 
-type _Step = dict[str, str | None]
-
 
 def _actor(kind: str, actor_id: UUID) -> Actor:
     return Actor(ActorType(kind), actor_id)
-
-
-def _optional(value: Decimal | UUID | None) -> str | None:
-    return None if value is None else str(value)
-
-
-def _step_json(step: Adjustment) -> _Step:
-    """Decimals and ids as strings, as everywhere JSON carries them (ADR-0003)."""
-    return {
-        "stage": step.stage.value,
-        "rule_id": _optional(step.rule_id),
-        "label": step.label,
-        "rate": _optional(step.rate),
-        "amount": str(step.amount.amount),
-        "unit_price": str(step.unit_price.amount),
-    }
-
-
-def _step(data: _Step, currency: str) -> Adjustment:
-    def money(key: str) -> Money:
-        return Money(Decimal(str(data[key])), currency)
-
-    rule_id, rate = data["rule_id"], data["rate"]
-    return Adjustment(
-        stage=Stage(str(data["stage"])),
-        label=str(data["label"]),
-        rule_id=None if rule_id is None else UUID(rule_id),
-        rate=None if rate is None else Decimal(rate),
-        amount=money("amount"),
-        unit_price=money("unit_price"),
-    )
-
-
-def _override_values(override: ManualOverride | None) -> dict[str, object]:
-    match override:
-        case RateOverride(rate, reason):
-            return {"override_kind": "rate", "override_rate": rate, "override_reason": reason}
-        case PriceOverride(unit_price, reason):
-            return {
-                "override_kind": "price",
-                "override_unit_price": unit_price.amount,
-                "override_reason": reason,
-            }
-        case _:
-            return {"override_kind": None}
-
-
-def _override(record: QuoteLineRecord) -> ManualOverride | None:
-    reason = record.override_reason or ""
-    if record.override_kind == "rate" and record.override_rate is not None:
-        return RateOverride(record.override_rate, reason)
-    if record.override_kind == "price" and record.override_unit_price is not None:
-        return PriceOverride(Money(record.override_unit_price, record.currency), reason)
-    return None
 
 
 # Column values for SQL statements: ``Any`` at this boundary, since each column has its own type.
@@ -125,6 +60,7 @@ def _quote_values(quote: Quote) -> dict[str, Any]:
         "submitted_at": quote.submitted_at,
         "cancel_reason": quote.cancel_reason,
         "superseded_by_id": quote.superseded_by_id,
+        "order_id": quote.order_id,
         "list_subtotal": totals.list_subtotal.amount,
         "net_subtotal": totals.net_subtotal.amount,
         "tax_rate": totals.tax_rate,
@@ -136,32 +72,12 @@ def _quote_values(quote: Quote) -> dict[str, Any]:
 
 
 def _line_values(quote: Quote, line: QuoteLine, position: int) -> dict[str, Any]:
-    pricing, floor = line.pricing, line.pricing.margin_floor
     return {
         "id": line.id,
         "tenant_id": quote.tenant_id,
         "quote_id": quote.id,
         "position": position,
-        "product_id": line.product_id,
-        "sku": line.sku,
-        "product_name": line.product_name,
-        "unit": line.unit.value,
-        "quantity": line.quantity,
-        "currency": quote.currency,
-        "list_unit_price": pricing.breakdown.list_unit_price.amount,
-        "steps": [_step_json(step) for step in pricing.breakdown.steps],
-        "list_total": pricing.list_total.amount,
-        "net_total": pricing.net_total.amount,
-        "cost_total": pricing.cost_total.amount,
-        "margin_floor_rule_id": None if floor is None else floor.rule_id,
-        "margin_floor_label": None if floor is None else floor.label,
-        "margin_floor_rate": None if floor is None else floor.rate,
-        "override_kind": None,
-        "override_rate": None,
-        "override_unit_price": None,
-        "override_reason": None,
-        **_override_values(line.override),
-        "override_by": line.override_by,
+        **snapshot_values(line, quote.currency),
         "added_by_type": line.added_by.type.value,
         "added_by_id": line.added_by.id,
     }
@@ -189,28 +105,6 @@ def _approval_values(quote: Quote, request: ApprovalRequest) -> dict[str, Any]:
 
 
 def _to_line(record: QuoteLineRecord) -> QuoteLine:
-    currency = record.currency
-    floor = (
-        None
-        if record.margin_floor_rule_id is None
-        or record.margin_floor_rate is None
-        or record.margin_floor_label is None
-        else MarginFloor(
-            record.margin_floor_rule_id, record.margin_floor_label, record.margin_floor_rate
-        )
-    )
-    pricing = PricedLine(
-        product_id=record.product_id,
-        quantity=record.quantity,
-        breakdown=PriceBreakdown(
-            Money(record.list_unit_price, currency),
-            tuple(_step(step, currency) for step in record.steps),
-        ),
-        list_total=Money(record.list_total, currency),
-        net_total=Money(record.net_total, currency),
-        cost_total=Money(record.cost_total, currency),
-        margin_floor=floor,
-    )
     return QuoteLine(
         id=record.id,
         product_id=record.product_id,
@@ -219,8 +113,8 @@ def _to_line(record: QuoteLineRecord) -> QuoteLine:
         unit=UnitOfMeasure(record.unit),
         quantity=record.quantity,
         added_by=_actor(record.added_by_type, record.added_by_id),
-        pricing=pricing,
-        override=_override(record),
+        pricing=priced_line(record),
+        override=override_of(record),
         override_by=record.override_by,
     )
 
@@ -283,6 +177,7 @@ def _to_quote(
         cancel_reason=record.cancel_reason,
         supersedes_id=record.supersedes_id,
         superseded_by_id=record.superseded_by_id,
+        order_id=record.order_id,
         version=record.version,
     )
 
@@ -314,21 +209,7 @@ class SqlAlchemyQuoteRepository:
             raise RuntimeError("only a quote of the unit of work's tenant can be stored")
 
     async def allocate_number(self, year: int) -> int:
-        # The upsert locks the counter row until commit: concurrent allocations in the tenant and
-        # year wait, and a rollback takes the number back (ADR-0021).
-        counter = QuoteNumberCounterRecord
-        allocated = await self._session.scalar(
-            pg_insert(counter)
-            .values(tenant_id=self._scope.tenant_id, year=year, last_value=1)
-            .on_conflict_do_update(
-                index_elements=[counter.tenant_id, counter.year],
-                set_={"last_value": counter.last_value + 1},
-            )
-            .returning(counter.last_value)
-        )
-        if allocated is None:  # pragma: no cover - an upsert with RETURNING always returns a row
-            raise RuntimeError("the quote number counter returned nothing")
-        return int(allocated)
+        return await allocate_number(self._session, self._scope.tenant_id, NumberSeries.QUOTE, year)
 
     async def add(self, quote: Quote) -> None:
         self._require_own(quote)

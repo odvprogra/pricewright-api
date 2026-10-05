@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-05
+- **Amended:** 2026-10-05 — orders are numbered the same way, in a series of their own with the
+  tenant's order prefix
 
 ## Context
 
@@ -39,6 +41,14 @@ and ask about it.
   locks the counter row until commit: concurrent quote creations in the same tenant wait for each
   other, and a rollback takes the number back. Numbers are issued when a draft is created, as SAP
   and Dynamics 365 do, and quotes are cancelled, never deleted, so the series has no gaps.
+- **Orders (amendment, M6):** numbered alike, `{order prefix}-{year}-{sequence}`
+  (`ORD-2026-000045`), in a series of their own, as SAP assigns a number range per document type and
+  Dynamics 365 Sales a prefix per record type (`QUO`, `ORD`, `INV`;
+  [auto-numbering](https://learn.microsoft.com/en-us/power-platform/admin/change-auto-number-prefix-contract-case-article-quote-order-invoice-campaign-category-knowledge-articles)).
+  The counter table becomes `document_number_counters`, keyed by tenant, series (`quote`, `order`)
+  and year; existing quote counts carry over. The tenant's `order_prefix` defaults to `ORD` and must
+  differ from its quote prefix, so a number never names a quote and an order at once. An order's
+  number is issued when it is converted (ADR-0023).
 
 ## Alternatives considered
 
