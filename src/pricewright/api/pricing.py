@@ -30,7 +30,7 @@ _FOUR_PLACES = Decimal(1).scaleb(-RATIO_DECIMAL_PLACES)
 _QUANTITY_PLACES = Decimal(1).scaleb(-QUANTITY_DECIMAL_PLACES)
 
 
-def _ratio(value: Decimal) -> Decimal:
+def ratio(value: Decimal) -> Decimal:
     return value.quantize(_FOUR_PLACES)
 
 
@@ -70,7 +70,7 @@ class StepJson(BaseModel):
             stage=step.stage.value,
             rule_id=step.rule_id,
             label=step.label,
-            rate=None if step.rate is None else _ratio(step.rate),
+            rate=None if step.rate is None else ratio(step.rate),
             amount=MoneyJson.of(step.amount),
             unit_price=MoneyJson.of(step.unit_price),
         )
@@ -130,13 +130,13 @@ class PricedLineJson(BaseModel):
             net_total=MoneyJson.of(line.net_total),
             margin=MarginJson(
                 amount=MoneyJson.of(line.margin),
-                rate=None if margin is None else _ratio(margin),
+                rate=None if margin is None else ratio(margin),
             )
             if caller.holds(Permission.COSTS_READ)
             else None,
             margin_floor=None
             if floor is None
-            else MarginFloorJson(rule_id=floor.rule_id, label=floor.label, rate=_ratio(floor.rate)),
+            else MarginFloorJson(rule_id=floor.rule_id, label=floor.label, rate=ratio(floor.rate)),
             below_margin_floor=line.below_margin_floor,
         )
 
@@ -197,11 +197,11 @@ async def preview(
         ],
         list_subtotal=MoneyJson.of(quote.list_subtotal),
         net_subtotal=MoneyJson.of(quote.net_subtotal),
-        tax_rate=_ratio(quote.tax_rate),
+        tax_rate=ratio(quote.tax_rate),
         tax=MoneyJson.of(quote.tax),
         total=MoneyJson.of(quote.total),
         discount=quote.discount,
-        approval_threshold=_ratio(quote.approval_threshold),
+        approval_threshold=ratio(quote.approval_threshold),
         requires_approval=quote.requires_approval,
         approval_reasons=[reason.value for reason in quote.approval_reasons],
     )

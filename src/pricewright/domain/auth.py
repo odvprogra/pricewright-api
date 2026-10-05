@@ -42,6 +42,9 @@ class Permission(StrEnum):
     PRICING_READ = "pricing:read"
     """The pricing rules, and prices computed with them."""
     PRICING_MANAGE = "pricing:manage"
+    QUOTES_READ = "quotes:read"
+    QUOTES_MANAGE = "quotes:manage"
+    """Create and edit drafts and their lines, submit, recall, cancel and revise quotes."""
 
 
 _SELLING = frozenset(
@@ -52,12 +55,14 @@ _SELLING = frozenset(
         Permission.CUSTOMERS_READ,
         Permission.CUSTOMERS_MANAGE,
         Permission.PRICING_READ,
+        Permission.QUOTES_READ,
+        Permission.QUOTES_MANAGE,
     }
 )
 
 # Brief §2: everyone sees the tenant's settings, the catalog with its costs (reps see margins on
-# quote lines, brief §3) and the pricing rules, and manages customers; managers also manage the
-# pricing rules; only admins change the settings and the catalog, and manage users.
+# quote lines, brief §3) and the pricing rules, and manages customers and quotes; managers also
+# manage the pricing rules; only admins change the settings and the catalog, and manage users.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
     Role.SALES_REP: _SELLING,
     Role.SALES_MANAGER: _SELLING | {Permission.PRICING_MANAGE},
