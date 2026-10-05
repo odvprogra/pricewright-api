@@ -55,7 +55,7 @@ class QuoteNotEditableError(ConflictError):
 
 
 class UnknownQuoteLineError(NotFoundError):
-    code = "quote_line_not_found"
+    """A 404 like any other: the line is not on this quote."""
 
 
 class EmptyQuoteError(ConflictError):

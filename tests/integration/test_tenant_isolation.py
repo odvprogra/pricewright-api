@@ -124,6 +124,7 @@ async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str
             "customer_id": customer.json()["id"],
             "rule_id": rule.json()["id"],
             "quote_id": quote.json()["id"],
+            "line_id": quote.json()["lines"][0]["id"],
         },
     )
 
@@ -168,6 +169,7 @@ async def test_attempts_from_another_tenant_change_nothing(world: World) -> None
     assert (rule.json()["is_active"], rule.json()["version"]) == (True, 1)
     quote = await world.client.get(f"/api/v1/quotes/{ids['quote_id']}", headers=admin)
     assert (quote.json()["notes"], quote.json()["version"]) == (None, 1)
+    assert [line["quantity"] for line in quote.json()["lines"]] == ["10.000"]
 
 
 async def test_lists_only_show_the_callers_tenant(world: World) -> None:

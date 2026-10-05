@@ -109,6 +109,14 @@ def test_integrations_can_be_granted_quote_drafting() -> None:
     assert {Permission.QUOTES_READ, Permission.QUOTES_MANAGE} <= GRANTABLE_SCOPES
 
 
+def test_only_managers_and_admins_override_prices_and_never_integrations() -> None:
+    assert principal(Role.SALES_MANAGER).holds(Permission.QUOTES_OVERRIDE)
+    assert principal(Role.ADMIN).holds(Permission.QUOTES_OVERRIDE)
+    with pytest.raises(PermissionDeniedError, match="quotes:override"):
+        principal(Role.SALES_REP).require(Permission.QUOTES_OVERRIDE)
+    assert Permission.QUOTES_OVERRIDE not in GRANTABLE_SCOPES
+
+
 def test_integrations_can_read_pricing_but_never_change_it() -> None:
     assert Permission.PRICING_READ in GRANTABLE_SCOPES
     assert Permission.PRICING_MANAGE not in GRANTABLE_SCOPES

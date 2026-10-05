@@ -66,4 +66,19 @@ CASES = (
         json={"notes": "Hijacked"},
         headers={"If-Match": '"1"'},
     ),
+    IsolationCase(
+        "POST",
+        "/api/v1/quotes/{quote_id}/lines",
+        json={"product_id": "01900000-0000-7000-8000-000000000000", "quantity": "1"},
+        headers={"If-Match": '"1"'},
+    ),
+    IsolationCase(
+        "PATCH",
+        "/api/v1/quotes/{quote_id}/lines/{line_id}",
+        json={"quantity": "99"},
+        headers={"If-Match": '"1"'},
+    ),
+    IsolationCase(
+        "DELETE", "/api/v1/quotes/{quote_id}/lines/{line_id}", headers={"If-Match": '"1"'}
+    ),
 )

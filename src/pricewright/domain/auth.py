@@ -45,6 +45,8 @@ class Permission(StrEnum):
     QUOTES_READ = "quotes:read"
     QUOTES_MANAGE = "quotes:manage"
     """Create and edit drafts and their lines, submit, recall, cancel and revise quotes."""
+    QUOTES_OVERRIDE = "quotes:override"
+    """Set or clear a manual price override on a quote line (brief §4, rule 1)."""
 
 
 _SELLING = frozenset(
@@ -62,18 +64,20 @@ _SELLING = frozenset(
 
 # Brief §2: everyone sees the tenant's settings, the catalog with its costs (reps see margins on
 # quote lines, brief §3) and the pricing rules, and manages customers and quotes; managers also
-# manage the pricing rules; only admins change the settings and the catalog, and manage users.
+# manage the pricing rules and override prices on quote lines; only admins change the settings
+# and the catalog, and manage users.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
     Role.SALES_REP: _SELLING,
-    Role.SALES_MANAGER: _SELLING | {Permission.PRICING_MANAGE},
+    Role.SALES_MANAGER: _SELLING | {Permission.PRICING_MANAGE, Permission.QUOTES_OVERRIDE},
     Role.ADMIN: frozenset(Permission),
 }
 
 
 # Some permissions stay with people, whatever a service account is granted: administering the
 # tenant, its users and its service accounts; reading the audit trail of what they do; changing the
-# catalog or the pricing rules, so a person approves every price change (decision D-02); and reading
-# costs, which an integration such as an LLM drafting customer messages could leak (ADR-0017).
+# catalog or the pricing rules, or overriding a quote's prices, so a person decides every price
+# change (decision D-02); and reading costs, which an integration such as an LLM drafting customer
+# messages could leak (ADR-0017).
 PEOPLE_ONLY_PERMISSIONS = frozenset(
     {
         Permission.TENANT_MANAGE,
@@ -83,6 +87,7 @@ PEOPLE_ONLY_PERMISSIONS = frozenset(
         Permission.CATALOG_MANAGE,
         Permission.COSTS_READ,
         Permission.PRICING_MANAGE,
+        Permission.QUOTES_OVERRIDE,
     }
 )
 GRANTABLE_SCOPES = frozenset(Permission) - PEOPLE_ONLY_PERMISSIONS
