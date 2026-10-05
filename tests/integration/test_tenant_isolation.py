@@ -39,7 +39,7 @@ async def bearer(client: httpx.AsyncClient, email: str, password: str) -> dict[s
 @pytest.fixture
 async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str) -> World:
     """Northfield with a rep, an integration and its key, a category, a product, a customer, a
-    pricing rule and a draft quote.
+    pricing rule, a draft quote and an order converted from another quote.
 
     Larkspur has only its admin.
     """
@@ -111,6 +111,7 @@ async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str
         },
         headers=northfield,
     )
+    order_id = await converted(client, northfield, customer.json()["id"], product.json()["id"])
     return World(
         client=client,
         northfield_admin=northfield,
@@ -125,8 +126,30 @@ async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str
             "rule_id": rule.json()["id"],
             "quote_id": quote.json()["id"],
             "line_id": quote.json()["lines"][0]["id"],
+            "order_id": order_id,
         },
     )
+
+
+async def converted(
+    client: httpx.AsyncClient, headers: dict[str, str], customer_id: str, product_id: str
+) -> str:
+    """A quote submitted (it needs no approval), sent, accepted and converted: the order's id."""
+    quote = await client.post(
+        "/api/v1/quotes",
+        json={"customer_id": customer_id, "lines": [{"product_id": product_id, "quantity": "2"}]},
+        headers=headers,
+    )
+    path = f"/api/v1/quotes/{quote.json()['id']}"
+    for version, action in enumerate(("submit", "send", "accept"), start=1):
+        moved = await client.post(
+            f"{path}/{action}", headers=headers | {"If-Match": f'"{version}"'}
+        )
+        assert moved.status_code == 200, moved.text
+    order = await client.post(f"{path}/convert", json={}, headers=headers | {"If-Match": '"4"'})
+    assert order.status_code == 201, order.text
+    order_id: str = order.json()["id"]
+    return order_id
 
 
 async def call_as_larkspur(world: World, case: IsolationCase) -> httpx.Response:
@@ -170,6 +193,8 @@ async def test_attempts_from_another_tenant_change_nothing(world: World) -> None
     quote = await world.client.get(f"/api/v1/quotes/{ids['quote_id']}", headers=admin)
     assert (quote.json()["notes"], quote.json()["version"]) == (None, 1)
     assert [line["quantity"] for line in quote.json()["lines"]] == ["10.000"]
+    order = await world.client.get(f"/api/v1/orders/{ids['order_id']}", headers=admin)
+    assert (order.json()["status"], order.json()["version"]) == ("open", 1)
 
 
 async def test_lists_only_show_the_callers_tenant(world: World) -> None:

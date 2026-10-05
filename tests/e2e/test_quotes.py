@@ -138,6 +138,7 @@ async def test_a_rep_starts_a_draft_priced_line_by_line(client: httpx.AsyncClien
         "cancel_reason": None,
         "supersedes_id": None,
         "superseded_by_id": None,
+        "order_id": None,
         "approvals": [],
         "version": 1,
     }

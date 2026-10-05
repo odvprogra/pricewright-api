@@ -16,6 +16,7 @@ from pricewright.api import (
     customers,
     health,
     me,
+    orders,
     pricing,
     pricing_rules,
     product_categories,
@@ -62,6 +63,7 @@ def create_app(
     app.include_router(pricing.router)
     app.include_router(quotes.router)
     app.include_router(approvals.router)
+    app.include_router(orders.router)
     app.include_router(audit.router)
     register_problem_handlers(app)
     app.add_middleware(RequestContextMiddleware)

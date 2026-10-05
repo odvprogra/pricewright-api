@@ -16,6 +16,7 @@ from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.money import AMOUNT_DECIMAL_PLACES
+from pricewright.domain.orders import Order
 from pricewright.domain.pricing import ManualOverride, RateOverride
 from pricewright.domain.pricing_rules import RATE_DECIMAL_PLACES as RULE_RATE_PLACES
 from pricewright.domain.pricing_rules import PricingRule
@@ -175,6 +176,25 @@ def quote_fields(quote: Quote) -> dict[str, AuditValue]:
         "cancel_reason": quote.cancel_reason,
         "supersedes_id": _id(quote.supersedes_id),
         "superseded_by_id": _id(quote.superseded_by_id),
+        "order_id": _id(quote.order_id),
+    }
+
+
+def order_fields(order: Order) -> dict[str, AuditValue]:
+    """What the order committed to; its lines are the quote's, kept in the quote's events."""
+    totals = order.totals
+    return {
+        "number": order.number,
+        "quote_id": str(order.quote_id),
+        "quote_number": order.quote_number,
+        "customer_id": str(order.customer.id),
+        "customer_reference": order.customer_reference,
+        "status": order.status.value,
+        "lines": len(order.lines),
+        "net_subtotal": _decimal(totals.net_subtotal.amount, AMOUNT_DECIMAL_PLACES),
+        "tax": _decimal(totals.tax.amount, AMOUNT_DECIMAL_PLACES),
+        "total": _decimal(totals.total.amount, AMOUNT_DECIMAL_PLACES),
+        "cancel_reason": order.cancel_reason,
     }
 
 

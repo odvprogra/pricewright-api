@@ -51,6 +51,9 @@ class Permission(StrEnum):
     """Approve or reject a quote someone else built (ADR-0020)."""
     QUOTES_OVERRIDE = "quotes:override"
     """Set or clear a manual price override on a quote line (brief §4, rule 1)."""
+    ORDERS_READ = "orders:read"
+    ORDERS_MANAGE = "orders:manage"
+    """Convert an accepted quote into an order, and cancel an order: commitments (ADR-0023)."""
 
 
 _SELLING = frozenset(
@@ -64,13 +67,15 @@ _SELLING = frozenset(
         Permission.QUOTES_READ,
         Permission.QUOTES_MANAGE,
         Permission.QUOTES_SEND,
+        Permission.ORDERS_READ,
+        Permission.ORDERS_MANAGE,
     }
 )
 
 # Brief §2: everyone sees the tenant's settings, the catalog with its costs (reps see margins on
-# quote lines, brief §3) and the pricing rules, and manages customers and quotes; managers also
-# manage the pricing rules, approve or reject quotes and override prices on quote lines; only
-# admins change the settings and the catalog, and manage users.
+# quote lines, brief §3) and the pricing rules, manages customers and quotes, and converts accepted
+# quotes into orders; managers also manage the pricing rules, approve or reject quotes and override
+# prices on quote lines; only admins change the settings and the catalog, and manage users.
 ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
     Role.SALES_REP: _SELLING,
     Role.SALES_MANAGER: _SELLING
@@ -82,9 +87,10 @@ ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
 # Some permissions stay with people, whatever a service account is granted: administering the
 # tenant, its users and its service accounts; reading the audit trail of what they do; changing the
 # catalog or the pricing rules, overriding a quote's prices or approving a quote, so a person
-# decides every price change (decision D-02); sending quotes and recording their acceptance, which
-# commit the company to a customer; and reading costs, which an integration such as an LLM drafting
-# customer messages could leak (ADR-0017, OWASP LLM06 excessive agency).
+# decides every price change (decision D-02); sending quotes, recording their acceptance, turning
+# them into orders and cancelling those, which commit the company to a customer (ADR-0023); and
+# reading costs, which an integration such as an LLM drafting customer messages could leak
+# (ADR-0017, OWASP LLM06 excessive agency).
 PEOPLE_ONLY_PERMISSIONS = frozenset(
     {
         Permission.TENANT_MANAGE,
@@ -97,6 +103,7 @@ PEOPLE_ONLY_PERMISSIONS = frozenset(
         Permission.QUOTES_SEND,
         Permission.QUOTES_APPROVE,
         Permission.QUOTES_OVERRIDE,
+        Permission.ORDERS_MANAGE,
     }
 )
 GRANTABLE_SCOPES = frozenset(Permission) - PEOPLE_ONLY_PERMISSIONS

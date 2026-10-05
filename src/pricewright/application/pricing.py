@@ -13,7 +13,7 @@ from uuid import UUID
 from pricewright.application.ports import Clock, UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import Product, UnknownProductError
-from pricewright.domain.customers import UnknownCustomerError
+from pricewright.domain.customers import Customer, UnknownCustomerError
 from pricewright.domain.errors import NotFoundError
 from pricewright.domain.pricing import LineRequest, PricedQuote, price_quote
 from pricewright.domain.quotes import PricingContext
@@ -29,6 +29,14 @@ async def tenant_of(uow: UnitOfWork, tenant_id: UUID) -> Tenant:
     return tenant
 
 
+async def customer_of(uow: UnitOfWork, customer_id: UUID) -> Customer:
+    """A customer of the caller's tenant: another tenant's does not exist here (ADR-0009)."""
+    customer = await uow.customers.get(customer_id)
+    if customer is None:
+        raise UnknownCustomerError("no such customer in this tenant")
+    return customer
+
+
 async def pricing_context(
     uow: UnitOfWork,
     tenant: Tenant,
@@ -39,9 +47,7 @@ async def pricing_context(
 ) -> PricingContext:
     """What pricing reads, from the caller's tenant only: another tenant's customer or product does
     not exist here (ADR-0009)."""
-    customer = await uow.customers.get(customer_id)
-    if customer is None:
-        raise UnknownCustomerError("no such customer in this tenant")
+    customer = await customer_of(uow, customer_id)
     wanted = set(product_ids)
     products = {product.id: product for product in await uow.products.with_ids(wanted)}
     if missing := wanted - products.keys():
