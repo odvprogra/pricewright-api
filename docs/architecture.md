@@ -59,8 +59,9 @@ sequenceDiagram
 Every tenant-owned table carries `tenant_id`; children point to parents with composite keys, so a
 row can never reference another tenant's row (ADR-0006). Prices also carry the currency, tied to the
 tenant's by a composite key (ADR-0003). Products and customers are archived, never deleted
-(ADR-0016); pricing rules are deactivated or end-dated (ADR-0018); audit events are append-only
-(ADR-0013).
+(ADR-0016); pricing rules are deactivated or end-dated (ADR-0018); quotes are cancelled or
+superseded, never deleted, and each revision links to the next (ADR-0005); audit events are
+append-only (ADR-0013).
 
 ```mermaid
 erDiagram
@@ -76,6 +77,13 @@ erDiagram
     products |o--o{ pricing_rules : "(tenant_id, product_id)"
     product_categories |o--o{ pricing_rules : "(tenant_id, category_id)"
     pricing_rules ||--o{ pricing_rule_brackets : "(tenant_id, rule_id)"
+    customers ||--o{ quotes : "(tenant_id, customer_id)"
+    quotes |o--o| quotes : "(tenant_id, superseded_by_id)"
+    quotes ||--o{ quote_lines : "(tenant_id, quote_id)"
+    products ||--o{ quote_lines : "(tenant_id, product_id)"
+    quotes ||--o{ approval_requests : "(tenant_id, quote_id)"
+    users |o--o{ approval_requests : "(tenant_id, decided_by)"
+    tenants ||--o{ quote_number_counters : "tenant_id"
     tenants ||--o{ audit_events : "tenant_id"
 ```
 
@@ -122,6 +130,43 @@ sequenceDiagram
     U-->>C: 200, margins only with costs:read
 ```
 
+## A quote's life
+
+Statuses and moves come from one transition table (ADR-0005). Only drafts change; every change to a
+draft's lines reprices all of them, and submitting freezes the prices (ADR-0019). An offer in flight
+past its `valid_until` acts as `expired` before any job persists it.
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft
+    draft --> approved: submit (no approval needed)
+    draft --> pending_approval: submit
+    pending_approval --> approved: approve (four eyes)
+    pending_approval --> rejected: reject
+    pending_approval --> draft: recall
+    approved --> sent: send
+    sent --> accepted: accept
+    accepted --> converted: convert (M6)
+    approved --> superseded: revise
+    sent --> superseded: revise
+    rejected --> superseded: revise
+    expired --> superseded: revise
+    pending_approval --> expired: expire (M5 job)
+    approved --> expired: expire
+    sent --> expired: expire
+    draft --> cancelled: cancel
+    pending_approval --> cancelled: cancel
+    approved --> cancelled: cancel
+    sent --> cancelled: cancel
+    rejected --> cancelled: cancel
+    converted --> [*]
+    superseded --> [*]
+    cancelled --> [*]
+```
+
+`revise` supersedes the revision with a new draft that keeps the number (`NF-2026-000123-R2`).
+Approving needs `quotes:approve`, and the decider never built the revision (ADR-0020).
+
 ## Rules
 
 - Dependencies point inward; the domain imports no framework or infrastructure library. Enforced by
@@ -129,12 +174,15 @@ sequenceDiagram
 - Configuration is read only in `main.py` (the composition root) and passed in.
 - Every log line is structured JSON with a `request_id` when one exists.
 - Authorization is by permission (`resource:action`), never by role name; service accounts hold
-  scopes, never the permissions reserved for people (administration, the audit trail, catalog
-  changes, costs) (ADR-0007, ADR-0017).
+  scopes, never the permissions reserved for people (administration, the audit trail, catalog and
+  pricing changes, costs, sending, approving and overriding quotes) (ADR-0007, ADR-0017).
 - Every change appends its audit event in the same unit of work (ADR-0013).
 - Lists filter and sort through whitelisted parameters and page with keyset cursors bound to the
   query (ADR-0014).
 - Money is a `Decimal` with its currency, never a float, and travels as a decimal string (ADR-0003).
-- Prices are computed only by the pricing engine, a pure function of the rules (ADR-0004).
+- Prices are computed only by the pricing engine, a pure function of the rules (ADR-0004); quotes
+  keep its result as a snapshot and never recompute it once submitted (ADR-0019).
+- Quotes move only through the transition table (ADR-0005); nobody approves a quote they built, and
+  approving, sending and overriding prices stay with people (ADR-0020).
 - Use cases bind the unit of work to the caller's tenant; only authentication reads across tenants
   (ADR-0006).

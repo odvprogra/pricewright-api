@@ -36,7 +36,7 @@ Pricewright is built in milestones; this table shows what works today. The full 
 | Catalog and customers: search, filters, sorting and cursor pages; money exact to 4 places | M2        | Done   |
 | Audit trail: every change with its actor, before/after values and request ID              | M2        | Done   |
 | Pricing engine: rules kept by managers; previews that explain every price, step by step   | M3        | Done   |
-| Quotes with revisions, expiration, approvals and optimistic locking                       | M4        |        |
+| Quotes priced line by line, with revisions, expiration, four-eyes approvals and an inbox  | M4        | Done   |
 | Idempotent conversion of accepted quotes into orders                                      | M6        |        |
 | Transactional outbox, worker, quote PDFs and email notifications                          | M5        |        |
 
@@ -71,6 +71,7 @@ generates its client from the `openapi.json` attached to it. Details in
 | [ADR-0002](docs/adr/0002-separate-repos-with-a-versioned-openapi-contract.md) Versioned OpenAPI contract                     | Every client, the web app included, depends on a released, immutable spec                           |
 | [ADR-0003](docs/adr/0003-money-as-an-exact-decimal-with-its-currency.md) Money as an exact decimal, rounded half up          | Sub-cent unit prices, no float drift, and rounding that matches invoices, tax and SQL               |
 | [ADR-0004](docs/adr/0004-pricing-waterfall-breakdown-and-approval-metric.md) Staged price waterfall, explained per line      | Discounts cascade as in ERPs and CPQs; every price explains itself                                  |
+| [ADR-0005](docs/adr/0005-quote-lifecycle-as-a-transition-table.md) Quote lifecycle as a transition table                     | One readable table; revisions supersede; an expired offer acts expired before any job runs          |
 | [ADR-0006](docs/adr/0006-shared-schema-multi-tenancy.md) Shared-schema multi-tenancy                                         | Cheapest model to run; isolation enforced by scoped repositories, composite keys and tests          |
 | [ADR-0007](docs/adr/0007-authentication-for-users-and-service-accounts.md) Authentication without an external IdP            | Standards-based passwords and tokens, and a demo that runs with `docker compose up`                 |
 | [ADR-0009](docs/adr/0009-not-found-for-other-tenants-resources.md) 404 across tenants                                        | An id never confirms that another tenant's record exists                                            |
@@ -82,6 +83,9 @@ generates its client from the `openapi.json` attached to it. Details in
 | [ADR-0016](docs/adr/0016-catalog-and-customer-master-data.md) Archived, never deleted; keyed by SKU and account number       | Quotes never point at nothing; other systems rely on codes; retries cannot duplicate records        |
 | [ADR-0017](docs/adr/0017-costs-only-for-people-with-costs-read.md) Costs only for people (`costs:read`)                      | Integrations, and the LLMs behind them, never see costs or margins                                  |
 | [ADR-0018](docs/adr/0018-pricing-rules-typed-scoped-and-effective-dated.md) Pricing rules: typed, scoped, effective-dated    | One table the engine reads at once; the best discount wins without priorities to maintain           |
+| [ADR-0019](docs/adr/0019-quote-pricing-snapshot.md) A pricing snapshot per quote line                                        | Drafts reprice on every change; submitted quotes never drift from what was approved and sent        |
+| [ADR-0020](docs/adr/0020-quote-approvals-with-four-eyes.md) Approvals decided by four eyes                                   | Nobody approves a discount they set; every decision names who asked, who decided and why            |
+| [ADR-0021](docs/adr/0021-quote-numbers-per-tenant-and-year.md) Quote numbers per tenant and year                             | Readable numbers without gaps (`NF-2026-000123-R2`) that never reveal another tenant's volume       |
 
 ## Run it locally
 
@@ -109,7 +113,7 @@ Configuration comes from environment variables; [.env.example](.env.example) doc
 
 | Level        | Location             | What it covers                                                                         |
 | ------------ | -------------------- | -------------------------------------------------------------------------------------- |
-| Unit         | `tests/unit`         | Domain rules and use cases, no I/O; hypothesis tests of the pricing invariants         |
+| Unit         | `tests/unit`         | Domain rules and use cases, no I/O; hypothesis properties and a quote state machine    |
 | Architecture | `tests/architecture` | Import contracts: dependencies point inward, the domain is pure                        |
 | Integration  | `tests/integration`  | Adapters against a real PostgreSQL (testcontainers); migrations reversible and in sync |
 | API          | `tests/e2e`          | HTTP behavior: Problem Details, request IDs, health, OpenAPI drift                     |
@@ -146,7 +150,13 @@ docs/                # product brief, architecture and ADRs
 - **Isolation lives in the application and in composite keys.** PostgreSQL row-level security would
   add a fourth layer (ADR-0006); it stays a stretch goal.
 - **`Idempotency-Key`** arrives with orders (M6). Until then the creation endpoints are protected by
-  natural keys (a user's email, an account's name, a SKU, a customer's account number).
+  natural keys (a user's email, an account's name, a SKU, a customer's account number); a quote has
+  none, so a retried `POST /quotes` can leave a second draft to cancel.
+- **Quotes follow UTC.** `valid_until` ends at midnight UTC and quote numbers take the UTC year
+  until tenants have time zones (ADR-0005, ADR-0021).
+- **Every change to a draft's lines reprices all of them** (ADR-0019), and a line whose product was
+  archived must be removed before anything else changes. Approvals have one level, and the inbox
+  does not yet say whether the caller may decide each request (ADR-0020).
 - **Search is a "contains" match within the tenant's rows** (ADR-0016). A trigram index (`pg_trgm`)
   is the next step once a tenant's catalog reaches tens of thousands of products.
 - **The audit trail grows without bound.** A retention policy (and archiving old events to cheaper

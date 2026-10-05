@@ -79,7 +79,8 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
 3. A quote **requires approval** if its value-weighted discount —
    `1 − (net subtotal / list subtotal)`, before tax and including manual overrides — exceeds the
    tenant threshold (default 15%) **or** any line is below the margin floor.
-4. Quote lifecycle (State pattern or an explicit transition table — decided in ADR-0005):
+4. Quote lifecycle, an explicit transition table
+   ([ADR-0005](adr/0005-quote-lifecycle-as-a-transition-table.md)):
 
    ```text
    DRAFT ──submit──► PENDING_APPROVAL ──approve──► APPROVED ──send──► SENT ──accept──► ACCEPTED ──convert──► CONVERTED
@@ -98,6 +99,10 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
      error (409). A periodic worker job persists `EXPIRED` for listings and reports (from M5; before
      that, only the guard). Correctness never depends on the job's timing.
    - Invalid transitions raise a domain error → 409 Problem Details.
+   - Also agreed in M4 (ADR-0005): `cancel` from every open status (with a reason; also a customer's
+     "no"), `recall` of a pending approval back to `DRAFT`, and `revise` from `APPROVED` and
+     `EXPIRED` too. An expired offer allows only `revise`, before and after the job persists
+     `EXPIRED`.
 
 5. Converting to an order is **idempotent** (`Idempotency-Key`) and snapshots prices and tax.
 6. Totals: line totals rounded to the currency's minor units (2 decimals for USD) half up, ties away
@@ -186,7 +191,7 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0002 | [Separate repos with a versioned OpenAPI contract](adr/0002-separate-repos-with-a-versioned-openapi-contract.md)                        | M0        |
 | 0003 | [Money as an exact decimal with its currency, rounded half up](adr/0003-money-as-an-exact-decimal-with-its-currency.md)                 | M2        |
 | 0004 | [Pricing waterfall, breakdown and approval metric](adr/0004-pricing-waterfall-breakdown-and-approval-metric.md)                         | M3        |
-| 0005 | Quote lifecycle implementation (revisions, expiration)                                                                                  | M4        |
+| 0005 | [Quote lifecycle: a transition table, revisions, expiry by the clock](adr/0005-quote-lifecycle-as-a-transition-table.md)                | M4        |
 | 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                                        | M1        |
 | 0007 | [Authentication for users and service accounts](adr/0007-authentication-for-users-and-service-accounts.md)                              | M1        |
 | 0008 | Transactional outbox without a broker                                                                                                   | M5        |
@@ -200,6 +205,9 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0016 | [Catalog and customer master data](adr/0016-catalog-and-customer-master-data.md)                                                        | M2        |
 | 0017 | [Costs and margins only for people, behind `costs:read`](adr/0017-costs-only-for-people-with-costs-read.md)                             | M3        |
 | 0018 | [Pricing rules: typed, scoped and effective-dated](adr/0018-pricing-rules-typed-scoped-and-effective-dated.md)                          | M3        |
+| 0019 | [Quote pricing: a snapshot per line, frozen once submitted](adr/0019-quote-pricing-snapshot.md)                                         | M4        |
+| 0020 | [Quote approvals: a request per submission, decided by four eyes](adr/0020-quote-approvals-with-four-eyes.md)                           | M4        |
+| 0021 | [Quote numbers: the tenant's prefix, the year and a counter](adr/0021-quote-numbers-per-tenant-and-year.md)                             | M4        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 
