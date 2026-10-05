@@ -17,6 +17,7 @@ from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
+from pricewright.domain.idempotency import IdempotencyRecord
 from pricewright.domain.money import Money
 from pricewright.domain.pricing_rules import PricingRule, RuleKind
 from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus
@@ -396,6 +397,28 @@ class AuditEventRepository(Protocol):
         ...
 
 
+class IdempotencyKeyRepository(Protocol):
+    """Idempotency keys of the unit of work's tenant, each its caller's own (ADR-0022).
+
+    A unit of work holds a key from its first use until it ends, so two requests with the same
+    key never run at once.
+    """
+
+    async def claim(self, actor: Actor, key: str, *, now: datetime) -> IdempotencyRecord | None:
+        """Hold ``actor``'s ``key`` and return what it created, unless that has expired.
+
+        Raise ``IdempotencyKeyInUseError``, without waiting, while another unit of work holds it.
+        """
+        ...
+
+    async def add(self, record: IdempotencyRecord) -> None:
+        """Hold the record's key and remember what it created; an expired record is replaced.
+
+        Raise ``IdempotencyKeyInUseError`` like ``claim``.
+        """
+        ...
+
+
 class IdentityLookup(Protocol):
     """The only cross-tenant reads: finding who is signing in before their tenant is known."""
 
@@ -455,6 +478,7 @@ class UnitOfWork(Protocol):
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
     quotes: QuoteRepository
+    idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...
