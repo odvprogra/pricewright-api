@@ -72,8 +72,10 @@ def _whole_numbers_as_integers(value: object) -> object:
 
 
 def render_openapi(app: FastAPI) -> str:
+    """The spec as committed: sorted keys, whole numbers as integers, and text as UTF-8 rather than
+    ``\\u`` escapes, as JSON tools that rewrite the file (a release bot) write it."""
     spec = _whole_numbers_as_integers(app.openapi())
-    return json.dumps(spec, indent=2, sort_keys=True) + "\n"
+    return json.dumps(spec, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
 def write_openapi(path: Path = Path("openapi.json")) -> None:

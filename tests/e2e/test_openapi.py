@@ -31,3 +31,20 @@ def test_rendered_spec_writes_whole_numbers_as_integers() -> None:
 
     assert '"maximum": 365,' in rendered
     assert "365.0" not in rendered
+
+
+class _Invoice(BaseModel):
+    """Due in 30 days (§ 4), payable in €."""
+
+
+def test_rendered_spec_writes_text_as_utf8_not_escapes() -> None:
+    app = FastAPI()
+
+    @app.post("/invoices")
+    async def create_invoice(invoice: _Invoice) -> _Invoice:
+        return invoice
+
+    rendered = render_openapi(app)
+
+    assert "Due in 30 days (§ 4), payable in €." in rendered
+    assert "\\u00a7" not in rendered
