@@ -38,8 +38,8 @@ async def bearer(client: httpx.AsyncClient, email: str, password: str) -> dict[s
 
 @pytest.fixture
 async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str) -> World:
-    """Northfield with a rep, an integration and its key, a category, a product, a customer and a
-    pricing rule.
+    """Northfield with a rep, an integration and its key, a category, a product, a customer, a
+    pricing rule and a draft quote.
 
     Larkspur has only its admin.
     """
@@ -103,6 +103,14 @@ async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str
         json={"kind": "margin_floor", "name": "Tenant floor", "rate": "0.2"},
         headers=northfield,
     )
+    quote = await client.post(
+        "/api/v1/quotes",
+        json={
+            "customer_id": customer.json()["id"],
+            "lines": [{"product_id": product.json()["id"], "quantity": "10"}],
+        },
+        headers=northfield,
+    )
     return World(
         client=client,
         northfield_admin=northfield,
@@ -115,6 +123,7 @@ async def world(northfield_client: httpx.AsyncClient, migrated_database_url: str
             "product_id": product.json()["id"],
             "customer_id": customer.json()["id"],
             "rule_id": rule.json()["id"],
+            "quote_id": quote.json()["id"],
         },
     )
 
@@ -157,6 +166,8 @@ async def test_attempts_from_another_tenant_change_nothing(world: World) -> None
     assert (customer.json()["tier"], customer.json()["version"]) == ("standard", 1)
     rule = await world.client.get(f"/api/v1/pricing-rules/{ids['rule_id']}", headers=admin)
     assert (rule.json()["is_active"], rule.json()["version"]) == (True, 1)
+    quote = await world.client.get(f"/api/v1/quotes/{ids['quote_id']}", headers=admin)
+    assert (quote.json()["status"], quote.json()["version"]) == ("draft", 1)
 
 
 async def test_lists_only_show_the_callers_tenant(world: World) -> None:

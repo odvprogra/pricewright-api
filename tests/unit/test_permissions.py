@@ -96,6 +96,19 @@ def test_everyone_reads_pricing_rules_but_only_managers_and_admins_manage_them()
         principal(Role.SALES_REP).require(Permission.PRICING_MANAGE)
 
 
+@pytest.mark.parametrize("role", list(Role))
+def test_every_role_reads_and_builds_quotes(role: Role) -> None:
+    caller = principal(role)
+
+    caller.require(Permission.QUOTES_READ)
+    caller.require(Permission.QUOTES_MANAGE)
+
+
+def test_integrations_can_be_granted_quote_drafting() -> None:
+    # erp-mcp-server: list_quotes, get_quote, create_draft_quote, add / remove lines, submit_quote.
+    assert {Permission.QUOTES_READ, Permission.QUOTES_MANAGE} <= GRANTABLE_SCOPES
+
+
 def test_integrations_can_read_pricing_but_never_change_it() -> None:
     assert Permission.PRICING_READ in GRANTABLE_SCOPES
     assert Permission.PRICING_MANAGE not in GRANTABLE_SCOPES

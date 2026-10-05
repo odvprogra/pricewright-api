@@ -19,6 +19,7 @@ from pricewright.domain.money import AMOUNT_DECIMAL_PLACES
 from pricewright.domain.pricing_rules import RATE_DECIMAL_PLACES as RULE_RATE_PLACES
 from pricewright.domain.pricing_rules import PricingRule
 from pricewright.domain.quantities import QUANTITY_DECIMAL_PLACES
+from pricewright.domain.quotes import Quote
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.tenants import RATE_DECIMAL_PLACES, Tenant
 from pricewright.domain.users import User
@@ -153,4 +154,20 @@ def pricing_rule_fields(rule: PricingRule) -> dict[str, AuditValue]:
         "valid_from": _time(rule.valid_from),
         "valid_to": _time(rule.valid_to),
         "is_active": rule.is_active,
+    }
+
+
+def quote_fields(quote: Quote) -> dict[str, AuditValue]:
+    """The quote's header and totals; each line's details travel with the line's own events."""
+    totals = quote.totals
+    return {
+        "number": quote.display_number,
+        "customer_id": str(quote.customer_id),
+        "status": quote.status.value,
+        "valid_until": quote.valid_until.isoformat(),
+        "notes": quote.notes,
+        "lines": len(quote.lines),
+        "net_subtotal": _decimal(totals.net_subtotal.amount, AMOUNT_DECIMAL_PLACES),
+        "tax": _decimal(totals.tax.amount, AMOUNT_DECIMAL_PLACES),
+        "total": _decimal(totals.total.amount, AMOUNT_DECIMAL_PLACES),
     }

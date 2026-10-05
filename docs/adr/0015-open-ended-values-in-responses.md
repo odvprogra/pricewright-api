@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-03
+- **Amended:** 2026-10-05 — a quote's allowed actions and approval reasons are open-ended; quote
+  statuses stay an enum
 
 ## Context
 
@@ -21,9 +23,12 @@ compatible extensions such as new values.
 - A response field whose set of values will grow is a `string`, with today's values listed in
   `examples` and a description telling clients to handle unknown values: an audit event's `action`
   and `resource_type`, a service account's `scopes` (an enum until M2 started adding permissions), a
-  product's `unit` and a pricing rule's `kind` (kinds such as exclusive promotions are expected).
-- Fixed sets stay `enum` in responses: roles, customer tiers, actor types. Adding a value to one of
-  those is a breaking change, marked with `!`.
+  product's `unit`, a pricing rule's `kind` (kinds such as exclusive promotions are expected), a
+  price breakdown step's `stage`, and a quote's `allowed_actions` (orders add one in M6) and
+  `approval_reasons`.
+- Fixed sets stay `enum` in responses: roles, customer tiers, actor types, and quote statuses, which
+  the lifecycle fixes (ADR-0005; `converted` is listed before orders exist). Adding a value to one
+  of those is a breaking change, marked with `!`.
 - Requests keep `enum` everywhere, so invalid input is a 422; adding an accepted value to a request
   never breaks a client.
 

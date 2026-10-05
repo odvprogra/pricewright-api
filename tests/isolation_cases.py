@@ -59,4 +59,5 @@ CASES = (
         json={"is_active": False},
         headers={"If-Match": '"1"'},
     ),
+    IsolationCase("GET", "/api/v1/quotes/{quote_id}"),
 )
