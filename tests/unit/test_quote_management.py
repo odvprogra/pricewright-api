@@ -7,19 +7,32 @@ from decimal import Decimal
 
 import pytest
 
-from pricewright.application.ports import UnitOfWork
-from pricewright.application.quotes import NewQuote, create_quote, get_quote
+from pricewright.application.pagination import Keyset
+from pricewright.application.ports import QuoteQuery, QuoteSort, UnitOfWork
+from pricewright.application.quotes import (
+    NewQuote,
+    QuoteTerms,
+    change_quote_terms,
+    create_quote,
+    get_quote,
+    list_quotes,
+)
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditAction
 from pricewright.domain.auth import Permission, PermissionDeniedError, Principal
 from pricewright.domain.catalog import Product, UnitOfMeasure, UnknownProductError
 from pricewright.domain.customers import Customer, CustomerTier, UnknownCustomerError
-from pricewright.domain.errors import NotFoundError
+from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.money import Money
 from pricewright.domain.pricing import ArchivedCustomerError, Stage
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
 from pricewright.domain.quote_lifecycle import QuoteStatus
-from pricewright.domain.quotes import InvalidQuoteError, LineChange, Quote
+from pricewright.domain.quotes import (
+    InvalidQuoteError,
+    LineChange,
+    Quote,
+    QuoteNotEditableError,
+)
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role
 from tests.fakes import FakeClock, FakeUnitOfWork, InMemoryDatabase
@@ -208,4 +221,149 @@ async def test_get_quote_needs_quotes_read(f: Fixture) -> None:
     with pytest.raises(PermissionDeniedError, match="quotes:read"):
         await get_quote(
             f.integration(Permission.CATALOG_READ), quote.id, unit_of_work=f.unit_of_work
+        )
+
+
+async def test_list_quotes_shows_the_newest_first_across_pages(f: Fixture) -> None:
+    created = [await f.create() for _ in range(3)]
+
+    first = await list_quotes(f.rep, QuoteQuery(), after=None, limit=2, unit_of_work=f.unit_of_work)
+    second = await list_quotes(
+        f.rep, QuoteQuery(), after=first.next_after, limit=2, unit_of_work=f.unit_of_work
+    )
+
+    assert [q.number for q in first.items] == ["NF-2026-000003", "NF-2026-000002"]
+    assert [q.id for q in second.items] == [created[0].id]
+    assert second.next_after is None
+
+
+async def test_list_quotes_sorts_by_validity_with_its_date_in_the_cursor(f: Fixture) -> None:
+    late = await f.create(NewQuote(f.acme.id, valid_until=date(2026, 12, 31)))
+    soon = await f.create(NewQuote(f.acme.id, valid_until=date(2026, 10, 10)))
+    query = QuoteQuery(sort=QuoteSort.VALID_UNTIL, descending=False)
+
+    page = await list_quotes(f.rep, query, after=None, limit=1, unit_of_work=f.unit_of_work)
+
+    assert [q.id for q in page.items] == [soon.id]
+    assert page.next_after == Keyset(soon.id, "2026-10-10")
+    rest = await list_quotes(
+        f.rep, query, after=page.next_after, limit=5, unit_of_work=f.unit_of_work
+    )
+    assert [q.id for q in rest.items] == [late.id]
+
+
+async def test_list_quotes_filters_by_status_customer_number_and_creator(f: Fixture) -> None:
+    mine = await f.create()
+    integration = f.integration(Permission.QUOTES_MANAGE)
+    theirs = await f.create(caller=integration)
+    f.database.quotes[theirs.id].status = QuoteStatus.CANCELLED
+
+    async def ids(query: QuoteQuery) -> list[uuid.UUID]:
+        page = await list_quotes(f.rep, query, after=None, limit=10, unit_of_work=f.unit_of_work)
+        return [quote.id for quote in page.items]
+
+    assert await ids(QuoteQuery(status=QuoteStatus.DRAFT)) == [mine.id]
+    assert await ids(QuoteQuery(created_by=integration.subject_id)) == [theirs.id]
+    assert await ids(QuoteQuery(number="NF-2026-000001")) == [mine.id]
+    assert await ids(QuoteQuery(customer_id=uuid.uuid7())) == []
+
+
+async def test_list_quotes_never_shows_another_tenant(f: Fixture) -> None:
+    await f.create()
+    stranger = Principal(f.larkspur.id, uuid.uuid7(), Role.ADMIN)
+
+    page = await list_quotes(
+        stranger, QuoteQuery(), after=None, limit=10, unit_of_work=f.unit_of_work
+    )
+
+    assert page.items == []
+
+
+async def test_list_quotes_needs_quotes_read(f: Fixture) -> None:
+    with pytest.raises(PermissionDeniedError, match="quotes:read"):
+        await list_quotes(
+            f.integration(Permission.CATALOG_READ),
+            QuoteQuery(),
+            after=None,
+            limit=10,
+            unit_of_work=f.unit_of_work,
+        )
+
+
+async def change_terms(f: Fixture, quote: Quote, terms: QuoteTerms, *, version: int = 1) -> Quote:
+    return await change_quote_terms(
+        f.rep,
+        quote.id,
+        terms,
+        expected_version=version,
+        unit_of_work=f.unit_of_work,
+        clock=f.clock,
+    )
+
+
+async def test_change_quote_terms_saves_a_new_version_and_records_it(f: Fixture) -> None:
+    quote = await f.create(NewQuote(f.acme.id, notes="Rush order"))
+
+    changed = await change_terms(f, quote, QuoteTerms(valid_until=date(2026, 12, 1), notes=None))
+
+    assert (changed.valid_until, changed.notes, changed.version) == (date(2026, 12, 1), None, 2)
+    assert f.database.quotes[quote.id].version == 2
+    updated = [e for e in f.database.audit_events.values() if e.action is AuditAction.QUOTE_UPDATED]
+    assert [event.changes for event in updated] == [
+        {"valid_until": ("2026-11-02", "2026-12-01"), "notes": ("Rush order", None)}
+    ]
+
+
+async def test_change_quote_terms_keeps_the_notes_unless_asked(f: Fixture) -> None:
+    quote = await f.create(NewQuote(f.acme.id, notes="Rush order"))
+
+    changed = await change_terms(f, quote, QuoteTerms(valid_until=date(2026, 12, 1)))
+
+    assert changed.notes == "Rush order"
+
+
+async def test_change_quote_terms_based_on_an_old_version_is_rejected(f: Fixture) -> None:
+    quote = await f.create()
+    await change_terms(f, quote, QuoteTerms(notes="First"))
+
+    with pytest.raises(StaleVersionError):
+        await change_terms(f, quote, QuoteTerms(notes="Second"))
+
+    assert f.database.quotes[quote.id].notes == "First"
+
+
+async def test_change_quote_terms_of_a_submitted_quote_is_refused(f: Fixture) -> None:
+    quote = await f.create()
+    f.database.quotes[quote.id].status = QuoteStatus.APPROVED
+
+    with pytest.raises(QuoteNotEditableError):
+        await change_terms(f, quote, QuoteTerms(notes="Too late"))
+
+
+async def test_change_quote_terms_of_another_tenant_is_not_found(f: Fixture) -> None:
+    quote = await f.create()
+    stranger = Principal(f.larkspur.id, uuid.uuid7(), Role.ADMIN)
+
+    with pytest.raises(NotFoundError):
+        await change_quote_terms(
+            stranger,
+            quote.id,
+            QuoteTerms(notes="Hijacked"),
+            expected_version=1,
+            unit_of_work=f.unit_of_work,
+            clock=f.clock,
+        )
+
+
+async def test_change_quote_terms_needs_quotes_manage(f: Fixture) -> None:
+    quote = await f.create()
+
+    with pytest.raises(PermissionDeniedError, match="quotes:manage"):
+        await change_quote_terms(
+            f.integration(Permission.QUOTES_READ),
+            quote.id,
+            QuoteTerms(notes="Read-only"),
+            expected_version=1,
+            unit_of_work=f.unit_of_work,
+            clock=f.clock,
         )

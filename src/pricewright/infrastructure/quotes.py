@@ -5,14 +5,17 @@ need, so nothing depends on how the ORM orders a flush across tables.
 """
 
 from collections.abc import Sequence
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import ColumnElement, delete, insert, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricewright.application.pagination import Keyset
+from pricewright.application.ports import QuoteQuery, QuoteSort, QuoteSummary
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.catalog import UnitOfMeasure
@@ -279,6 +282,23 @@ def _to_quote(
     )
 
 
+def _to_summary(record: QuoteRecord) -> QuoteSummary:
+    return QuoteSummary(
+        id=record.id,
+        number=record.number,
+        revision=record.revision,
+        customer_id=record.customer_id,
+        status=QuoteStatus(record.status),
+        valid_until=record.valid_until,
+        net_subtotal=Money(record.net_subtotal, record.currency),
+        total=Money(record.total, record.currency),
+        created_by=_actor(record.created_by_type, record.created_by_id),
+        created_at=record.created_at,
+        status_changed_at=record.status_changed_at,
+        version=record.version,
+    )
+
+
 class SqlAlchemyQuoteRepository:
     def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
         self._session = session
@@ -349,6 +369,31 @@ class SqlAlchemyQuoteRepository:
             .order_by(ApprovalRequestRecord.id)
         )
         return _to_quote(record, list(lines), list(approvals))
+
+    async def page(
+        self, query: QuoteQuery, *, after: Keyset | None, limit: int
+    ) -> list[QuoteSummary]:
+        conditions: list[ColumnElement[bool]] = [QuoteRecord.tenant_id == self._scope.tenant_id]
+        if query.status is not None:
+            conditions.append(QuoteRecord.status == query.status.value)
+        if query.customer_id is not None:
+            conditions.append(QuoteRecord.customer_id == query.customer_id)
+        if query.number is not None:
+            conditions.append(QuoteRecord.number == query.number)
+        if query.created_by is not None:
+            conditions.append(QuoteRecord.created_by_id == query.created_by)
+        # Keyset on (sort value, id), or on the id alone (ADR-0014): one index range scan.
+        by_date = query.sort is QuoteSort.VALID_UNTIL
+        key = (QuoteRecord.valid_until, QuoteRecord.id) if by_date else (QuoteRecord.id,)
+        if after is not None:
+            position = (date.fromisoformat(after.value or ""), after.id) if by_date else (after.id,)
+            rows, start = tuple_(*key), tuple_(*position)
+            conditions.append(rows < start if query.descending else rows > start)
+        order = [part.desc() if query.descending else part.asc() for part in key]
+        records = await self._session.scalars(
+            select(QuoteRecord).where(*conditions).order_by(*order).limit(limit)
+        )
+        return [_to_summary(record) for record in records]
 
     async def save(self, quote: Quote) -> None:
         self._require_own(quote)

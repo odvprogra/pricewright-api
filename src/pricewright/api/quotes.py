@@ -3,18 +3,29 @@ step (ADR-0019); costs and margins only reach people (ADR-0017)."""
 
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from http import HTTPStatus
+from typing import Annotated, Self
 from uuid import UUID
 
-from fastapi import APIRouter, Response
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Header, Query, Response
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
-from pricewright.api.concurrency import etag
+from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
 from pricewright.api.money import MoneyJson
+from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.pricing import MarginFloorJson, MarginJson, StepJson, ratio
-from pricewright.application.quotes import NewQuote, create_quote, get_quote
+from pricewright.application.ports import QuoteQuery, QuoteSort, QuoteSummary
+from pricewright.application.quotes import (
+    NewQuote,
+    QuoteTerms,
+    change_quote_terms,
+    create_quote,
+    get_quote,
+    list_quotes,
+)
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.auth import Permission, Principal
@@ -29,6 +40,7 @@ from pricewright.domain.quotes import (
     Quote,
     QuoteLine,
 )
+from pricewright.domain.updates import KEEP
 
 router = APIRouter(prefix="/api/v1/quotes", tags=["quotes"])
 
@@ -43,6 +55,11 @@ _ERRORS: dict[int | str, dict[str, object]] = {
 _NOT_FOUND: dict[int | str, dict[str, object]] = {
     404: {"description": "No such quote in this tenant (ADR-0009)"}
 }
+_CONDITIONAL: dict[int | str, dict[str, object]] = {
+    412: {"description": "If-Match is stale: someone else changed the quote; reload it"},
+    428: {"description": "If-Match is required"},
+}
+_NUMBER_LENGTH = 24
 
 
 class ActorJson(BaseModel):
@@ -279,4 +296,152 @@ async def read_quote(
     quote_id: UUID, principal: PrincipalDep, services: ServicesDep, response: Response
 ) -> QuoteResponse:
     quote = await get_quote(principal, quote_id, unit_of_work=services.unit_of_work)
+    return _respond(response, quote, principal, services.clock())
+
+
+class QuoteSummaryJson(BaseModel):
+    """A quote as lists show it: no lines."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    number: str = Field(examples=["NF-2026-000123-R2"])
+    revision: int
+    customer_id: UUID
+    status: QuoteStatus
+    valid_until: date
+    net_subtotal: MoneyJson
+    total: MoneyJson
+    created_by: ActorJson
+    created_at: datetime
+    status_changed_at: datetime | None
+    version: int
+
+    @classmethod
+    def of(cls, quote: QuoteSummary) -> QuoteSummaryJson:
+        return cls(
+            id=quote.id,
+            number=quote.display_number,
+            revision=quote.revision,
+            customer_id=quote.customer_id,
+            status=quote.status,
+            valid_until=quote.valid_until,
+            net_subtotal=MoneyJson.of(quote.net_subtotal),
+            total=MoneyJson.of(quote.total),
+            created_by=ActorJson.of(quote.created_by),
+            created_at=quote.created_at,
+            status_changed_at=quote.status_changed_at,
+            version=quote.version,
+        )
+
+
+class QuotePage(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    items: list[QuoteSummaryJson]
+    next_cursor: str | None
+
+
+class QuoteOrder(StrEnum):
+    NEWEST = "-created_at"
+    OLDEST = "created_at"
+    EXPIRING_FIRST = "valid_until"
+    EXPIRING_LAST = "-valid_until"
+
+
+@router.get("", summary="List quotes, newest first by default", responses=_ERRORS)
+async def read_quotes(
+    principal: PrincipalDep,
+    services: ServicesDep,
+    status: QuoteStatus | None = None,
+    customer_id: UUID | None = None,
+    number: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=_NUMBER_LENGTH,
+            description="Every revision of this number, written without `-R2`.",
+            examples=["NF-2026-000123"],
+        ),
+    ] = None,
+    created_by: Annotated[
+        UUID | None, Query(description="The user or service account that created it.")
+    ] = None,
+    sort: Annotated[QuoteOrder, Query(description="`-` sorts descending.")] = QuoteOrder.NEWEST,
+    limit: Limit = DEFAULT_LIMIT,
+    cursor: Cursor = None,
+) -> QuotePage:
+    query = QuoteQuery(
+        status=status,
+        customer_id=customer_id,
+        number=number,
+        created_by=created_by,
+        sort=QuoteSort(sort.removeprefix("-")),
+        descending=sort.startswith("-"),
+    )
+    fingerprint = {
+        "status": status,
+        "customer_id": None if customer_id is None else str(customer_id),
+        "number": number,
+        "created_by": None if created_by is None else str(created_by),
+        "sort": sort,
+    }
+    page = await list_quotes(
+        principal,
+        query,
+        after=decode_cursor(cursor, fingerprint),
+        limit=limit,
+        unit_of_work=services.unit_of_work,
+    )
+    return QuotePage(
+        items=[QuoteSummaryJson.of(quote) for quote in page.items],
+        next_cursor=encode_cursor(page.next_after, fingerprint),
+    )
+
+
+class QuoteTermsPatch(BaseModel):
+    """Only the fields sent change; `notes: null` removes them. Only drafts change."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    valid_until: date | None = Field(default=None, description="Today or later.")
+    notes: str | None = Field(default=None, max_length=MAX_NOTES_LENGTH)
+
+    @model_validator(mode="after")
+    def _changes_something(self) -> Self:
+        if self.model_fields_set == set():
+            raise ValueError("send at least one field to change")
+        return self
+
+    def terms(self) -> QuoteTerms:
+        return QuoteTerms(
+            valid_until=self.valid_until,
+            notes=self.notes if "notes" in self.model_fields_set else KEEP,
+        )
+
+
+@router.patch(
+    "/{quote_id}",
+    summary="Change a draft's validity or notes",
+    responses=_ERRORS
+    | _NOT_FOUND
+    | _CONDITIONAL
+    | {409: {"description": "Only drafts change (`quote_not_editable`)"}},
+)
+async def update_quote(
+    quote_id: UUID,
+    body: QuoteTermsPatch,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> QuoteResponse:
+    quote = await change_quote_terms(
+        principal,
+        quote_id,
+        body.terms(),
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
     return _respond(response, quote, principal, services.clock())

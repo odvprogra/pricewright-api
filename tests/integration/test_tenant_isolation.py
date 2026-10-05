@@ -167,7 +167,7 @@ async def test_attempts_from_another_tenant_change_nothing(world: World) -> None
     rule = await world.client.get(f"/api/v1/pricing-rules/{ids['rule_id']}", headers=admin)
     assert (rule.json()["is_active"], rule.json()["version"]) == (True, 1)
     quote = await world.client.get(f"/api/v1/quotes/{ids['quote_id']}", headers=admin)
-    assert (quote.json()["status"], quote.json()["version"]) == ("draft", 1)
+    assert (quote.json()["notes"], quote.json()["version"]) == (None, 1)
 
 
 async def test_lists_only_show_the_callers_tenant(world: World) -> None:
@@ -182,6 +182,7 @@ async def test_lists_only_show_the_callers_tenant(world: World) -> None:
         "/api/v1/customers", params={"tax_id": "DE123456789"}, headers=world.larkspur_admin
     )
     rules = await world.client.get("/api/v1/pricing-rules", headers=world.larkspur_admin)
+    quotes = await world.client.get("/api/v1/quotes", headers=world.larkspur_admin)
 
     assert [user["email"] for user in users.json()["items"]] == [LARKSPUR_EMAIL]
     assert accounts.json()["items"] == []
@@ -189,6 +190,7 @@ async def test_lists_only_show_the_callers_tenant(world: World) -> None:
     assert products.json()["items"] == []
     assert customers.json()["items"] == []
     assert rules.json()["items"] == []
+    assert quotes.json()["items"] == []
     assert tenant.json()["name"] == "Larkspur Tool Co."
 
 

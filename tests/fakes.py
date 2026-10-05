@@ -32,7 +32,10 @@ from pricewright.application.ports import (
     ProductQuery,
     ProductRepository,
     ProductSort,
+    QuoteQuery,
     QuoteRepository,
+    QuoteSort,
+    QuoteSummary,
     RefreshTokenRepository,
     ServiceAccountRepository,
     TenantRepository,
@@ -522,6 +525,46 @@ class FakeQuoteRepository:
         if quote is None or quote.tenant_id != self._uow.tenant_id:
             return None
         return copy.deepcopy(quote)
+
+    async def page(
+        self, query: QuoteQuery, *, after: Keyset | None, limit: int
+    ) -> list[QuoteSummary]:
+        def matches(quote: Quote) -> bool:
+            return (
+                quote.tenant_id == self._uow.tenant_id
+                and query.status in {None, quote.status}
+                and query.customer_id in {None, quote.customer_id}
+                and query.number in {None, quote.number}
+                and query.created_by in {None, quote.created_by.id}
+            )
+
+        def key(value: str | None, quote_id: UUID) -> tuple[str, UUID]:
+            return (value or "" if query.sort is QuoteSort.VALID_UNTIL else ""), quote_id
+
+        found = keyset_page(
+            [quote for quote in self._quotes.values() if matches(quote)],
+            lambda quote: key(quote.valid_until.isoformat(), quote.id),
+            None if after is None else key(after.value, after.id),
+            descending=query.descending,
+            limit=limit,
+        )
+        return [
+            QuoteSummary(
+                id=quote.id,
+                number=quote.number,
+                revision=quote.revision,
+                customer_id=quote.customer_id,
+                status=quote.status,
+                valid_until=quote.valid_until,
+                net_subtotal=quote.totals.net_subtotal,
+                total=quote.totals.total,
+                created_by=quote.created_by,
+                created_at=quote.created_at,
+                status_changed_at=quote.status_changed_at,
+                version=quote.version,
+            )
+            for quote in found
+        ]
 
     async def save(self, quote: Quote) -> None:
         self._require_own(quote)

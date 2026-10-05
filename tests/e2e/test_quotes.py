@@ -14,6 +14,7 @@ from pricewright.domain.catalog import Product, UnitOfMeasure
 from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.money import Money
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
+from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role
 from tests.fakes import FakeAccessTokens, FakeClock, InMemoryDatabase, fake_services
@@ -52,13 +53,17 @@ PATH = "/api/v1/quotes"
 
 
 @pytest.fixture
-async def client() -> AsyncIterator[httpx.AsyncClient]:
-    database = InMemoryDatabase(
+def database() -> InMemoryDatabase:
+    return InMemoryDatabase(
         tenants={NORTHFIELD.id: NORTHFIELD},
         products={BOLTS.id: BOLTS},
         customers={ACME.id: ACME},
         pricing_rules={rule.id: rule for rule in (VOLUME, FLOOR)},
     )
+
+
+@pytest.fixture
+async def client(database: InMemoryDatabase) -> AsyncIterator[httpx.AsyncClient]:
     app = create_app(title="test", services=fake_services(database, FakeClock()))
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -226,3 +231,136 @@ async def test_numbers_keep_counting_and_skip_nothing(client: httpx.AsyncClient)
     response = await client.post(PATH, json=new_quote(), headers=bearer())
 
     assert response.json()["number"] == "NF-2026-000002"
+
+
+async def test_quotes_are_listed_newest_first_without_their_lines(
+    client: httpx.AsyncClient,
+) -> None:
+    first = await client.post(PATH, json=new_quote(), headers=bearer())
+    second = await client.post(PATH, json=new_quote(), headers=bearer())
+
+    response = await client.get(PATH, headers=bearer())
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["id"] for item in items] == [second.json()["id"], first.json()["id"]]
+    assert items[0] | {"id": None, "created_by": None} == {
+        "id": None,
+        "number": "NF-2026-000002",
+        "revision": 1,
+        "customer_id": str(ACME.id),
+        "status": "draft",
+        "valid_until": "2026-11-02",
+        "net_subtotal": usd("900.0000"),
+        "total": usd("965.2500"),
+        "created_by": None,
+        "created_at": "2026-10-03T12:00:00Z",
+        "status_changed_at": "2026-10-03T12:00:00Z",
+        "version": 1,
+    }
+    assert response.json()["next_cursor"] is None
+
+
+async def test_quotes_are_filtered_sorted_and_paged(client: httpx.AsyncClient) -> None:
+    late = await client.post(PATH, json=new_quote(valid_until="2026-12-31"), headers=bearer())
+    soon = await client.post(PATH, json=new_quote(valid_until="2026-10-10"), headers=bearer())
+    params = {"sort": "valid_until", "limit": "1", "status": "draft"}
+
+    page = await client.get(PATH, params=params, headers=bearer())
+    rest = await client.get(
+        PATH, params=params | {"cursor": page.json()["next_cursor"]}, headers=bearer()
+    )
+    by_number = await client.get(PATH, params={"number": "NF-2026-000001"}, headers=bearer())
+
+    assert [item["id"] for item in page.json()["items"]] == [soon.json()["id"]]
+    assert [item["id"] for item in rest.json()["items"]] == [late.json()["id"]]
+    assert [item["id"] for item in by_number.json()["items"]] == [late.json()["id"]]
+
+
+async def test_a_cursor_from_another_list_is_a_422(client: httpx.AsyncClient) -> None:
+    await client.post(PATH, json=new_quote(), headers=bearer())
+    await client.post(PATH, json=new_quote(), headers=bearer())
+    page = await client.get(PATH, params={"limit": "1"}, headers=bearer())
+
+    response = await client.get(
+        PATH,
+        params={"limit": "1", "sort": "valid_until", "cursor": page.json()["next_cursor"]},
+        headers=bearer(),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_cursor"
+
+
+async def patch(
+    client: httpx.AsyncClient,
+    quote_id: str,
+    body: dict[str, object],
+    *,
+    if_match: str | None = '"1"',
+) -> httpx.Response:
+    headers = bearer() | ({"If-Match": if_match} if if_match is not None else {})
+    return await client.patch(f"{PATH}/{quote_id}", json=body, headers=headers)
+
+
+async def test_a_draft_gets_new_terms_with_its_etag(client: httpx.AsyncClient) -> None:
+    created = await client.post(PATH, json=new_quote(notes="Rush order"), headers=bearer())
+
+    response = await patch(
+        client, created.json()["id"], {"valid_until": "2026-12-01", "notes": None}
+    )
+
+    assert response.status_code == 200
+    assert response.headers["etag"] == '"2"'
+    assert (response.json()["valid_until"], response.json()["notes"]) == ("2026-12-01", None)
+    assert response.json()["priced_at"] == created.json()["priced_at"]  # terms do not reprice
+
+
+async def test_terms_changed_with_an_old_etag_are_a_412(client: httpx.AsyncClient) -> None:
+    created = await client.post(PATH, json=new_quote(), headers=bearer())
+    await patch(client, created.json()["id"], {"notes": "First"})
+
+    response = await patch(client, created.json()["id"], {"notes": "Second"})
+
+    assert response.status_code == 412
+    assert response.json()["code"] == "stale_version"
+
+
+async def test_terms_without_an_etag_are_a_428(client: httpx.AsyncClient) -> None:
+    created = await client.post(PATH, json=new_quote(), headers=bearer())
+
+    response = await patch(client, created.json()["id"], {"notes": "No ETag"}, if_match=None)
+
+    assert response.status_code == 428
+
+
+async def test_terms_of_a_submitted_quote_are_a_409(
+    client: httpx.AsyncClient, database: InMemoryDatabase
+) -> None:
+    created = await client.post(PATH, json=new_quote(), headers=bearer())
+    database.quotes[uuid.UUID(created.json()["id"])].status = QuoteStatus.APPROVED
+
+    response = await patch(client, created.json()["id"], {"notes": "Too late"})
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "quote_not_editable"
+
+
+@pytest.mark.parametrize(
+    ("body", "code"),
+    [
+        ({}, "validation_error"),
+        ({"valid_until": "2026-10-02"}, "invalid_quote"),
+        ({"number": "NF-1"}, "validation_error"),
+    ],
+    ids=["empty", "past", "extra"],
+)
+async def test_invalid_terms_are_a_422(
+    client: httpx.AsyncClient, body: dict[str, object], code: str
+) -> None:
+    created = await client.post(PATH, json=new_quote(), headers=bearer())
+
+    response = await patch(client, created.json()["id"], body)
+
+    assert response.status_code == 422
+    assert response.json()["code"] == code

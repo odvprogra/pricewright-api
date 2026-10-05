@@ -5,18 +5,21 @@ Adapters in ``infrastructure`` implement them; tests use in-memory fakes.
 
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
 from pricewright.application.pagination import Keyset
+from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
+from pricewright.domain.money import Money
 from pricewright.domain.pricing_rules import PricingRule, RuleKind
+from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import Quote
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -276,6 +279,47 @@ class PricingRuleRepository(Protocol):
         ...
 
 
+class QuoteSort(StrEnum):
+    CREATED = "created_at"
+    VALID_UNTIL = "valid_until"
+
+
+@dataclass(frozen=True, slots=True)
+class QuoteQuery:
+    """Which quotes to list and in which order (ADR-0014). ``None`` filters match everything."""
+
+    status: QuoteStatus | None = None
+    customer_id: UUID | None = None
+    number: str | None = None
+    """Every revision of this quote number."""
+    created_by: UUID | None = None
+    """A user's or a service account's id."""
+    sort: QuoteSort = QuoteSort.CREATED
+    descending: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class QuoteSummary:
+    """A quote as lists show it, without its lines."""
+
+    id: UUID
+    number: str
+    revision: int
+    customer_id: UUID
+    status: QuoteStatus
+    valid_until: date
+    net_subtotal: Money
+    total: Money
+    created_by: Actor
+    created_at: datetime
+    status_changed_at: datetime | None
+    version: int
+
+    @property
+    def display_number(self) -> str:
+        return self.number if self.revision == 1 else f"{self.number}-R{self.revision}"
+
+
 class QuoteRepository(Protocol):
     """Quotes of the unit of work's tenant only (ADR-0006), with their lines and approvals."""
 
@@ -292,6 +336,16 @@ class QuoteRepository(Protocol):
         ...
 
     async def get(self, quote_id: UUID) -> Quote | None: ...
+
+    async def page(
+        self, query: QuoteQuery, *, after: Keyset | None, limit: int
+    ) -> list[QuoteSummary]:
+        """Up to ``limit`` matching quotes in the query's order, after ``after``.
+
+        The keyset holds the sort value (the ISO date for ``valid_until``, none when sorted by
+        creation) and the id.
+        """
+        ...
 
     async def save(self, quote: Quote) -> None:
         """Store changes, lines and approvals included, and bump ``quote.version``, atomically.
