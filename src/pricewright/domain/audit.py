@@ -58,6 +58,12 @@ class AuditAction(StrEnum):
     QUOTE_LINE_ADDED = "quote.line_added"
     QUOTE_LINE_CHANGED = "quote.line_changed"
     QUOTE_LINE_REMOVED = "quote.line_removed"
+    QUOTE_SUBMITTED = "quote.submitted"
+    QUOTE_RECALLED = "quote.recalled"
+    QUOTE_SENT = "quote.sent"
+    QUOTE_ACCEPTED = "quote.accepted"
+    QUOTE_CANCELLED = "quote.cancelled"
+    QUOTE_REVISED = "quote.revised"
 
     @property
     def resource_type(self) -> AuditResourceType:

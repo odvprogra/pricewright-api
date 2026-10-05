@@ -81,4 +81,14 @@ CASES = (
     IsolationCase(
         "DELETE", "/api/v1/quotes/{quote_id}/lines/{line_id}", headers={"If-Match": '"1"'}
     ),
+    *(
+        IsolationCase("POST", f"/api/v1/quotes/{{quote_id}}/{action}", headers={"If-Match": '"1"'})
+        for action in ("submit", "recall", "send", "accept", "revise")
+    ),
+    IsolationCase(
+        "POST",
+        "/api/v1/quotes/{quote_id}/cancel",
+        json={"reason": "Hijacked"},
+        headers={"If-Match": '"1"'},
+    ),
 )

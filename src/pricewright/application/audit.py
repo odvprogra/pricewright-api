@@ -171,6 +171,9 @@ def quote_fields(quote: Quote) -> dict[str, AuditValue]:
         "net_subtotal": _decimal(totals.net_subtotal.amount, AMOUNT_DECIMAL_PLACES),
         "tax": _decimal(totals.tax.amount, AMOUNT_DECIMAL_PLACES),
         "total": _decimal(totals.total.amount, AMOUNT_DECIMAL_PLACES),
+        "cancel_reason": quote.cancel_reason,
+        "supersedes_id": _id(quote.supersedes_id),
+        "superseded_by_id": _id(quote.superseded_by_id),
     }
 
 

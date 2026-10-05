@@ -109,6 +109,13 @@ def test_integrations_can_be_granted_quote_drafting() -> None:
     assert {Permission.QUOTES_READ, Permission.QUOTES_MANAGE} <= GRANTABLE_SCOPES
 
 
+@pytest.mark.parametrize("role", list(Role))
+def test_every_role_sends_quotes_but_integrations_never_do(role: Role) -> None:
+    # Sending an offer or recording its acceptance commits the company (OWASP LLM06).
+    principal(role).require(Permission.QUOTES_SEND)
+    assert Permission.QUOTES_SEND not in GRANTABLE_SCOPES
+
+
 def test_only_managers_and_admins_override_prices_and_never_integrations() -> None:
     assert principal(Role.SALES_MANAGER).holds(Permission.QUOTES_OVERRIDE)
     assert principal(Role.ADMIN).holds(Permission.QUOTES_OVERRIDE)

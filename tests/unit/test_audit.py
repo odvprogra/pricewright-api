@@ -42,12 +42,16 @@ def test_audit_event_record_names_the_service_account_that_acted() -> None:
     assert (event.actor_type, event.actor_id) == (ActorType.SERVICE_ACCOUNT, account.subject_id)
 
 
+IRREGULAR_PAST_TENSES = frozenset({"sent"})
+
+
 @pytest.mark.parametrize("action", list(AuditAction))
 def test_audit_action_names_its_resource_before_the_verb(action: AuditAction) -> None:
     resource_type, verb = action.value.split(".")
 
     assert action.resource_type == resource_type
-    assert verb.endswith("ed")  # past tense: it already happened
+    # Past tense: it already happened.
+    assert verb.endswith("ed") or verb.rpartition("_")[2] in IRREGULAR_PAST_TENSES
 
 
 def test_created_changes_start_every_set_field_from_nothing() -> None:

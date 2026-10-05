@@ -22,13 +22,19 @@ from pricewright.application.quotes import (
     LineEdit,
     NewQuote,
     QuoteTerms,
+    accept_quote,
     add_quote_line,
+    cancel_quote,
     change_quote_line,
     change_quote_terms,
     create_quote,
     get_quote,
     list_quotes,
+    recall_quote,
     remove_quote_line,
+    revise_quote,
+    send_quote,
+    submit_quote,
 )
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
@@ -42,6 +48,7 @@ from pricewright.domain.pricing import (
     RateOverride,
 )
 from pricewright.domain.quantities import QUANTITY_DECIMAL_PLACES
+from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus
 from pricewright.domain.quote_lifecycle import QuoteAction, QuoteStatus
 from pricewright.domain.quotes import (
     MAX_NOTES_LENGTH,
@@ -49,6 +56,9 @@ from pricewright.domain.quotes import (
     LineChange,
     Quote,
     QuoteLine,
+)
+from pricewright.domain.quotes import (
+    MAX_REASON_LENGTH as MAX_CANCEL_REASON_LENGTH,
 )
 from pricewright.domain.updates import KEEP
 
@@ -171,6 +181,47 @@ class QuoteLineJson(BaseModel):
         )
 
 
+class ApprovalRequestJson(BaseModel):
+    """What was asked when the quote was submitted, and what was decided (ADR-0020)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    # Open-ended (ADR-0015): the expiry job (M5) may close requests in a new way.
+    status: str = Field(
+        description="New statuses may appear; handle unknown ones.", examples=list(ApprovalStatus)
+    )
+    requested_by: ActorJson
+    requested_at: datetime
+    reasons: list[str] = Field(
+        description="New reasons may appear; handle unknown ones.", examples=[list(ApprovalReason)]
+    )
+    discount: Decimal = Field(description="1 - net / list subtotal when submitted (D-06).")
+    approval_threshold: Decimal
+    list_subtotal: MoneyJson
+    net_subtotal: MoneyJson
+    decided_by: UUID | None = Field(description="The person who approved or rejected it.")
+    decided_at: datetime | None = Field(description="When it was decided or withdrawn.")
+    comment: str | None
+
+    @classmethod
+    def of(cls, request: ApprovalRequest) -> ApprovalRequestJson:
+        return cls(
+            id=request.id,
+            status=request.status.value,
+            requested_by=ActorJson.of(request.requested_by),
+            requested_at=request.requested_at,
+            reasons=[reason.value for reason in request.reasons],
+            discount=ratio(request.discount),
+            approval_threshold=ratio(request.approval_threshold),
+            list_subtotal=MoneyJson.of(request.list_subtotal),
+            net_subtotal=MoneyJson.of(request.net_subtotal),
+            decided_by=request.decided_by,
+            decided_at=request.decided_at,
+            comment=request.comment,
+        )
+
+
 class QuoteResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -214,6 +265,9 @@ class QuoteResponse(BaseModel):
     cancel_reason: str | None
     supersedes_id: UUID | None = Field(description="The revision this one replaced.")
     superseded_by_id: UUID | None = Field(description="The revision that replaced this one.")
+    approvals: list[ApprovalRequestJson] = Field(
+        description="This revision's approval requests, oldest first; at most one pending."
+    )
     version: int = Field(description="Also sent as the ETag; send it back in If-Match to change.")
 
     @classmethod
@@ -249,6 +303,7 @@ class QuoteResponse(BaseModel):
             cancel_reason=quote.cancel_reason,
             supersedes_id=quote.supersedes_id,
             superseded_by_id=quote.superseded_by_id,
+            approvals=[ApprovalRequestJson.of(request) for request in quote.approvals],
             version=quote.version,
         )
 
@@ -590,3 +645,160 @@ async def delete_line(
         clock=services.clock,
     )
     return _respond(response, quote, principal, services.clock())
+
+
+_TRANSITION_ERRORS: dict[int | str, dict[str, object]] = {
+    409: {
+        "description": "The quote's status does not allow it (`invalid_transition`), its validity "
+        "passed (`quote_expired`), or it has no lines (`quote_empty`)"
+    },
+}
+_TRANSITIONS = _ERRORS | _NOT_FOUND | _CONDITIONAL | _TRANSITION_ERRORS
+IfMatch = Annotated[str | None, Header(alias="If-Match")]
+
+
+@router.post(
+    "/{quote_id}/submit",
+    summary="Submit a draft: priced one last time, then approved or sent for approval",
+    responses=_TRANSITIONS
+    | {422: {"description": "A product or the customer was archived since the last pricing"}},
+)
+async def submit(
+    quote_id: UUID,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    quote = await submit_quote(
+        principal,
+        quote_id,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+@router.post(
+    "/{quote_id}/recall",
+    summary="Withdraw a pending approval request; the quote is a draft again",
+    responses=_TRANSITIONS,
+)
+async def recall(
+    quote_id: UUID,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    quote = await recall_quote(
+        principal,
+        quote_id,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+@router.post(
+    "/{quote_id}/send",
+    summary="Mark an approved quote as sent to the customer (people only)",
+    responses=_TRANSITIONS | {403: {"description": "Needs `quotes:send`; never integrations"}},
+)
+async def send(
+    quote_id: UUID,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    quote = await send_quote(
+        principal,
+        quote_id,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+@router.post(
+    "/{quote_id}/accept",
+    summary="Record the customer's acceptance of a sent quote (people only)",
+    responses=_TRANSITIONS | {403: {"description": "Needs `quotes:send`; never integrations"}},
+)
+async def accept(
+    quote_id: UUID,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    quote = await accept_quote(
+        principal,
+        quote_id,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+class CancelRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reason: str = Field(
+        min_length=1, max_length=MAX_CANCEL_REASON_LENGTH, examples=["Customer chose another bid"]
+    )
+
+
+@router.post(
+    "/{quote_id}/cancel",
+    summary="Close an open quote for good, with a reason (also a customer's no)",
+    responses=_TRANSITIONS,
+)
+async def cancel(
+    quote_id: UUID,
+    body: CancelRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    quote = await cancel_quote(
+        principal,
+        quote_id,
+        body.reason,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, quote, principal, services.clock())
+
+
+@router.post(
+    "/{quote_id}/revise",
+    status_code=HTTPStatus.CREATED,
+    summary="Supersede the quote with its next revision, a draft priced now",
+    description="Returns the new revision; the old one becomes `superseded` and links to it.",
+    responses=_TRANSITIONS
+    | {422: {"description": "A product or the customer was archived since the last pricing"}},
+)
+async def revise(
+    quote_id: UUID,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> QuoteResponse:
+    successor = await revise_quote(
+        principal,
+        quote_id,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    response.headers["Location"] = f"{router.prefix}/{successor.id}"
+    return _respond(response, successor, principal, services.clock())
