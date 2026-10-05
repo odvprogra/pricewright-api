@@ -33,6 +33,16 @@ async def register(
     return await register_tenant(command, unit_of_work=unit_of_work, hasher=FakePasswordHasher())
 
 
+async def test_register_tenant_numbers_quotes_with_the_given_prefix() -> None:
+    database = InMemoryDatabase()
+    command = dataclasses.replace(NORTHFIELD, quote_prefix="NF", quote_validity_days=45)
+
+    registered = await register(database, command)
+
+    settings = database.tenants[registered.tenant_id].settings
+    assert (settings.quote_prefix, settings.quote_validity_days) == ("NF", 45)
+
+
 async def test_register_tenant_creates_the_tenant_and_its_admin() -> None:
     database = InMemoryDatabase()
 

@@ -43,6 +43,11 @@ from pricewright.domain.customers import (
     CustomerTier,
 )
 from pricewright.domain.pricing_rules import MAX_RULE_NAME_LENGTH, RuleKind
+from pricewright.domain.tenants import (
+    MAX_QUOTE_PREFIX_LENGTH,
+    MAX_QUOTE_VALIDITY_DAYS,
+    QUOTE_PREFIX_PATTERN,
+)
 from pricewright.domain.users import MAX_EMAIL_LENGTH, Role
 from pricewright.infrastructure.database import Base
 
@@ -70,6 +75,13 @@ class TenantRecord(Base):
             "approval_threshold >= 0 AND approval_threshold <= 1",
             name="approval_threshold_in_range",
         ),
+        CheckConstraint(
+            f"quote_prefix ~ '^{QUOTE_PREFIX_PATTERN.pattern}$'", name="quote_prefix_is_valid"
+        ),
+        CheckConstraint(
+            f"quote_validity_days BETWEEN 1 AND {MAX_QUOTE_VALIDITY_DAYS}",
+            name="quote_validity_days_in_range",
+        ),
         CheckConstraint("version >= 1", name="version_positive"),
         # Target of the composite foreign keys that keep every price in the tenant's currency.
         UniqueConstraint("id", "currency"),
@@ -80,6 +92,8 @@ class TenantRecord(Base):
     currency: Mapped[str] = mapped_column(CHAR(3))
     tax_rate: Mapped[Decimal] = mapped_column(_RATE)
     approval_threshold: Mapped[Decimal] = mapped_column(_RATE)
+    quote_prefix: Mapped[str] = mapped_column(String(MAX_QUOTE_PREFIX_LENGTH))
+    quote_validity_days: Mapped[int] = mapped_column(SmallInteger)
     version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

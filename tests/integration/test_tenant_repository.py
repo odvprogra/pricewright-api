@@ -20,7 +20,12 @@ async def test_tenant_repository_save_stores_changes_and_bumps_the_version(
     async with SqlAlchemyUnitOfWork(session_factory) as uow:
         tenant = await uow.tenants.get(northfield.id)
         assert tenant is not None
-        tenant.change(name="Northfield Supply", tax_rate=Decimal("0.0725"))
+        tenant.change(
+            name="Northfield Supply",
+            tax_rate=Decimal("0.0725"),
+            quote_prefix="NF",
+            quote_validity_days=45,
+        )
         await uow.tenants.save(tenant)
         await uow.commit()
 

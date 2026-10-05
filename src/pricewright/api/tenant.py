@@ -25,6 +25,12 @@ class TenantResponse(BaseModel):
     approval_threshold: Decimal = Field(
         description="Quotes whose total discount exceeds it need a manager's approval."
     )
+    quote_prefix: str = Field(
+        description="Starts every new quote number: NF gives NF-2026-000123.", examples=["NF"]
+    )
+    quote_validity_days: int = Field(
+        description="How long a new quote is valid unless the rep sets another date."
+    )
     version: int = Field(description="Also sent as the ETag; send it back in If-Match to update.")
 
     @classmethod
@@ -35,6 +41,8 @@ class TenantResponse(BaseModel):
             currency=tenant.settings.currency,
             tax_rate=tenant.settings.tax_rate,
             approval_threshold=tenant.settings.approval_threshold,
+            quote_prefix=tenant.settings.quote_prefix,
+            quote_validity_days=tenant.settings.quote_validity_days,
             version=tenant.version,
         )
 
@@ -47,6 +55,13 @@ class TenantPatch(BaseModel):
     name: str | None = None
     tax_rate: Decimal | None = None
     approval_threshold: Decimal | None = None
+    quote_prefix: str | None = Field(
+        default=None,
+        description="2 to 5 upper-case letters or digits, starting with a letter. Numbers new "
+        "quotes only: issued numbers never change.",
+        examples=["NF"],
+    )
+    quote_validity_days: int | None = Field(default=None, description="From 1 to 365.")
 
     @model_validator(mode="after")
     def _changes_something(self) -> Self:
@@ -70,7 +85,7 @@ async def read_tenant(
 
 @router.patch(
     "/tenant",
-    summary="Change the tenant's name or rates (admins)",
+    summary="Change the tenant's name, rates or quote settings (admins)",
     responses={
         401: {"description": "Missing or invalid access token"},
         403: {"description": "Only admins change the tenant (`tenant:manage`)"},
@@ -88,7 +103,11 @@ async def update_tenant(
     tenant = await change_tenant(
         principal,
         TenantChanges(
-            name=body.name, tax_rate=body.tax_rate, approval_threshold=body.approval_threshold
+            name=body.name,
+            tax_rate=body.tax_rate,
+            approval_threshold=body.approval_threshold,
+            quote_prefix=body.quote_prefix,
+            quote_validity_days=body.quote_validity_days,
         ),
         expected_version=expected_version(if_match),
         unit_of_work=services.unit_of_work,

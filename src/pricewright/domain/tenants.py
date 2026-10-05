@@ -1,7 +1,8 @@
 """Tenants: the distributor companies that use Pricewright, and the settings pricing depends on."""
 
+import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from pricewright.domain.currencies import is_iso_4217
@@ -11,6 +12,14 @@ DEFAULT_APPROVAL_THRESHOLD = Decimal("0.15")
 # Rates are stored as NUMERIC(5, 4): 0.0725 is 7.25%. More places would be rounded silently.
 RATE_DECIMAL_PLACES = 4
 MAX_NAME_LENGTH = 200
+# Dynamics 365 Sales numbers quotes with the prefix QUO until an administrator changes it.
+DEFAULT_QUOTE_PREFIX = "QUO"
+MAX_QUOTE_PREFIX_LENGTH = 5
+# A letter, then letters or digits: no hyphen, which separates the parts of a quote number.
+QUOTE_PREFIX_PATTERN = re.compile(r"[A-Z][A-Z0-9]{1,4}")
+# Odoo and Salesforce CPQ propose a quote's expiration from a default validity in days.
+DEFAULT_QUOTE_VALIDITY_DAYS = 30
+MAX_QUOTE_VALIDITY_DAYS = 365
 
 
 class InvalidTenantError(RuleViolationError):
@@ -28,11 +37,16 @@ def _require_rate(value: Decimal, name: str, *, low: Decimal, high: Decimal, hig
 
 @dataclass(frozen=True, slots=True)
 class TenantSettings:
-    """Commercial settings read by pricing (tax) and approvals (discount threshold)."""
+    """Commercial settings read by pricing (tax), approvals (discount threshold) and quotes (number
+    prefix, default validity)."""
 
     currency: str
     tax_rate: Decimal
     approval_threshold: Decimal = DEFAULT_APPROVAL_THRESHOLD
+    quote_prefix: str = DEFAULT_QUOTE_PREFIX
+    """Starts every quote number: ``NF`` gives ``NF-2026-000123``."""
+    quote_validity_days: int = DEFAULT_QUOTE_VALIDITY_DAYS
+    """How long a new quote is valid unless the rep sets another date."""
 
     def __post_init__(self) -> None:
         if not is_iso_4217(self.currency):
@@ -45,6 +59,14 @@ class TenantSettings:
             high=Decimal(1),
             high_ok=True,
         )
+        if not QUOTE_PREFIX_PATTERN.fullmatch(self.quote_prefix):
+            raise InvalidTenantError(
+                "quote_prefix must be 2 to 5 upper-case letters or digits, starting with a letter"
+            )
+        if not 1 <= self.quote_validity_days <= MAX_QUOTE_VALIDITY_DAYS:
+            raise InvalidTenantError(
+                f"quote_validity_days must be from 1 to {MAX_QUOTE_VALIDITY_DAYS}"
+            )
 
 
 def _valid_name(name: str) -> str:
@@ -76,15 +98,21 @@ class Tenant:
         name: str | None = None,
         tax_rate: Decimal | None = None,
         approval_threshold: Decimal | None = None,
+        quote_prefix: str | None = None,
+        quote_validity_days: int | None = None,
     ) -> None:
-        """Rename or adjust rates. The currency is fixed: every stored price is in it."""
-        settings = TenantSettings(
-            currency=self.settings.currency,
-            tax_rate=self.settings.tax_rate if tax_rate is None else tax_rate,
+        """Rename, adjust rates or quote settings. The currency is fixed: every stored price is in
+        it. A new quote prefix numbers new quotes only; issued numbers never change."""
+        current = self.settings
+        settings = replace(
+            current,
+            tax_rate=current.tax_rate if tax_rate is None else tax_rate,
             approval_threshold=(
-                self.settings.approval_threshold
-                if approval_threshold is None
-                else approval_threshold
+                current.approval_threshold if approval_threshold is None else approval_threshold
+            ),
+            quote_prefix=current.quote_prefix if quote_prefix is None else quote_prefix,
+            quote_validity_days=(
+                current.quote_validity_days if quote_validity_days is None else quote_validity_days
             ),
         )
         self.name = self.name if name is None else _valid_name(name)

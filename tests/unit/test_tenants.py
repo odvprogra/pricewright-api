@@ -6,6 +6,8 @@ from hypothesis import strategies as st
 
 from pricewright.domain.tenants import (
     DEFAULT_APPROVAL_THRESHOLD,
+    DEFAULT_QUOTE_PREFIX,
+    DEFAULT_QUOTE_VALIDITY_DAYS,
     InvalidTenantError,
     Tenant,
     TenantSettings,
@@ -27,6 +29,39 @@ def test_tenant_settings_default_approval_threshold_is_fifteen_percent() -> None
     settings = TenantSettings(currency="USD", tax_rate=Decimal("0.07"))
 
     assert settings.approval_threshold == DEFAULT_APPROVAL_THRESHOLD == Decimal("0.15")
+
+
+def test_tenant_settings_default_quote_settings_follow_dynamics_365_and_odoo() -> None:
+    settings = TenantSettings(currency="USD", tax_rate=Decimal("0.07"))
+
+    assert (settings.quote_prefix, settings.quote_validity_days) == ("QUO", 30)
+    assert (DEFAULT_QUOTE_PREFIX, DEFAULT_QUOTE_VALIDITY_DAYS) == ("QUO", 30)
+
+
+@pytest.mark.parametrize("prefix", ["NF", "LT", "QUO", "A1B2C"])
+def test_tenant_settings_accepts_a_quote_prefix_of_letters_and_digits(prefix: str) -> None:
+    settings = TenantSettings(currency="USD", tax_rate=Decimal(0), quote_prefix=prefix)
+
+    assert settings.quote_prefix == prefix
+
+
+@pytest.mark.parametrize("prefix", ["", "N", "nf", "N-F", "1NF", "NFSUPP", "NF ", "ÑF"])
+def test_tenant_settings_rejects_a_quote_prefix_that_would_blur_the_number(prefix: str) -> None:
+    with pytest.raises(InvalidTenantError, match="quote_prefix"):
+        TenantSettings(currency="USD", tax_rate=Decimal(0), quote_prefix=prefix)
+
+
+@pytest.mark.parametrize("days", [1, 365])
+def test_tenant_settings_accepts_a_quote_validity_from_one_day_to_a_year(days: int) -> None:
+    settings = TenantSettings(currency="USD", tax_rate=Decimal(0), quote_validity_days=days)
+
+    assert settings.quote_validity_days == days
+
+
+@pytest.mark.parametrize("days", [0, -1, 366])
+def test_tenant_settings_rejects_a_quote_validity_out_of_range(days: int) -> None:
+    with pytest.raises(InvalidTenantError, match="quote_validity_days"):
+        TenantSettings(currency="USD", tax_rate=Decimal(0), quote_validity_days=days)
 
 
 @pytest.mark.parametrize("currency", ["usd", "US", "USDX", "", "U$D", "ABC", "XXX", "UYW"])
@@ -78,6 +113,25 @@ def test_tenant_change_renames_and_adjusts_rates_but_keeps_the_currency() -> Non
         TenantSettings(currency="USD", tax_rate=Decimal("0.0725")),
     )
     assert tenant.version == 1  # the repository counts saved versions
+
+
+def test_tenant_change_sets_the_quote_settings_and_keeps_the_rates() -> None:
+    tenant = northfield()
+
+    tenant.change(quote_prefix="NF", quote_validity_days=45)
+
+    assert tenant.settings == TenantSettings(
+        currency="USD", tax_rate=Decimal("0.07"), quote_prefix="NF", quote_validity_days=45
+    )
+
+
+def test_tenant_change_of_a_rate_keeps_the_quote_settings() -> None:
+    tenant = northfield()
+    tenant.change(quote_prefix="NF", quote_validity_days=45)
+
+    tenant.change(tax_rate=Decimal("0.08"))
+
+    assert (tenant.settings.quote_prefix, tenant.settings.quote_validity_days) == ("NF", 45)
 
 
 def test_tenant_change_rejects_invalid_values_and_changes_nothing() -> None:
