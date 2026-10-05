@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/odvprogra/pricewright-api/compare/v0.4.0...v0.5.0) (2026-10-05)
+
+
+### Features
+
+* add, change and remove quote lines over the API, with manager overrides ([#57](https://github.com/odvprogra/pricewright-api/issues/57)) ([16eb45c](https://github.com/odvprogra/pricewright-api/commit/16eb45c8734417db23d7c8d3eeccd24b29591113))
+* give tenants a quote number prefix and a default quote validity ([#49](https://github.com/odvprogra/pricewright-api/issues/49)) ([f13998b](https://github.com/odvprogra/pricewright-api/commit/f13998bacb1ada00469ce184b43de928c00066ce))
+* let managers approve or reject quotes from an approval inbox ([#59](https://github.com/odvprogra/pricewright-api/issues/59)) ([83c1c29](https://github.com/odvprogra/pricewright-api/commit/83c1c2981c26586a4e6492edb2523072cfc990f3))
+* let sales teams and integrations start draft quotes over the API ([#55](https://github.com/odvprogra/pricewright-api/issues/55)) ([5ed9b6e](https://github.com/odvprogra/pricewright-api/commit/5ed9b6e5815c28aca4895484e0c0b243a902b6f6))
+* list quotes and change a draft's terms over the API ([#56](https://github.com/odvprogra/pricewright-api/issues/56)) ([9ffc453](https://github.com/odvprogra/pricewright-api/commit/9ffc453f4065c607fd205f7e877ed8ed030cc3af))
+* model draft quotes priced by the engine, with a snapshot per line ([#52](https://github.com/odvprogra/pricewright-api/issues/52)) ([5bf6e86](https://github.com/odvprogra/pricewright-api/commit/5bf6e86ed48ffdb51fc6e1b9c50d7ac62ac0944f))
+* model the quote lifecycle as a transition table ([#51](https://github.com/odvprogra/pricewright-api/issues/51)) ([cf6ab91](https://github.com/odvprogra/pricewright-api/commit/cf6ab9120171753ba7b05d4acc4785ea697b9eaf))
+* move quotes through their lifecycle, with approvals decided by four eyes ([#53](https://github.com/odvprogra/pricewright-api/issues/53)) ([c271ac1](https://github.com/odvprogra/pricewright-api/commit/c271ac1a6a389163fce4a25d2c83117eca85a65a))
+* store quotes with their lines, approvals and numbers ([#54](https://github.com/odvprogra/pricewright-api/issues/54)) ([56a3a2d](https://github.com/odvprogra/pricewright-api/commit/56a3a2d2ed0f36fe866c3144af2ef806e43f70fd))
+* submit, recall, send, accept, cancel and revise quotes over the API ([#58](https://github.com/odvprogra/pricewright-api/issues/58)) ([eb55c05](https://github.com/odvprogra/pricewright-api/commit/eb55c052f4106baa4d9779dbd806fbe611a7e0d7))
+
+
+### Documentation
+
+* close M4 in the README, CLAUDE.md, architecture and brief ([#60](https://github.com/odvprogra/pricewright-api/issues/60)) ([de1a73f](https://github.com/odvprogra/pricewright-api/commit/de1a73f9e91e8903ce91ceee420d8a95dbefa57c))
+
 ## [0.4.0](https://github.com/odvprogra/pricewright-api/compare/v0.3.0...v0.4.0) (2026-10-04)
 
 
