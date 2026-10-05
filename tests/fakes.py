@@ -32,6 +32,7 @@ from pricewright.application.ports import (
     ProductQuery,
     ProductRepository,
     ProductSort,
+    QuoteRepository,
     RefreshTokenRepository,
     ServiceAccountRepository,
     TenantRepository,
@@ -44,6 +45,7 @@ from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
 from pricewright.domain.pricing_rules import PricingRule
+from pricewright.domain.quotes import Quote
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
@@ -63,6 +65,9 @@ class InMemoryDatabase:
     products: dict[UUID, Product] = field(default_factory=dict)
     customers: dict[UUID, Customer] = field(default_factory=dict)
     pricing_rules: dict[UUID, PricingRule] = field(default_factory=dict)
+    quotes: dict[UUID, Quote] = field(default_factory=dict)
+    quote_numbers: dict[tuple[UUID, int], int] = field(default_factory=dict)
+    """The last quote number issued, per tenant and year."""
 
 
 class FakeTenantRepository:
@@ -485,6 +490,50 @@ class FakeCustomerRepository:
         self._customers[customer.id] = copy.deepcopy(customer)
 
 
+class FakeQuoteRepository:
+    def __init__(
+        self,
+        quotes: dict[UUID, Quote],
+        numbers: dict[tuple[UUID, int], int],
+        uow: FakeUnitOfWork,
+    ) -> None:
+        self._quotes = quotes
+        self._numbers = numbers
+        self._uow = uow
+
+    def _require_own(self, quote: Quote) -> None:
+        if quote.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("only a quote of the unit of work's tenant can be stored")
+
+    async def allocate_number(self, year: int) -> int:
+        # Like the adapter, a number is only kept when the unit of work commits.
+        key = (self._uow.tenant_id, year)
+        self._numbers[key] = self._numbers.get(key, 0) + 1
+        return self._numbers[key]
+
+    async def add(self, quote: Quote) -> None:
+        self._require_own(quote)
+        if quote.id in self._quotes:
+            raise RuntimeError("a quote with this id is already stored")
+        self._quotes[quote.id] = copy.deepcopy(quote)
+
+    async def get(self, quote_id: UUID) -> Quote | None:
+        quote = self._quotes.get(quote_id)
+        if quote is None or quote.tenant_id != self._uow.tenant_id:
+            return None
+        return copy.deepcopy(quote)
+
+    async def save(self, quote: Quote) -> None:
+        self._require_own(quote)
+        stored = self._quotes.get(quote.id)
+        if stored is None:
+            raise RuntimeError("only an existing quote can be saved")
+        if stored.version != quote.version:
+            raise StaleVersionError("the quote was changed by someone else; reload it")
+        quote.version = stored.version + 1
+        self._quotes[quote.id] = copy.deepcopy(quote)
+
+
 class FakeIdentityLookup:
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -516,6 +565,7 @@ class FakeUnitOfWork:
     products: ProductRepository
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
+    quotes: QuoteRepository
     identities: IdentityLookup
 
     def __init__(self, database: InMemoryDatabase) -> None:
@@ -536,6 +586,7 @@ class FakeUnitOfWork:
         self.products = FakeProductRepository(self._staged.products, self)
         self.customers = FakeCustomerRepository(self._staged.customers, self)
         self.pricing_rules = FakePricingRuleRepository(self._staged.pricing_rules, self)
+        self.quotes = FakeQuoteRepository(self._staged.quotes, self._staged.quote_numbers, self)
         self.identities = FakeIdentityLookup(self._staged)
         return self
 
@@ -567,9 +618,16 @@ class FakeUnitOfWork:
         categories = [(c.tenant_id, c.name.lower()) for c in staged.product_categories.values()]
         skus = [(p.tenant_id, p.sku.lower()) for p in staged.products.values()]
         accounts = [(c.tenant_id, c.account_number.lower()) for c in staged.customers.values()]
-        unique_keys = (emails, names, categories, skus, accounts)
+        quotes = staged.quotes.values()
+        revisions = [(q.tenant_id, q.number, q.revision) for q in quotes]
+        links = [(q.tenant_id, q.superseded_by_id) for q in quotes if q.superseded_by_id]
+        links_back = [(q.tenant_id, q.supersedes_id) for q in quotes if q.supersedes_id]
+        unique_keys = (emails, names, categories, skus, accounts, revisions, links, links_back)
         if any(len(keys) != len(set(keys)) for keys in unique_keys):
             raise ConflictError("the change conflicts with an existing record")
+        # The deferred foreign key: a superseded revision points to a stored successor.
+        if any(successor not in staged.quotes for _, successor in links):
+            raise RuntimeError("a superseded quote points to a revision that does not exist")
         for table in dataclasses.fields(InMemoryDatabase):  # every table, new ones included
             setattr(self._database, table.name, copy.deepcopy(getattr(staged, table.name)))
 

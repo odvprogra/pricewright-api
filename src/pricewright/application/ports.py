@@ -17,6 +17,7 @@ from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.pricing_rules import PricingRule, RuleKind
+from pricewright.domain.quotes import Quote
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
 from pricewright.domain.tenants import Tenant
@@ -275,6 +276,31 @@ class PricingRuleRepository(Protocol):
         ...
 
 
+class QuoteRepository(Protocol):
+    """Quotes of the unit of work's tenant only (ADR-0006), with their lines and approvals."""
+
+    async def allocate_number(self, year: int) -> int:
+        """The tenant's next quote number in ``year``: 1, 2, 3... (ADR-0021).
+
+        Concurrent allocations in the same tenant and year wait for each other until commit, and a
+        rollback takes the number back, so the issued numbers have no gaps.
+        """
+        ...
+
+    async def add(self, quote: Quote) -> None:
+        """Store a new revision. Revising saves the old revision first, then adds the new one."""
+        ...
+
+    async def get(self, quote_id: UUID) -> Quote | None: ...
+
+    async def save(self, quote: Quote) -> None:
+        """Store changes, lines and approvals included, and bump ``quote.version``, atomically.
+
+        Raise ``StaleVersionError`` if the stored version is no longer ``quote.version``.
+        """
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEventFilter:
     """Which audit events to list; a field left as ``None`` matches every event."""
@@ -355,6 +381,7 @@ class UnitOfWork(Protocol):
     products: ProductRepository
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
+    quotes: QuoteRepository
     identities: IdentityLookup
 
     async def __aenter__(self) -> Self: ...
