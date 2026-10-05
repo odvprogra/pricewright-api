@@ -22,7 +22,7 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **M4 — Quotes + lifecycle + approvals**.
+- Work one milestone at a time. Current milestone: **M6 — Orders** (next).
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.
@@ -56,6 +56,7 @@ Read first: `main.py` (wiring), `application/ports.py` (unit of work and reposit
 `domain/auth.py` (principals and permissions), `api/dependencies.py` (who is calling),
 `api/concurrency.py` (ETag / If-Match), `application/audit.py` (the audit trail),
 `api/pagination.py` (cursors), `domain/money.py`, `domain/pricing.py` (the engine),
+`domain/quote_lifecycle.py` (the transition table), `domain/quotes.py` (the quote aggregate),
 `tests/fakes.py`.
 
 Rules the code relies on:
@@ -98,6 +99,8 @@ expected ADRs and their milestones are listed in the brief (§9).
   queries (ADR-0014), product categories, products and customers (ADR-0016) (v0.3.0). M3 — ISO 4217
   currencies, costs only for people (ADR-0017), pricing rules (ADR-0018), the pricing engine with
   its breakdown and approval metric (ADR-0004), rules managed over the API, `POST /pricing/preview`
-  (v0.4.0)
+  (v0.4.0). M4 — tenant quote settings, the lifecycle as a transition table (ADR-0005), quotes
+  priced line by line with a snapshot (ADR-0019), four-eyes approvals (ADR-0020), numbers per tenant
+  and year (ADR-0021), quote, line and transition endpoints, the approval inbox (v0.5.0)
 - In progress: —
-- Next: M4 — quotes, lifecycle (ADR-0005), revisions, line endpoints, approvals
+- Next: M6 — orders from accepted quotes, `Idempotency-Key`
