@@ -7,8 +7,8 @@ from decimal import Decimal
 
 import pytest
 
+from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
-from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import UnknownProductError
 from pricewright.domain.pricing import (
     ApprovalReason,
@@ -21,14 +21,12 @@ from pricewright.domain.quantities import InvalidQuantityError
 from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import (
     MAX_QUOTE_LINES,
-    Actor,
     InvalidQuoteError,
     LineChange,
     QuoteNotEditableError,
     UnknownQuoteLineError,
     quote_number,
 )
-from pricewright.domain.users import Role
 from tests.unit.quote_data import (
     ACME,
     BOLTS,
@@ -50,14 +48,6 @@ from tests.unit.quote_data import (
 def test_quote_number_pads_the_sequence_to_six_digits() -> None:
     assert quote_number("NF", 2026, 123) == "NF-2026-000123"
     assert quote_number("LT", 2027, 1_234_567) == "LT-2027-1234567"
-
-
-def test_actor_of_a_person_or_an_integration() -> None:
-    person = Principal(TENANT, uuid.uuid7(), Role.SALES_REP)
-    integration = Principal(TENANT, uuid.uuid7())
-
-    assert Actor.of(person) == Actor(ActorType.USER, person.subject_id)
-    assert Actor.of(integration) == Actor(ActorType.SERVICE_ACCOUNT, integration.subject_id)
 
 
 def test_draft_starts_as_revision_one_in_draft_with_the_tenants_currency() -> None:
