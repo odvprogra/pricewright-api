@@ -225,6 +225,84 @@ async def test_invalid_quotes_are_a_422(
     assert response.json()["code"] == code
 
 
+KEY = str(uuid.uuid4())  # generated: gitleaks flags literal keys
+
+
+def with_key(key: str, user_id: uuid.UUID) -> dict[str, str]:
+    return bearer(user_id=user_id) | {"Idempotency-Key": key}
+
+
+async def test_a_draft_retried_with_its_idempotency_key_is_created_once(
+    client: httpx.AsyncClient,
+) -> None:
+    rep = uuid.uuid7()
+
+    first = await client.post(PATH, json=new_quote(), headers=with_key(f'"{KEY}"', rep))
+    retry = await client.post(PATH, json=new_quote(), headers=with_key(f'"{KEY}"', rep))
+    listed = await client.get(PATH, headers=bearer())
+
+    assert (first.status_code, retry.status_code) == (201, 201)
+    assert "idempotent-replayed" not in first.headers
+    assert retry.headers["idempotent-replayed"] == "true"
+    assert (retry.headers["location"], retry.headers["etag"]) == (
+        first.headers["location"],
+        first.headers["etag"],
+    )
+    assert retry.json() == first.json()
+    assert [quote["id"] for quote in listed.json()["items"]] == [first.json()["id"]]
+
+
+async def test_a_retry_is_the_same_request_however_it_is_written(
+    client: httpx.AsyncClient,
+) -> None:
+    rep = uuid.uuid7()
+    reordered = dict(reversed(new_quote(notes=None).items()))
+
+    first = await client.post(PATH, json=new_quote(), headers=with_key(f'"{KEY}"', rep))
+    retry = await client.post(PATH, json=reordered, headers=with_key(KEY, rep))  # bare key
+
+    assert retry.headers["idempotent-replayed"] == "true"
+    assert retry.json()["id"] == first.json()["id"]
+
+
+async def test_an_idempotency_key_reused_for_another_draft_is_a_422(
+    client: httpx.AsyncClient,
+) -> None:
+    rep = uuid.uuid7()
+    await client.post(PATH, json=new_quote(), headers=with_key(KEY, rep))
+
+    response = await client.post(
+        PATH, json=new_quote(notes="Another draft"), headers=with_key(KEY, rep)
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "idempotency_key_reused"
+
+
+async def test_another_callers_idempotency_key_creates_another_draft(
+    client: httpx.AsyncClient,
+) -> None:
+    mine = await client.post(PATH, json=new_quote(), headers=with_key(KEY, uuid.uuid7()))
+    theirs = await client.post(PATH, json=new_quote(), headers=with_key(KEY, uuid.uuid7()))
+
+    assert "idempotent-replayed" not in theirs.headers
+    assert theirs.json()["id"] != mine.json()["id"]
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["", "with space", "with\ttab", '"unterminated', 'in"side', "k" * 256],
+    ids=["empty", "space", "tab", "unterminated", "quote", "too-long"],
+)
+async def test_an_invalid_idempotency_key_is_a_422(client: httpx.AsyncClient, key: str) -> None:
+    response = await client.post(
+        PATH, json=new_quote(), headers=bearer() | {"Idempotency-Key": key}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_idempotency_key"
+
+
 async def test_numbers_keep_counting_and_skip_nothing(client: httpx.AsyncClient) -> None:
     await client.post(PATH, json=new_quote(), headers=bearer())
     await client.post(PATH, json=new_quote(valid_until="2026-01-01"), headers=bearer())  # refused

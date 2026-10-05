@@ -5893,6 +5893,29 @@
       },
       "post": {
         "operationId": "add_quote_api_v1_quotes_post",
+        "parameters": [
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5934,6 +5957,16 @@
             },
             "description": "Needs `quotes:read`, or `quotes:manage` for changes"
           },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A request with this Idempotency-Key is still running"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -5942,7 +5975,7 @@
                 }
               }
             },
-            "description": "Invalid quote, or an unknown or archived customer or product of this tenant"
+            "description": "Invalid quote, an unknown or archived customer or product of this tenant, or an Idempotency-Key that is invalid or was used for a different request"
           }
         },
         "security": [
