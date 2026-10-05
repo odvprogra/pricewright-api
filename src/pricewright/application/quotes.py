@@ -28,9 +28,10 @@ from pricewright.domain.audit import AuditAction, AuditResourceType, changed, cr
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.idempotency import IdempotentRequest
+from pricewright.domain.numbering import document_number
 from pricewright.domain.pricing import ManualOverride
 from pricewright.domain.quote_approvals import ApprovalStatus
-from pricewright.domain.quotes import LineChange, PricingContext, Quote, quote_number
+from pricewright.domain.quotes import LineChange, PricingContext, Quote
 from pricewright.domain.updates import KEEP, Keep
 
 
@@ -78,7 +79,7 @@ async def create_quote(
         # A quote refused below rolls the unit of work back, and the number with it (ADR-0021).
         sequence = await uow.quotes.allocate_number(today.year)
         quote = Quote.draft(
-            number=quote_number(tenant.settings.quote_prefix, today.year, sequence),
+            number=document_number(tenant.settings.quote_prefix, today.year, sequence),
             valid_until=new.valid_until
             or today + timedelta(days=tenant.settings.quote_validity_days),
             by=Actor.of(principal),

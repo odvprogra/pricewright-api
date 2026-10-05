@@ -19,8 +19,16 @@ from pricewright.domain.catalog import Product, UnitOfMeasure, UnknownProductErr
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, NotFoundError, RuleViolationError
 from pricewright.domain.money import Money
+from pricewright.domain.orders import (
+    CustomerSnapshot,
+    Order,
+    OrderLine,
+    OrderTotals,
+    customer_reference,
+)
 from pricewright.domain.pricing import (
     ApprovalReason,
+    ArchivedCustomerError,
     LineRequest,
     ManualOverride,
     PricedLine,
@@ -43,7 +51,6 @@ from pricewright.domain.updates import KEEP, Keep
 MAX_QUOTE_LINES = 100
 MAX_NOTES_LENGTH = 2000
 MAX_REASON_LENGTH = 200
-NUMBER_SEQUENCE_DIGITS = 6
 
 
 class InvalidQuoteError(RuleViolationError):
@@ -60,11 +67,6 @@ class UnknownQuoteLineError(NotFoundError):
 
 class EmptyQuoteError(ConflictError):
     code = "quote_empty"
-
-
-def quote_number(prefix: str, year: int, sequence: int) -> str:
-    """``NF-2026-000123``: the tenant's prefix, the year and the tenant's count in that year."""
-    return f"{prefix}-{year}-{sequence:0{NUMBER_SEQUENCE_DIGITS}d}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +240,8 @@ class Quote:
     """The revision this one replaced."""
     superseded_by_id: uuid.UUID | None = None
     """The revision that replaced this one (decision D-07)."""
+    order_id: uuid.UUID | None = None
+    """The order this revision became (ADR-0023)."""
     version: int = 1
 
     @classmethod
@@ -460,6 +464,65 @@ class Quote:
         self._withdraw_pending(now)
         self.superseded_by_id = successor.id
         return successor
+
+    def convert(
+        self,
+        *,
+        number: str,
+        customer: Customer,
+        by: Actor,
+        now: datetime,
+        reference: str | None = None,
+    ) -> Order:
+        """Become an order: this accepted revision's snapshot, copied unchanged (ADR-0023).
+
+        An accepted quote converts after its ``valid_until``, since the customer accepted in time
+        (ADR-0005); once converted, it never converts again.
+        """
+        targets(self.status, QuoteAction.CONVERT, valid_until=self.valid_until, now=now)
+        if customer.id != self.customer_id:
+            raise ValueError("the customer is not this quote's")
+        if not customer.is_active:
+            raise ArchivedCustomerError("an archived customer takes no new orders")
+        totals = self.totals
+        order = Order(
+            id=uuid.uuid7(),
+            tenant_id=self.tenant_id,
+            number=number,
+            quote_id=self.id,
+            quote_number=self.display_number,
+            customer=CustomerSnapshot.of(customer),
+            currency=self.currency,
+            totals=OrderTotals(
+                list_subtotal=totals.list_subtotal,
+                net_subtotal=totals.net_subtotal,
+                tax_rate=totals.tax_rate,
+                tax=totals.tax,
+                total=totals.total,
+                priced_at=totals.priced_at,
+            ),
+            created_by=by,
+            created_at=now,
+            lines=[
+                OrderLine(
+                    id=uuid.uuid7(),
+                    product_id=line.product_id,
+                    sku=line.sku,
+                    product_name=line.product_name,
+                    unit=line.unit,
+                    quantity=line.quantity,
+                    pricing=line.pricing,
+                    override=line.override,
+                    override_by=line.override_by,
+                )
+                for line in self.lines
+            ],
+            customer_reference=customer_reference(reference),
+            status_changed_at=now,
+        )
+        self._move(QuoteAction.CONVERT, now)
+        self.order_id = order.id
+        return order
 
     def builders(self) -> frozenset[Actor]:
         """Everyone who shaped this revision: they never decide on its approval (ADR-0020)."""

@@ -10,6 +10,7 @@ import pytest
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.catalog import UnknownProductError
+from pricewright.domain.numbering import document_number
 from pricewright.domain.pricing import (
     ApprovalReason,
     ArchivedProductError,
@@ -25,7 +26,6 @@ from pricewright.domain.quotes import (
     LineChange,
     QuoteNotEditableError,
     UnknownQuoteLineError,
-    quote_number,
 )
 from tests.unit.quote_data import (
     ACME,
@@ -45,9 +45,9 @@ from tests.unit.quote_data import (
 )
 
 
-def test_quote_number_pads_the_sequence_to_six_digits() -> None:
-    assert quote_number("NF", 2026, 123) == "NF-2026-000123"
-    assert quote_number("LT", 2027, 1_234_567) == "LT-2027-1234567"
+def test_document_number_pads_the_sequence_to_six_digits() -> None:
+    assert document_number("NF", 2026, 123) == "NF-2026-000123"
+    assert document_number("LT", 2027, 1_234_567) == "LT-2027-1234567"
 
 
 def test_draft_starts_as_revision_one_in_draft_with_the_tenants_currency() -> None:
