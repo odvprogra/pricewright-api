@@ -15,12 +15,14 @@ from pricewright.application.ports import (
     PricingRuleRepository,
     ProductCategoryRepository,
     ProductRepository,
+    QuoteRepository,
     RefreshTokenRepository,
     ServiceAccountRepository,
     TenantRepository,
     UserRepository,
 )
 from pricewright.domain.errors import ConflictError
+from pricewright.infrastructure.quotes import SqlAlchemyQuoteRepository
 from pricewright.infrastructure.repositories import (
     SqlAlchemyApiKeyRepository,
     SqlAlchemyAuditEventRepository,
@@ -52,6 +54,7 @@ class SqlAlchemyUnitOfWork:
     products: ProductRepository
     customers: CustomerRepository
     pricing_rules: PricingRuleRepository
+    quotes: QuoteRepository
     identities: IdentityLookup
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -71,6 +74,7 @@ class SqlAlchemyUnitOfWork:
         self.products = SqlAlchemyProductRepository(self._session, self._scope)
         self.customers = SqlAlchemyCustomerRepository(self._session, self._scope)
         self.pricing_rules = SqlAlchemyPricingRuleRepository(self._session, self._scope)
+        self.quotes = SqlAlchemyQuoteRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
         return self
 
