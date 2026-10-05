@@ -8,7 +8,9 @@ Invariants checked after every step:
 - no quote with a line below its margin floor, or above the discount threshold, is approved, sent
   or accepted without an approval decided by someone who did not build it (ADR-0020);
 - at most one approval request is pending, exactly while the quote is pending approval;
-- superseded revisions never change again and stay linked to their successor (decision D-07).
+- superseded revisions never change again and stay linked to their successor (decision D-07);
+- a quote becomes an order only while accepted, exactly once, with its own lines and totals
+  (ADR-0023).
 """
 
 import copy
@@ -24,11 +26,13 @@ from pricewright.domain.actors import Actor
 from pricewright.domain.catalog import Product
 from pricewright.domain.errors import DomainError
 from pricewright.domain.money import Money
+from pricewright.domain.orders import Order
 from pricewright.domain.pricing import ManualOverride, PriceOverride, RateOverride
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quote_lifecycle import TERMINAL, TRANSITIONS, QuoteStatus
 from pricewright.domain.quotes import LineChange, PricingContext, Quote, QuoteLine, QuoteTotals
 from tests.unit.quote_data import (
+    ACME,
     BOLTS,
     GLOVES,
     INTEGRATION,
@@ -95,6 +99,8 @@ class QuoteLifecycleMachine(RuleBasedStateMachine):
         self.frozen: tuple[list[QuoteLine], QuoteTotals] | None = None
         self.retired: list[tuple[Quote, Quote]] = []
         """Superseded revisions, each with a copy taken when it was superseded."""
+        self.orders: list[tuple[QuoteStatus, Order]] = []
+        """Every order made, with the status its quote had just before."""
 
     def pricing(self) -> PricingContext:
         return context(at=self.now, rules=RULES, products=CATALOG)
@@ -186,6 +192,15 @@ class QuoteLifecycleMachine(RuleBasedStateMachine):
             self.previous, self.terminal, self.frozen = successor.status, None, None
 
     @rule(by=people)
+    def convert(self, by: Actor) -> None:
+        status = self.quote.status
+        order = self.attempt(
+            lambda: self.quote.convert(number="ORD-2026-000001", customer=ACME, by=by, now=self.now)
+        )
+        if isinstance(order, Order):
+            self.orders.append((status, order))
+
+    @rule(by=people)
     def advance(self, by: Actor) -> None:
         """The next step of the main path, so runs also reach sent and accepted quotes."""
         quote = self.quote
@@ -200,6 +215,8 @@ class QuoteLifecycleMachine(RuleBasedStateMachine):
                 self.send()
             case QuoteStatus.SENT:
                 self.accept()
+            case QuoteStatus.ACCEPTED:
+                self.convert(by)
             case _:
                 self.revise(by)
 
@@ -273,6 +290,22 @@ class QuoteLifecycleMachine(RuleBasedStateMachine):
             assert old.superseded_by_id == successor.id
             assert successor.supersedes_id == old.id
             assert (successor.number, successor.revision) == (old.number, old.revision + 1)
+
+    @invariant()
+    def a_quote_becomes_one_order_only_while_accepted(self) -> None:
+        quote = self.quote
+        assert all(status is QuoteStatus.ACCEPTED for status, _ in self.orders)
+        assert all(order.quote_id == quote.id for _, order in self.orders)
+        assert len(self.orders) == (1 if quote.status is QuoteStatus.CONVERTED else 0)
+        if self.orders:
+            [(_, order)] = self.orders
+            assert quote.order_id == order.id
+            assert [line.pricing for line in order.lines] == [line.pricing for line in quote.lines]
+            assert (order.totals.net_subtotal, order.totals.tax, order.totals.total) == (
+                quote.totals.net_subtotal,
+                quote.totals.tax,
+                quote.totals.total,
+            )
 
 
 QuoteLifecycleMachine.TestCase.settings = settings(max_examples=150, stateful_step_count=60)
