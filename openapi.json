@@ -1529,7 +1529,7 @@
         "type": "object"
       },
       "OverrideJson": {
-        "description": "A manager's manual override, the last step of the waterfall (brief \u00a74, rule 1).",
+        "description": "A manager's manual override, the last step of the waterfall (brief §4, rule 1).",
         "properties": {
           "rate": {
             "anyOf": [
