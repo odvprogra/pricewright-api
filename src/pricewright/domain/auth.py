@@ -45,6 +45,8 @@ class Permission(StrEnum):
     QUOTES_READ = "quotes:read"
     QUOTES_MANAGE = "quotes:manage"
     """Create and edit drafts and their lines, submit, recall, cancel and revise quotes."""
+    QUOTES_SEND = "quotes:send"
+    """Send a quote to the customer and record the customer's acceptance: commitments."""
     QUOTES_OVERRIDE = "quotes:override"
     """Set or clear a manual price override on a quote line (brief §4, rule 1)."""
 
@@ -59,6 +61,7 @@ _SELLING = frozenset(
         Permission.PRICING_READ,
         Permission.QUOTES_READ,
         Permission.QUOTES_MANAGE,
+        Permission.QUOTES_SEND,
     }
 )
 
@@ -76,8 +79,9 @@ ROLE_PERMISSIONS: Mapping[Role, frozenset[Permission]] = {
 # Some permissions stay with people, whatever a service account is granted: administering the
 # tenant, its users and its service accounts; reading the audit trail of what they do; changing the
 # catalog or the pricing rules, or overriding a quote's prices, so a person decides every price
-# change (decision D-02); and reading costs, which an integration such as an LLM drafting customer
-# messages could leak (ADR-0017).
+# change (decision D-02); sending quotes and recording their acceptance, which commit the company
+# to a customer; and reading costs, which an integration such as an LLM drafting customer messages
+# could leak (ADR-0017, OWASP LLM06 excessive agency).
 PEOPLE_ONLY_PERMISSIONS = frozenset(
     {
         Permission.TENANT_MANAGE,
@@ -87,6 +91,7 @@ PEOPLE_ONLY_PERMISSIONS = frozenset(
         Permission.CATALOG_MANAGE,
         Permission.COSTS_READ,
         Permission.PRICING_MANAGE,
+        Permission.QUOTES_SEND,
         Permission.QUOTES_OVERRIDE,
     }
 )

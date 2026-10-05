@@ -4,7 +4,7 @@ Every use case binds the unit of work to the caller's tenant (ADR-0006), saves w
 caller read (ADR-0012) and records its audit event in the same unit of work (ADR-0013).
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -257,3 +257,170 @@ async def remove_quote_line(
         await record(uow, principal, AuditAction.QUOTE_LINE_REMOVED, quote.id, changes, now=now)
         await uow.commit()
     return quote
+
+
+async def _transition(
+    principal: Principal,
+    quote_id: UUID,
+    permission: Permission,
+    action: AuditAction,
+    move: Callable[[Quote, datetime], None],
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Load the quote at the caller's version, move it, save it and record the move."""
+    principal.require(permission)
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        before = quote_fields(quote)
+        move(quote, now)
+        await uow.quotes.save(quote)
+        await record(
+            uow, principal, action, quote.id, changed(before, quote_fields(quote)), now=now
+        )
+        await uow.commit()
+    return quote
+
+
+async def submit_quote(
+    principal: Principal,
+    quote_id: UUID,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Price one last time and freeze (ADR-0019); ask for approval when needed (ADR-0020)."""
+    principal.require(Permission.QUOTES_MANAGE)
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        context = await _repricing(uow, principal, quote, extra=None, now=now)
+        before = quote_fields(quote)
+        quote.submit(by=Actor.of(principal), context=context)
+        await uow.quotes.save(quote)
+        changes = dict(changed(before, quote_fields(quote)))
+        if (request := quote.pending_approval) is not None:
+            reasons = " ".join(reason.value for reason in request.reasons)
+            changes["approval_reasons"] = (None, reasons)
+        await record(uow, principal, AuditAction.QUOTE_SUBMITTED, quote.id, changes, now=now)
+        await uow.commit()
+    return quote
+
+
+async def recall_quote(
+    principal: Principal,
+    quote_id: UUID,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Withdraw a pending approval request; the quote is a draft again (ADR-0005)."""
+    return await _transition(
+        principal,
+        quote_id,
+        Permission.QUOTES_MANAGE,
+        AuditAction.QUOTE_RECALLED,
+        lambda quote, now: quote.recall(now=now),
+        expected_version=expected_version,
+        unit_of_work=unit_of_work,
+        clock=clock,
+    )
+
+
+async def send_quote(
+    principal: Principal,
+    quote_id: UUID,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Mark an approved quote as sent to the customer (people only: ``quotes:send``)."""
+    return await _transition(
+        principal,
+        quote_id,
+        Permission.QUOTES_SEND,
+        AuditAction.QUOTE_SENT,
+        lambda quote, now: quote.send(now=now),
+        expected_version=expected_version,
+        unit_of_work=unit_of_work,
+        clock=clock,
+    )
+
+
+async def accept_quote(
+    principal: Principal,
+    quote_id: UUID,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Record the customer's acceptance of a sent quote, within its validity."""
+    return await _transition(
+        principal,
+        quote_id,
+        Permission.QUOTES_SEND,
+        AuditAction.QUOTE_ACCEPTED,
+        lambda quote, now: quote.accept(now=now),
+        expected_version=expected_version,
+        unit_of_work=unit_of_work,
+        clock=clock,
+    )
+
+
+async def cancel_quote(
+    principal: Principal,
+    quote_id: UUID,
+    reason: str,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Close an open quote for good, with a reason; also how a customer's "no" is recorded."""
+    return await _transition(
+        principal,
+        quote_id,
+        Permission.QUOTES_MANAGE,
+        AuditAction.QUOTE_CANCELLED,
+        lambda quote, now: quote.cancel(reason=reason, now=now),
+        expected_version=expected_version,
+        unit_of_work=unit_of_work,
+        clock=clock,
+    )
+
+
+async def revise_quote(
+    principal: Principal,
+    quote_id: UUID,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+) -> Quote:
+    """Supersede the quote with its next revision, a draft priced now (decision D-07)."""
+    principal.require(Permission.QUOTES_MANAGE)
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        context = await _repricing(uow, principal, quote, extra=None, now=now)
+        before = quote_fields(quote)
+        successor = quote.revise(by=Actor.of(principal), context=context)
+        # The old revision first: its version decides between concurrent revisions (ADR-0012).
+        await uow.quotes.save(quote)
+        await uow.quotes.add(successor)
+        superseded = changed(before, quote_fields(quote))
+        await record(uow, principal, AuditAction.QUOTE_REVISED, quote.id, superseded, now=now)
+        fields = created(quote_fields(successor))
+        await record(uow, principal, AuditAction.QUOTE_CREATED, successor.id, fields, now=now)
+        await uow.commit()
+    return successor
