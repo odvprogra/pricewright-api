@@ -5,12 +5,13 @@ from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.catalog import Product, UnitOfMeasure
 from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.money import Money
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
-from pricewright.domain.quotes import Actor, LineChange, PricingContext, Quote
+from pricewright.domain.quotes import LineChange, PricingContext, Quote
 from pricewright.domain.tenants import TenantSettings
 
 TENANT = uuid.uuid7()
@@ -21,6 +22,7 @@ SETTINGS = TenantSettings(currency="USD", tax_rate=Decimal("0.0725"), quote_pref
 REP = Actor(ActorType.USER, uuid.uuid7())
 OTHER_REP = Actor(ActorType.USER, uuid.uuid7())
 MANAGER = Actor(ActorType.USER, uuid.uuid7())
+OTHER_MANAGER = Actor(ActorType.USER, uuid.uuid7())
 INTEGRATION = Actor(ActorType.SERVICE_ACCOUNT, uuid.uuid7())
 
 

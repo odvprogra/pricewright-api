@@ -10,11 +10,11 @@ transition table of ADR-0005.
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from pricewright.domain.audit import ActorType
-from pricewright.domain.auth import Principal
+from pricewright.domain.actors import Actor
+from pricewright.domain.auth import PermissionDeniedError
 from pricewright.domain.catalog import Product, UnitOfMeasure, UnknownProductError
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, NotFoundError, RuleViolationError
@@ -28,12 +28,21 @@ from pricewright.domain.pricing import (
     price_quote,
 )
 from pricewright.domain.pricing_rules import PricingRule
-from pricewright.domain.quote_lifecycle import QuoteStatus
+from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus, SelfApprovalError
+from pricewright.domain.quote_lifecycle import (
+    QuoteAction,
+    QuoteExpiredError,
+    QuoteStatus,
+    allowed_actions,
+    has_passed,
+    targets,
+)
 from pricewright.domain.tenants import TenantSettings
 from pricewright.domain.updates import KEEP, Keep
 
 MAX_QUOTE_LINES = 100
 MAX_NOTES_LENGTH = 2000
+MAX_REASON_LENGTH = 200
 NUMBER_SEQUENCE_DIGITS = 6
 
 
@@ -49,22 +58,13 @@ class UnknownQuoteLineError(NotFoundError):
     code = "quote_line_not_found"
 
 
+class EmptyQuoteError(ConflictError):
+    code = "quote_empty"
+
+
 def quote_number(prefix: str, year: int, sequence: int) -> str:
     """``NF-2026-000123``: the tenant's prefix, the year and the tenant's count in that year."""
     return f"{prefix}-{year}-{sequence:0{NUMBER_SEQUENCE_DIGITS}d}"
-
-
-@dataclass(frozen=True, slots=True)
-class Actor:
-    """Who did something: a person or an integration."""
-
-    type: ActorType
-    id: uuid.UUID
-
-    @classmethod
-    def of(cls, principal: Principal) -> Actor:
-        kind = ActorType.SERVICE_ACCOUNT if principal.is_service_account else ActorType.USER
-        return cls(kind, principal.subject_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +201,13 @@ def _valid_until(valid_until: date, now: datetime) -> date:
     return valid_until
 
 
+def _reason(reason: str) -> str:
+    text = reason.strip()
+    if not text or len(text) > MAX_REASON_LENGTH:
+        raise InvalidQuoteError(f"a cancellation needs a reason of 1 to {MAX_REASON_LENGTH} chars")
+    return text
+
+
 @dataclass(slots=True)
 class Quote:
     """One revision of a quote. ``version`` counts saved changes (optimistic concurrency, ADR-0012).
@@ -222,6 +229,15 @@ class Quote:
     notes: str | None = None
     status: QuoteStatus = QuoteStatus.DRAFT
     status_changed_at: datetime | None = None
+    approvals: list[ApprovalRequest] = field(default_factory=list)
+    """Every approval request of this revision, oldest first; at most one pending."""
+    submitted_by: Actor | None = None
+    submitted_at: datetime | None = None
+    cancel_reason: str | None = None
+    supersedes_id: uuid.UUID | None = None
+    """The revision this one replaced."""
+    superseded_by_id: uuid.UUID | None = None
+    """The revision that replaced this one (decision D-07)."""
     version: int = 1
 
     @classmethod
@@ -283,6 +299,13 @@ class Quote:
     def approval_reasons(self) -> tuple[ApprovalReason, ...]:
         return self.priced.approval_reasons
 
+    @property
+    def pending_approval(self) -> ApprovalRequest | None:
+        return next((a for a in self.approvals if a.status is ApprovalStatus.PENDING), None)
+
+    def allowed_actions(self, now: datetime) -> frozenset[QuoteAction]:
+        return allowed_actions(self.status, valid_until=self.valid_until, now=now)
+
     def line(self, line_id: uuid.UUID) -> QuoteLine:
         for line in self.lines:
             if line.id == line_id:
@@ -343,6 +366,139 @@ class Quote:
     def reprice(self, context: PricingContext) -> None:
         """Price every line again with what is effective at ``context.at``."""
         self._price([_Line.of(line) for line in self.lines], context)
+
+    def submit(self, *, by: Actor, context: PricingContext) -> None:
+        """Price one last time and freeze (ADR-0019); ask for approval when the quote needs it."""
+        now = context.at
+        targets(self.status, QuoteAction.SUBMIT, valid_until=self.valid_until, now=now)
+        if not self.lines:
+            raise EmptyQuoteError("add at least one line before submitting the quote")
+        if has_passed(self.valid_until, now):
+            raise QuoteExpiredError("valid_until has passed; set a new date before submitting")
+        self.reprice(context)
+        self.submitted_by, self.submitted_at = by, now
+        if not self.approval_reasons:
+            self._enter(QuoteStatus.APPROVED, now)
+            return
+        totals = self.totals
+        self.approvals.append(
+            ApprovalRequest(
+                id=uuid.uuid7(),
+                requested_by=by,
+                requested_at=now,
+                reasons=self.approval_reasons,
+                discount=self.discount,
+                approval_threshold=totals.approval_threshold,
+                list_subtotal=totals.list_subtotal,
+                net_subtotal=totals.net_subtotal,
+            )
+        )
+        self._enter(QuoteStatus.PENDING_APPROVAL, now)
+
+    def recall(self, *, now: datetime) -> None:
+        """Withdraw the pending approval request; the quote is a draft again."""
+        self._move(QuoteAction.RECALL, now)
+        self._withdraw_pending(now)
+        self.submitted_by = self.submitted_at = None
+
+    def approve(self, *, by: Actor, comment: str | None = None, now: datetime) -> None:
+        self._decide(ApprovalStatus.APPROVED, QuoteAction.APPROVE, by=by, comment=comment, now=now)
+
+    def reject(self, *, by: Actor, comment: str, now: datetime) -> None:
+        self._decide(ApprovalStatus.REJECTED, QuoteAction.REJECT, by=by, comment=comment, now=now)
+
+    def send(self, *, now: datetime) -> None:
+        self._move(QuoteAction.SEND, now)
+
+    def accept(self, *, now: datetime) -> None:
+        self._move(QuoteAction.ACCEPT, now)
+
+    def cancel(self, *, reason: str, now: datetime) -> None:
+        """Close the quote for good; also how a customer's "no" is recorded."""
+        text = _reason(reason)
+        self._move(QuoteAction.CANCEL, now)
+        self._withdraw_pending(now)
+        self.cancel_reason = text
+
+    def revise(self, *, by: Actor, context: PricingContext) -> Quote:
+        """Supersede this revision with a new draft: same number, the next revision, the same
+        products, quantities and overrides priced again (ADR-0019), a fresh validity."""
+        now = context.at
+        targets(self.status, QuoteAction.REVISE, valid_until=self.valid_until, now=now)
+        if context.customer.id != self.customer_id:
+            raise ValueError("the pricing context is for another customer")
+        copies = [
+            _Line(
+                uuid.uuid7(),
+                line.product_id,
+                line.quantity,
+                line.added_by,
+                line.override,
+                line.override_by,
+            )
+            for line in self.lines
+        ]
+        quote_lines, totals = _priced(copies, context)
+        today = now.astimezone(UTC).date()
+        successor = Quote(
+            id=uuid.uuid7(),
+            tenant_id=self.tenant_id,
+            number=self.number,
+            revision=self.revision + 1,
+            customer_id=self.customer_id,
+            currency=self.currency,
+            valid_until=today + timedelta(days=context.settings.quote_validity_days),
+            created_by=by,
+            created_at=now,
+            totals=totals,
+            lines=quote_lines,
+            notes=self.notes,
+            status_changed_at=now,
+            supersedes_id=self.id,
+        )
+        self._move(QuoteAction.REVISE, now)
+        self._withdraw_pending(now)
+        self.superseded_by_id = successor.id
+        return successor
+
+    def builders(self) -> frozenset[Actor]:
+        """Everyone who shaped this revision: they never decide on its approval (ADR-0020)."""
+        people = {self.created_by, *(line.added_by for line in self.lines)}
+        people |= {Actor.person(line.override_by) for line in self.lines if line.override_by}
+        if self.submitted_by is not None:
+            people.add(self.submitted_by)
+        return frozenset(people)
+
+    def _decide(
+        self,
+        status: ApprovalStatus,
+        action: QuoteAction,
+        *,
+        by: Actor,
+        comment: str | None,
+        now: datetime,
+    ) -> None:
+        (target,) = targets(self.status, action, valid_until=self.valid_until, now=now)
+        if not by.is_person:
+            raise PermissionDeniedError("only people decide on approvals")
+        if by in self.builders():
+            raise SelfApprovalError("someone who built or submitted this quote cannot decide on it")
+        request = self.pending_approval
+        if request is None:  # pragma: no cover - a quote pending approval always has its request
+            raise RuntimeError("a quote pending approval has no pending request")
+        request.decide(status, by=by, comment=comment, now=now)
+        self._enter(target, now)
+
+    def _move(self, action: QuoteAction, now: datetime) -> None:
+        (target,) = targets(self.status, action, valid_until=self.valid_until, now=now)
+        self._enter(target, now)
+
+    def _enter(self, status: QuoteStatus, now: datetime) -> None:
+        self.status, self.status_changed_at = status, now
+
+    def _withdraw_pending(self, now: datetime) -> None:
+        if (request := self.pending_approval) is not None:
+            request.withdraw(now)
 
     def _require_draft(self) -> None:
         if self.status is not QuoteStatus.DRAFT:
