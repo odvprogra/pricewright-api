@@ -27,7 +27,9 @@ from pricewright.application.ports import (
     IdempotencyKeyRepository,
     IdentityLookup,
     IssuedToken,
+    OrderQuery,
     OrderRepository,
+    OrderSummary,
     PricingRuleQuery,
     PricingRuleRepository,
     PricingRuleSort,
@@ -661,6 +663,24 @@ class FakeIdempotencyKeyRepository:
         return scope
 
 
+def _order_summary(order: Order) -> OrderSummary:
+    return OrderSummary(
+        id=order.id,
+        number=order.number,
+        quote_id=order.quote_id,
+        quote_number=order.quote_number,
+        customer_id=order.customer.id,
+        customer_name=order.customer.name,
+        customer_reference=order.customer_reference,
+        status=order.status,
+        total=order.totals.total,
+        created_by=order.created_by,
+        created_at=order.created_at,
+        status_changed_at=order.status_changed_at or order.created_at,
+        version=order.version,
+    )
+
+
 class FakeOrderRepository:
     def __init__(
         self,
@@ -690,6 +710,26 @@ class FakeOrderRepository:
         if order is None or order.tenant_id != self._uow.tenant_id:
             return None
         return copy.deepcopy(order)
+
+    async def page(
+        self, query: OrderQuery, *, after: UUID | None, limit: int
+    ) -> list[OrderSummary]:
+        def matches(order: Order) -> bool:
+            return (
+                order.tenant_id == self._uow.tenant_id
+                and query.status in {None, order.status}
+                and query.customer_id in {None, order.customer.id}
+                and query.number in {None, order.number}
+                and query.created_by in {None, order.created_by.id}
+                and (after is None or (order.id < after if query.descending else order.id > after))
+            )
+
+        found = sorted(
+            (order for order in self._orders.values() if matches(order)),
+            key=lambda order: order.id,
+            reverse=query.descending,
+        )
+        return [_order_summary(order) for order in found[:limit]]
 
     async def save(self, order: Order) -> None:
         self._require_own(order)

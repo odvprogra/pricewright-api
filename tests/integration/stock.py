@@ -117,9 +117,9 @@ def draft(stock: Stock, number: str = "NF-2026-000001") -> Quote:
     return quote
 
 
-async def accepted(sessions: Sessions, stock: Stock) -> Quote:
+async def accepted(sessions: Sessions, stock: Stock, number: str = "NF-2026-000001") -> Quote:
     """A stored quote, approved by the director (a line is below its floor), sent and accepted."""
-    quote = draft(stock)
+    quote = draft(stock, number)
     quote.submit(by=Actor.person(stock.rep.id), context=stock.pricing())
     quote.approve(by=Actor.person(stock.director.id), now=NOW)
     quote.send(now=NOW)
