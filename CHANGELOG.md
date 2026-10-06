@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0](https://github.com/odvprogra/pricewright-api/compare/v0.5.0...v0.6.0) (2026-10-06)
+
+
+### Features
+
+* accept Idempotency-Key on every other creation ([#71](https://github.com/odvprogra/pricewright-api/issues/71)) ([f748633](https://github.com/odvprogra/pricewright-api/commit/f748633efb27b0ee9bdec5dd17afb58411a3ad4a))
+* accept Idempotency-Key when starting a draft quote ([#64](https://github.com/odvprogra/pricewright-api/issues/64)) ([fc048e2](https://github.com/odvprogra/pricewright-api/commit/fc048e2509f39de6f62cdd147bfce589e430d6a9))
+* cancel an open order with a reason ([#70](https://github.com/odvprogra/pricewright-api/issues/70)) ([58923a8](https://github.com/odvprogra/pricewright-api/commit/58923a83bb6fa4a2b1e0ea2c9300a0d04b152e37))
+* convert accepted quotes into orders over the API ([#68](https://github.com/odvprogra/pricewright-api/issues/68)) ([29ea962](https://github.com/odvprogra/pricewright-api/commit/29ea96278ab631c779b19daa51edeaa014d7e8af))
+* give tenants an order number prefix ([#65](https://github.com/odvprogra/pricewright-api/issues/65)) ([f154b54](https://github.com/odvprogra/pricewright-api/commit/f154b54b0b0e84f914eb0db2f9e10a1d57956f29))
+* list orders with filters and keyset pages ([#69](https://github.com/odvprogra/pricewright-api/issues/69)) ([6f7b7c4](https://github.com/odvprogra/pricewright-api/commit/6f7b7c4dc78cbbf2923c208ff790bb0b1befa005))
+* model orders converted once from accepted quotes ([#66](https://github.com/odvprogra/pricewright-api/issues/66)) ([8d812e1](https://github.com/odvprogra/pricewright-api/commit/8d812e1290f73a4aa0673f775caf88bae886d9f7))
+* store idempotency keys per caller, held until the transaction ends ([#62](https://github.com/odvprogra/pricewright-api/issues/62)) ([cd7b1de](https://github.com/odvprogra/pricewright-api/commit/cd7b1deff1fb73e95644e164bfff34cea01b538c))
+* store orders with their lines, numbered in a series of their own ([#67](https://github.com/odvprogra/pricewright-api/issues/67)) ([41dc09a](https://github.com/odvprogra/pricewright-api/commit/41dc09a80fed12895383eba65de43567cccb6bf2))
+
+
+### Documentation
+
+* close M6 in the README, CLAUDE.md, architecture and brief ([#72](https://github.com/odvprogra/pricewright-api/issues/72)) ([b2790fd](https://github.com/odvprogra/pricewright-api/commit/b2790fd526f17e83f579999800b59b864a65d4b3))
+
 ## [0.5.0](https://github.com/odvprogra/pricewright-api/compare/v0.4.0...v0.5.0) (2026-10-05)
 
 
