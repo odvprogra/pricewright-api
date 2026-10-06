@@ -22,7 +22,8 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **M6 — Orders** (next).
+- Work one milestone at a time. Current milestone: **presentable checkpoint** (seed data and README;
+  then M5).
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.
@@ -57,7 +58,7 @@ Read first: `main.py` (wiring), `application/ports.py` (unit of work and reposit
 `api/concurrency.py` (ETag / If-Match), `application/audit.py` (the audit trail),
 `api/pagination.py` (cursors), `domain/money.py`, `domain/pricing.py` (the engine),
 `domain/quote_lifecycle.py` (the transition table), `domain/quotes.py` (the quote aggregate),
-`tests/fakes.py`.
+`domain/orders.py`, `application/idempotency.py` (`Idempotency-Key`), `tests/fakes.py`.
 
 Rules the code relies on:
 
@@ -72,6 +73,8 @@ Rules the code relies on:
   ADR-0014). Response values from a growing set are strings with `examples` (ADR-0015).
 - Prices come only from the pricing engine (`domain/pricing.py`, ADR-0004); responses leave out
   costs and margins for callers without `costs:read` (ADR-0017).
+- Creations (every `POST` that answers 201, except API keys) take an optional `Idempotency-Key`:
+  check it first in the unit of work, remember what was created in the same one (ADR-0022).
 - Fakes in `tests/fakes.py` enforce the same rules as the adapters; keep them in step.
 - Test secrets are generated at runtime: gitleaks flags literals.
 
@@ -101,6 +104,8 @@ expected ADRs and their milestones are listed in the brief (§9).
   its breakdown and approval metric (ADR-0004), rules managed over the API, `POST /pricing/preview`
   (v0.4.0). M4 — tenant quote settings, the lifecycle as a transition table (ADR-0005), quotes
   priced line by line with a snapshot (ADR-0019), four-eyes approvals (ADR-0020), numbers per tenant
-  and year (ADR-0021), quote, line and transition endpoints, the approval inbox (v0.5.0)
+  and year (ADR-0021), quote, line and transition endpoints, the approval inbox (v0.5.0). M6 —
+  `Idempotency-Key` on every creation (ADR-0022), the order prefix, orders converted once from
+  accepted quotes with their snapshot (ADR-0023), listed and cancelled (v0.6.0)
 - In progress: —
-- Next: M6 — orders from accepted quotes, `Idempotency-Key`
+- Next: seed data and README for the presentable checkpoint, then M5
