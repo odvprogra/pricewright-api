@@ -325,3 +325,60 @@ async def test_listing_orders_needs_orders_read(client: httpx.AsyncClient) -> No
 
     assert len(allowed.json()["items"]) == 1
     assert (refused.status_code, refused.json()["code"]) == (403, "permission_denied")
+
+
+async def cancel_order(
+    client: httpx.AsyncClient, order_id: str, headers: dict[str, str]
+) -> httpx.Response:
+    return await client.post(
+        f"/api/v1/orders/{order_id}/cancel", json={"reason": "Entered twice"}, headers=headers
+    )
+
+
+async def test_a_rep_cancels_an_open_order_with_a_reason(client: httpx.AsyncClient) -> None:
+    path = await accepted(client)
+    order = (await convert(client, path)).json()
+
+    response = await cancel_order(client, order["id"], bearer() | {"If-Match": '"1"'})
+    again = await cancel_order(client, order["id"], bearer() | {"If-Match": '"2"'})
+    listed = await client.get("/api/v1/orders", params={"status": "cancelled"}, headers=bearer())
+    quote = (await client.get(path, headers=bearer())).json()
+
+    assert (response.status_code, response.headers["etag"]) == (200, '"2"')
+    assert (response.json()["status"], response.json()["cancel_reason"]) == (
+        "cancelled",
+        "Entered twice",
+    )
+    assert (again.status_code, again.json()["code"]) == (409, "invalid_transition")
+    assert [item["id"] for item in listed.json()["items"]] == [order["id"]]
+    assert quote["status"] == "converted"
+
+
+@pytest.mark.parametrize(
+    ("if_match", "status", "code"),
+    [(None, 428, "precondition_required"), ('"7"', 412, "stale_version")],
+)
+async def test_cancelling_an_order_needs_its_current_etag(
+    client: httpx.AsyncClient, if_match: str | None, status: int, code: str
+) -> None:
+    order = (await convert(client, await accepted(client))).json()
+    headers = bearer() | ({} if if_match is None else {"If-Match": if_match})
+
+    response = await cancel_order(client, order["id"], headers)
+
+    assert (response.status_code, response.json()["code"]) == (status, code)
+
+
+async def test_integrations_never_cancel_orders(client: httpx.AsyncClient) -> None:
+    order = (await convert(client, await accepted(client))).json()
+    integration = await api_key(client, "orders:read")
+
+    response = await cancel_order(client, order["id"], integration | {"If-Match": '"1"'})
+    empty = await client.post(
+        f"/api/v1/orders/{order['id']}/cancel",
+        json={"reason": ""},
+        headers=bearer() | {"If-Match": '"1"'},
+    )
+
+    assert (response.status_code, response.json()["code"]) == (403, "permission_denied")
+    assert (empty.status_code, empty.json()["code"]) == (422, "validation_error")

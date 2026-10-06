@@ -437,7 +437,8 @@
           "quote.approved",
           "quote.rejected",
           "quote.converted",
-          "order.created"
+          "order.created",
+          "order.cancelled"
         ],
         "title": "AuditAction",
         "type": "string"
@@ -504,7 +505,8 @@
               "quote.approved",
               "quote.rejected",
               "quote.converted",
-              "order.created"
+              "order.created",
+              "order.cancelled"
             ],
             "title": "Action",
             "type": "string"
@@ -687,6 +689,25 @@
           "rate"
         ],
         "title": "BracketJson",
+        "type": "object"
+      },
+      "CancelOrderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "examples": [
+              "Entered for the wrong customer"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CancelOrderRequest",
         "type": "object"
       },
       "CancelRequest": {
@@ -5137,6 +5158,141 @@
           }
         ],
         "summary": "One order, line by line",
+        "tags": [
+          "orders"
+        ]
+      }
+    },
+    "/api/v1/orders/{order_id}/cancel": {
+      "post": {
+        "description": "The order stays, as every document does, and its quote stays `converted`.",
+        "operationId": "cancel_api_v1_orders__order_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Needs `orders:manage`; never integrations"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such order in this tenant (ADR-0009)"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The order is not open (`invalid_transition`)"
+          },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is stale: someone else changed the order; reload it"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A reason is required (`invalid_order`, `validation_error`)"
+          },
+          "428": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "If-Match is required"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel an open order, with a reason (people only)",
         "tags": [
           "orders"
         ]
