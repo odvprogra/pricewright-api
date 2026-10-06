@@ -4603,6 +4603,29 @@
       },
       "post": {
         "operationId": "add_customer_api_v1_customers_post",
+        "parameters": [
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4652,7 +4675,7 @@
                 }
               }
             },
-            "description": "The account number exists, ignoring case"
+            "description": "The account number exists, ignoring case; or a request with this Idempotency-Key is still running (`idempotency_key_in_use`)"
           },
           "422": {
             "content": {
@@ -4662,7 +4685,7 @@
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid fields, or an Idempotency-Key that is invalid or was used for a different request"
           }
         },
         "security": [
@@ -5484,6 +5507,29 @@
       },
       "post": {
         "operationId": "add_pricing_rule_api_v1_pricing_rules_post",
+        "parameters": [
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5525,6 +5571,16 @@
             },
             "description": "Reading needs `pricing:read`; changes need `pricing:manage` (managers and admins)"
           },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A request with this Idempotency-Key is still running"
+          },
           "422": {
             "content": {
               "application/problem+json": {
@@ -5533,7 +5589,7 @@
                 }
               }
             },
-            "description": "Invalid fields, a rule inconsistent with its kind, or an unknown product or category"
+            "description": "Invalid fields, a rule inconsistent with its kind, or an unknown product or category; or an Idempotency-Key that is invalid or was used for a different request"
           }
         },
         "security": [
@@ -5904,6 +5960,29 @@
       },
       "post": {
         "operationId": "add_category_api_v1_product_categories_post",
+        "parameters": [
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5953,7 +6032,7 @@
                 }
               }
             },
-            "description": "Another category has that name, ignoring case"
+            "description": "Another category has that name, ignoring case; or a request with this Idempotency-Key is still running (`idempotency_key_in_use`)"
           },
           "422": {
             "content": {
@@ -5963,7 +6042,7 @@
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid fields, or an Idempotency-Key that is invalid or was used for a different request"
           }
         },
         "security": [
@@ -6362,6 +6441,29 @@
       },
       "post": {
         "operationId": "add_product_api_v1_products_post",
+        "parameters": [
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6411,7 +6513,7 @@
                 }
               }
             },
-            "description": "The SKU is already in the catalog, ignoring case"
+            "description": "The SKU is already in the catalog, ignoring case; or a request with this Idempotency-Key is still running (`idempotency_key_in_use`)"
           },
           "422": {
             "content": {
@@ -6421,7 +6523,7 @@
                 }
               }
             },
-            "description": "Invalid fields, an unknown category, or prices not in the tenant's currency"
+            "description": "Invalid fields, an unknown category, or prices not in the tenant's currency; or an Idempotency-Key that is invalid or was used for a different request"
           }
         },
         "security": [
@@ -8366,6 +8468,27 @@
               ],
               "title": "If-Match"
             }
+          },
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "responses": {
@@ -8417,7 +8540,7 @@
                 }
               }
             },
-            "description": "The quote's status does not allow it (`invalid_transition`), its validity passed (`quote_expired`), or it has no lines (`quote_empty`)"
+            "description": "The quote's status does not allow it (`invalid_transition`), its validity passed (`quote_expired`), or it has no lines (`quote_empty`); or a request with this Idempotency-Key is still running (`idempotency_key_in_use`)"
           },
           "412": {
             "content": {
@@ -8437,7 +8560,7 @@
                 }
               }
             },
-            "description": "A product or the customer was archived since the last pricing"
+            "description": "A product or the customer was archived since the last pricing; or an Idempotency-Key that is invalid or was used for a different request"
           },
           "428": {
             "content": {
@@ -8800,6 +8923,29 @@
       },
       "post": {
         "operationId": "add_service_account_api_v1_service_accounts_post",
+        "parameters": [
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8849,7 +8995,7 @@
                 }
               }
             },
-            "description": "The tenant already has an account with that name"
+            "description": "The tenant already has an account with that name; or a request with this Idempotency-Key is still running (`idempotency_key_in_use`)"
           },
           "422": {
             "content": {
@@ -8859,7 +9005,7 @@
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid fields, or an Idempotency-Key that is invalid or was used for a different request"
           }
         },
         "security": [
@@ -9435,6 +9581,29 @@
       },
       "post": {
         "operationId": "add_user_api_v1_users_post",
+        "parameters": [
+          {
+            "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Makes the request safe to retry (ADR-0022): a retry with the same key and the same request gets back what the first one created, with `Idempotent-Replayed: true`, instead of creating it again. 1 to 255 visible ASCII characters without `\"` or `\\`, quoted as a Structured Field String or bare; a UUID is a good key. Keys are the caller's own and kept for 24 hours. The same key with a different request is a 422 (`idempotency_key_reused`); while the first request is still running, a 409 (`idempotency_key_in_use`).",
+              "examples": [
+                "\"8e03978e-40d5-43e8-bc93-6894a57f9324\""
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9484,7 +9653,7 @@
                 }
               }
             },
-            "description": "The email is already registered in some tenant"
+            "description": "The email is already registered in some tenant; or a request with this Idempotency-Key is still running (`idempotency_key_in_use`)"
           },
           "422": {
             "content": {
@@ -9494,7 +9663,7 @@
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid fields, or an Idempotency-Key that is invalid or was used for a different request"
           }
         },
         "security": [

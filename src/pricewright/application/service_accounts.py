@@ -5,11 +5,18 @@ from datetime import datetime
 from uuid import UUID
 
 from pricewright.application.audit import api_key_fields, record, service_account_fields
+from pricewright.application.idempotency import (
+    Created,
+    earlier_creation,
+    remember_creation,
+    replay,
+)
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import Clock, UnitOfWork, UnitOfWorkFactory
-from pricewright.domain.audit import AuditAction, changed, created
+from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError
+from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.service_accounts import (
     MAX_ACTIVE_KEYS,
     ApiKey,
@@ -33,11 +40,16 @@ async def create_service_account(
     scopes: frozenset[Permission],
     unit_of_work: UnitOfWorkFactory,
     clock: Clock,
-) -> ServiceAccount:
+    idempotency: IdempotentRequest | None = None,
+) -> Created[ServiceAccount]:
+    """A retry with the same ``Idempotency-Key`` gets the account back (ADR-0022)."""
     principal.require(Permission.SERVICE_ACCOUNTS_MANAGE)
+    now = clock()
     account = ServiceAccount.create(tenant_id=principal.tenant_id, name=name, scopes=scopes)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return await replay(uow.service_accounts.get(earlier))
         await uow.service_accounts.add(account)
         await record(
             uow,
@@ -45,10 +57,13 @@ async def create_service_account(
             AuditAction.SERVICE_ACCOUNT_CREATED,
             account.id,
             created(service_account_fields(account)),
-            now=clock(),
+            now=now,
+        )
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.SERVICE_ACCOUNT, account.id, now=now
         )
         await uow.commit()  # a duplicate name in the tenant is a ConflictError
-    return account
+    return Created(account)
 
 
 async def list_service_accounts(

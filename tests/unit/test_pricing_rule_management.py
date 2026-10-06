@@ -78,9 +78,11 @@ class Fixture:
         return FakeUnitOfWork(self.database)
 
     async def add(self, new: NewPricingRule, caller: Principal | None = None) -> PricingRule:
-        return await create_pricing_rule(
-            caller or self.manager, new, unit_of_work=self.unit_of_work, clock=self.clock
-        )
+        return (
+            await create_pricing_rule(
+                caller or self.manager, new, unit_of_work=self.unit_of_work, clock=self.clock
+            )
+        ).value
 
     async def change(
         self, rule: PricingRule, changes: PricingRuleChanges, version: int = 1

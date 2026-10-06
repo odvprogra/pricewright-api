@@ -213,13 +213,15 @@ async def test_cancel_quote_keeps_its_reason(f: Fixture) -> None:
 async def test_revise_quote_stores_both_revisions_and_records_both(f: Fixture) -> None:
     quote = await send(f, await submit(f, await f.create()))
 
-    successor = await revise_quote(
-        f.rep,
-        quote.id,
-        expected_version=version(f, quote),
-        unit_of_work=f.unit_of_work,
-        clock=f.clock,
-    )
+    successor = (
+        await revise_quote(
+            f.rep,
+            quote.id,
+            expected_version=version(f, quote),
+            unit_of_work=f.unit_of_work,
+            clock=f.clock,
+        )
+    ).value
 
     old = f.database.quotes[quote.id]
     assert (old.status, old.superseded_by_id) == (QuoteStatus.SUPERSEDED, successor.id)

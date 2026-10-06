@@ -47,13 +47,15 @@ class Fixture:
         return Principal((tenant or self.northfield).id, uuid.uuid7(), Role.ADMIN)
 
     async def account(self, name: str = "ops-copilot") -> ServiceAccount:
-        return await create_service_account(
-            self.admin(),
-            name=name,
-            scopes=READ_TENANT,
-            unit_of_work=self.unit_of_work,
-            clock=self.clock,
-        )
+        return (
+            await create_service_account(
+                self.admin(),
+                name=name,
+                scopes=READ_TENANT,
+                unit_of_work=self.unit_of_work,
+                clock=self.clock,
+            )
+        ).value
 
     def events(self, action: AuditAction) -> list[AuditEvent]:
         events = self.database.audit_events.values()

@@ -7,6 +7,7 @@ left out: a retry may carry a fresher ``If-Match``.
 
 import hashlib
 import json
+from collections.abc import Mapping
 from typing import Annotated
 
 from fastapi import Header, Request, Response
@@ -44,14 +45,37 @@ def _unquoted(value: str) -> str:
     return value
 
 
+_IN_USE = "a request with this Idempotency-Key is still running (`idempotency_key_in_use`)"
+_KEY_REFUSED = "an Idempotency-Key that is invalid or was used for a different request"
+
+
+def idempotency_errors(
+    responses: Mapping[int | str, dict[str, object]],
+) -> dict[int | str, dict[str, object]]:
+    """A creation's documented errors, plus those of its ``Idempotency-Key``."""
+    merged = {status: dict(response) for status, response in responses.items()}
+    for status, cause, alone in (
+        (409, _IN_USE, "A request with this Idempotency-Key is still running"),
+        (422, _KEY_REFUSED, f"Invalid fields, or {_KEY_REFUSED}"),
+    ):
+        described = merged.get(status, {}).get("description")
+        merged[status] = {"description": alone if described is None else f"{described}; or {cause}"}
+    return merged
+
+
 def idempotent_request(
-    key: str | None, request: Request, body: BaseModel
+    key: str | None, request: Request, body: BaseModel | None
 ) -> IdempotentRequest | None:
-    """The key with a fingerprint of ``request``, or None when the client sent no key."""
+    """The key with a fingerprint of ``request``, or None when the client sent no key.
+
+    Secrets in the body (``SecretStr``) are masked by ``model_dump``, so a fingerprint never
+    hashes a password.
+    """
     if key is None:
         return None
+    dumped = None if body is None else body.model_dump(mode="json")
     canonical = json.dumps(
-        {"method": request.method, "path": request.url.path, "body": body.model_dump(mode="json")},
+        {"method": request.method, "path": request.url.path, "body": dumped},
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,

@@ -43,7 +43,9 @@ Practice:
 - **Scope:** the tenant and the caller (a user or a service account). The same value from another
   caller is another key.
 - **Fingerprint:** a SHA-256 of the method, the path and the validated body as canonical JSON.
-  Headers are left out, so a retry carrying a fresher `If-Match` is still the same request.
+  Headers are left out, so a retry carrying a fresher `If-Match` is still the same request. Secrets
+  are masked before hashing: a fast hash of a password would leak it, so a retry that only changes a
+  new user's password counts as the same request.
 - **Storage:** the table `idempotency_keys`, written in the same transaction as the change: the key,
   the fingerprint, the resource created (type and id), and when it was created and expires. Only
   completed creations are stored; a failure rolls back with everything else, so its retry is a new

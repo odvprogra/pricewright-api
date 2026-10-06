@@ -14,7 +14,12 @@ from pydantic.json_schema import SkipJsonSchema
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
-from pricewright.api.idempotency import IdempotencyKey, idempotent_request, mark_replayed
+from pricewright.api.idempotency import (
+    IdempotencyKey,
+    idempotency_errors,
+    idempotent_request,
+    mark_replayed,
+)
 from pricewright.api.money import MoneyJson
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.pricing import MarginFloorJson, MarginJson, StepJson, ratio
@@ -811,23 +816,30 @@ async def cancel(
     status_code=HTTPStatus.CREATED,
     summary="Supersede the quote with its next revision, a draft priced now",
     description="Returns the new revision; the old one becomes `superseded` and links to it.",
-    responses=_TRANSITIONS
-    | {422: {"description": "A product or the customer was archived since the last pricing"}},
+    responses=idempotency_errors(
+        _TRANSITIONS
+        | {422: {"description": "A product or the customer was archived since the last pricing"}}
+    ),
 )
 async def revise(
     quote_id: UUID,
     principal: PrincipalDep,
     services: ServicesDep,
+    request: Request,
     response: Response,
     if_match: IfMatch = None,
+    idempotency_key: IdempotencyKey = None,
 ) -> QuoteResponse:
-    successor = await revise_quote(
+    created = await revise_quote(
         principal,
         quote_id,
         expected_version=expected_version(if_match),
         unit_of_work=services.unit_of_work,
         clock=services.clock,
+        idempotency=idempotent_request(idempotency_key, request, None),
     )
+    successor = created.value
+    mark_replayed(response, created.replayed)
     response.headers["Location"] = f"{router.prefix}/{successor.id}"
     return _respond(response, successor, principal, services.clock())
 

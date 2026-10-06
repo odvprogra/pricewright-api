@@ -8,11 +8,17 @@ from http import HTTPStatus
 from typing import Annotated, Self
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, Response
+from fastapi import APIRouter, Header, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
+from pricewright.api.idempotency import (
+    IdempotencyKey,
+    idempotency_errors,
+    idempotent_request,
+    mark_replayed,
+)
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.times import UtcDatetime
 from pricewright.application.ports import PricingRuleQuery, PricingRuleSort
@@ -257,17 +263,25 @@ async def read_pricing_rule(
     "",
     status_code=HTTPStatus.CREATED,
     summary="Add a pricing rule",
-    responses=_ERRORS | _INVALID,
+    responses=idempotency_errors(_ERRORS | _INVALID),
 )
 async def add_pricing_rule(
     body: CreatePricingRuleRequest,
     principal: PrincipalDep,
     services: ServicesDep,
+    request: Request,
     response: Response,
+    idempotency_key: IdempotencyKey = None,
 ) -> PricingRuleResponse:
-    rule = await create_pricing_rule(
-        principal, body.new(), unit_of_work=services.unit_of_work, clock=services.clock
+    created = await create_pricing_rule(
+        principal,
+        body.new(),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+        idempotency=idempotent_request(idempotency_key, request, body),
     )
+    rule = created.value
+    mark_replayed(response, created.replayed)
     response.headers["Location"] = f"{router.prefix}/{rule.id}"
     response.headers["ETag"] = etag(rule.version)
     return PricingRuleResponse.of(rule)

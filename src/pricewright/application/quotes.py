@@ -11,7 +11,12 @@ from decimal import Decimal
 from uuid import UUID
 
 from pricewright.application.audit import order_fields, quote_fields, quote_line_fields, record
-from pricewright.application.idempotency import Created, earlier_creation, remember_creation
+from pricewright.application.idempotency import (
+    Created,
+    earlier_creation,
+    remember_creation,
+    replay,
+)
 from pricewright.application.orders import order_of
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
@@ -480,12 +485,19 @@ async def revise_quote(
     expected_version: int,
     unit_of_work: UnitOfWorkFactory,
     clock: Clock,
-) -> Quote:
-    """Supersede the quote with its next revision, a draft priced now (decision D-07)."""
+    idempotency: IdempotentRequest | None = None,
+) -> Created[Quote]:
+    """Supersede the quote with its next revision, a draft priced now (decision D-07).
+
+    A retry with the same ``Idempotency-Key`` gets the new revision back before the version is
+    checked (ADR-0022).
+    """
     principal.require(Permission.QUOTES_MANAGE)
     now = clock()
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return await replay(uow.quotes.get(earlier))
         quote = await _quote_at(uow, quote_id, expected_version)
         context = await _repricing(uow, principal, quote, extra=None, now=now)
         before = quote_fields(quote)
@@ -497,8 +509,11 @@ async def revise_quote(
         await record(uow, principal, AuditAction.QUOTE_REVISED, quote.id, superseded, now=now)
         fields = created(quote_fields(successor))
         await record(uow, principal, AuditAction.QUOTE_CREATED, successor.id, fields, now=now)
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.QUOTE, successor.id, now=now
+        )
         await uow.commit()
-    return successor
+    return Created(successor)
 
 
 async def _decide(

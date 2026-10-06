@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from pricewright.application.audit import category_fields, product_fields, record
+from pricewright.application.idempotency import (
+    Created,
+    earlier_creation,
+    remember_creation,
+    replay,
+)
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
     Clock,
@@ -12,7 +18,7 @@ from pricewright.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
-from pricewright.domain.audit import AuditAction, changed, created
+from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import (
     CategoryNameTakenError,
@@ -24,6 +30,7 @@ from pricewright.domain.catalog import (
     UnknownProductError,
 )
 from pricewright.domain.errors import NotFoundError, StaleVersionError
+from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.money import Money
 from pricewright.domain.updates import KEEP, Keep
 
@@ -36,19 +43,31 @@ async def _ensure_name_is_free(uow: UnitOfWork, category: ProductCategory) -> No
 
 
 async def create_category(
-    principal: Principal, *, name: str, unit_of_work: UnitOfWorkFactory, clock: Clock
-) -> ProductCategory:
+    principal: Principal,
+    *,
+    name: str,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+    idempotency: IdempotentRequest | None = None,
+) -> Created[ProductCategory]:
+    """A retry with the same ``Idempotency-Key`` gets the category back (ADR-0022)."""
     principal.require(Permission.CATALOG_MANAGE)
+    now = clock()
     category = ProductCategory.create(tenant_id=principal.tenant_id, name=name)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return await replay(uow.product_categories.get(earlier))
         await _ensure_name_is_free(uow, category)
         await uow.product_categories.add(category)
         changes = created(category_fields(category))
         action = AuditAction.PRODUCT_CATEGORY_CREATED
-        await record(uow, principal, action, category.id, changes, now=clock())
+        await record(uow, principal, action, category.id, changes, now=now)
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.PRODUCT_CATEGORY, category.id, now=now
+        )
         await uow.commit()
-    return category
+    return Created(category)
 
 
 async def list_categories(
@@ -132,11 +151,20 @@ class NewProduct:
 
 
 async def create_product(
-    principal: Principal, new: NewProduct, *, unit_of_work: UnitOfWorkFactory, clock: Clock
-) -> Product:
+    principal: Principal,
+    new: NewProduct,
+    *,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+    idempotency: IdempotentRequest | None = None,
+) -> Created[Product]:
+    """A retry with the same ``Idempotency-Key`` gets the product back (ADR-0022)."""
     principal.require(Permission.CATALOG_MANAGE)
+    now = clock()
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return await replay(uow.products.get(earlier))
         product = Product.create(
             tenant_id=principal.tenant_id,
             currency=await _tenant_currency(uow, principal.tenant_id),
@@ -152,9 +180,12 @@ async def create_product(
             raise SkuTakenError(f"SKU {holder.sku} is already in the catalog")
         await uow.products.add(product)
         changes = created(product_fields(product))
-        await record(uow, principal, AuditAction.PRODUCT_CREATED, product.id, changes, now=clock())
+        await record(uow, principal, AuditAction.PRODUCT_CREATED, product.id, changes, now=now)
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.PRODUCT, product.id, now=now
+        )
         await uow.commit()  # the unique index still settles a race on the SKU
-    return product
+    return Created(product)
 
 
 def _position(product: Product, sort: ProductSort) -> Keyset:

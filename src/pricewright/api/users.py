@@ -4,12 +4,18 @@ from http import HTTPStatus
 from typing import Annotated, Self
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Response
+from fastapi import APIRouter, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from pricewright.api.auth import MAX_PASSWORD_INPUT_LENGTH
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
+from pricewright.api.idempotency import (
+    IdempotencyKey,
+    idempotency_errors,
+    idempotent_request,
+    mark_replayed,
+)
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.application.users import (
     NewUser,
@@ -125,12 +131,19 @@ async def read_user(
     "",
     status_code=HTTPStatus.CREATED,
     summary="Add a user to the tenant",
-    responses=_ERRORS | {409: {"description": "The email is already registered in some tenant"}},
+    responses=idempotency_errors(
+        _ERRORS | {409: {"description": "The email is already registered in some tenant"}}
+    ),
 )
 async def add_user(
-    body: CreateUserRequest, principal: PrincipalDep, services: ServicesDep, response: Response
+    body: CreateUserRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    request: Request,
+    response: Response,
+    idempotency_key: IdempotencyKey = None,
 ) -> UserResponse:
-    user = await create_user(
+    created = await create_user(
         principal,
         NewUser(
             email=body.email,
@@ -141,7 +154,10 @@ async def add_user(
         unit_of_work=services.unit_of_work,
         hasher=services.hasher,
         clock=services.clock,
+        idempotency=idempotent_request(idempotency_key, request, body),
     )
+    user = created.value
+    mark_replayed(response, created.replayed)
     response.headers["Location"] = f"{router.prefix}/{user.id}"
     response.headers["ETag"] = etag(user.version)
     return UserResponse.of(user)

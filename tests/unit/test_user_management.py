@@ -122,13 +122,15 @@ BLAIR = NewUser(
 async def test_create_user_adds_a_user_to_the_callers_tenant() -> None:
     fixture = Fixture(reps=0)
 
-    blair = await create_user(
-        caller(fixture.northfield),
-        BLAIR,
-        unit_of_work=fixture.unit_of_work,
-        hasher=FakePasswordHasher(),
-        clock=CLOCK,
-    )
+    blair = (
+        await create_user(
+            caller(fixture.northfield),
+            BLAIR,
+            unit_of_work=fixture.unit_of_work,
+            hasher=FakePasswordHasher(),
+            clock=CLOCK,
+        )
+    ).value
 
     stored = fixture.database.users[blair.id]
     assert (stored.tenant_id, stored.email, stored.role) == (
@@ -312,9 +314,15 @@ async def test_create_user_records_the_new_user_without_the_password() -> None:
     fixture = Fixture(reps=0)
     admin = caller(fixture.northfield)
 
-    blair = await create_user(
-        admin, BLAIR, unit_of_work=fixture.unit_of_work, hasher=FakePasswordHasher(), clock=CLOCK
-    )
+    blair = (
+        await create_user(
+            admin,
+            BLAIR,
+            unit_of_work=fixture.unit_of_work,
+            hasher=FakePasswordHasher(),
+            clock=CLOCK,
+        )
+    ).value
 
     [event] = fixture.database.audit_events.values()
     assert (event.action, event.actor_id, event.resource_id) == (

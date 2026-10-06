@@ -4,6 +4,7 @@ A use case that creates something checks the key first, inside its unit of work,
 in the same unit of work as the creation, so the key commits or rolls back with the change.
 """
 
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -12,6 +13,7 @@ from pricewright.application.ports import UnitOfWork
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditResourceType
 from pricewright.domain.auth import Principal
+from pricewright.domain.errors import NotFoundError
 from pricewright.domain.idempotency import IdempotencyRecord, IdempotentRequest
 
 
@@ -35,6 +37,14 @@ async def earlier_creation(
         return None
     record = await uow.idempotency_keys.claim(Actor.of(principal), request.key, now=now)
     return None if record is None else record.replay(request)
+
+
+async def replay[T](found: Awaitable[T | None]) -> Created[T]:
+    """What the first request created, as it is now (ADR-0022)."""
+    value = await found
+    if value is None:
+        raise NotFoundError("what this Idempotency-Key created no longer exists")
+    return Created(value, replayed=True)
 
 
 async def remember_creation(
