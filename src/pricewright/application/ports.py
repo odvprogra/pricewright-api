@@ -19,7 +19,7 @@ from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
 from pricewright.domain.idempotency import IdempotencyRecord
 from pricewright.domain.money import Money
-from pricewright.domain.orders import Order
+from pricewright.domain.orders import Order, OrderStatus
 from pricewright.domain.pricing_rules import PricingRule, RuleKind
 from pricewright.domain.quote_approvals import ApprovalRequest, ApprovalStatus
 from pricewright.domain.quote_lifecycle import QuoteStatus
@@ -376,6 +376,38 @@ class QuoteRepository(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class OrderQuery:
+    """Which orders to list, by creation (ADR-0014). ``None`` filters match everything."""
+
+    status: OrderStatus | None = None
+    customer_id: UUID | None = None
+    number: str | None = None
+    """The exact order number."""
+    created_by: UUID | None = None
+    """A user's id: orders are converted by people."""
+    descending: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class OrderSummary:
+    """An order as lists show it, without its lines."""
+
+    id: UUID
+    number: str
+    quote_id: UUID
+    quote_number: str
+    customer_id: UUID
+    customer_name: str
+    customer_reference: str | None
+    status: OrderStatus
+    total: Money
+    created_by: Actor
+    created_at: datetime
+    status_changed_at: datetime
+    version: int
+
+
 class OrderRepository(Protocol):
     """Orders of the unit of work's tenant only (ADR-0006), with their lines (ADR-0023)."""
 
@@ -392,6 +424,12 @@ class OrderRepository(Protocol):
         ...
 
     async def get(self, order_id: UUID) -> Order | None: ...
+
+    async def page(
+        self, query: OrderQuery, *, after: UUID | None, limit: int
+    ) -> list[OrderSummary]:
+        """Up to ``limit`` matching orders by creation (their UUIDv7 id), after ``after``."""
+        ...
 
     async def save(self, order: Order) -> None:
         """Store a change of status and bump ``order.version``, atomically; lines never change.

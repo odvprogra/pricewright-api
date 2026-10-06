@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from pricewright.application.ports import OrderQuery
 from pricewright.domain.actors import Actor
 from pricewright.domain.errors import StaleVersionError
 from pricewright.domain.orders import Order, OrderStatus
@@ -24,9 +25,11 @@ from tests.integration.stock import NOW, Stock, accepted, stock, usd
 pytestmark = pytest.mark.integration
 
 
-async def convert(sessions: Sessions, stock: Stock, quote: Quote) -> Order:
+async def convert(
+    sessions: Sessions, stock: Stock, quote: Quote, number: str = "ORD-2026-000001"
+) -> Order:
     order = quote.convert(
-        number="ORD-2026-000001",
+        number=number,
         customer=stock.customer,
         by=Actor.person(stock.rep.id),
         now=NOW,
@@ -210,3 +213,41 @@ async def test_database_refuses_a_quote_linked_to_a_missing_order_at_commit(
         with pytest.raises(IntegrityError, match="fk_quotes_tenant_id_order_id_orders"):
             await uow.commit()
     assert order.quote_id == quote.id
+
+
+async def test_order_list_filters_and_pages_by_creation(session_factory: Sessions) -> None:
+    northfield = await stock(session_factory)
+    first = await convert(session_factory, northfield, await accepted(session_factory, northfield))
+    second = await convert(
+        session_factory,
+        northfield,
+        await accepted(session_factory, northfield, "NF-2026-000002"),
+        "ORD-2026-000002",
+    )
+    second.cancel(reason="Entered twice", now=NOW)
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.tenant.id)
+        await uow.orders.save(second)
+        await uow.commit()
+
+    async def page(query: OrderQuery, after: uuid.UUID | None = None) -> list[str]:
+        async with SqlAlchemyUnitOfWork(session_factory) as uow:
+            uow.bind_tenant(northfield.tenant.id)
+            return [order.number for order in await uow.orders.page(query, after=after, limit=10)]
+
+    assert await page(OrderQuery()) == ["ORD-2026-000002", "ORD-2026-000001"]
+    assert await page(OrderQuery(descending=False)) == ["ORD-2026-000001", "ORD-2026-000002"]
+    assert await page(OrderQuery(status=OrderStatus.OPEN)) == ["ORD-2026-000001"]
+    assert await page(OrderQuery(number="ORD-2026-000002")) == ["ORD-2026-000002"]
+    assert await page(OrderQuery(customer_id=northfield.customer.id, created_by=northfield.rep.id))
+    assert await page(OrderQuery(created_by=northfield.manager.id)) == []
+    assert await page(OrderQuery(), after=second.id) == ["ORD-2026-000001"]
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.tenant.id)
+        [summary] = await uow.orders.page(OrderQuery(number="ORD-2026-000001"), after=None, limit=1)
+    assert (summary.id, summary.quote_id, summary.total) == (
+        first.id,
+        first.quote_id,
+        first.totals.total,
+    )
+    assert (summary.customer_name, summary.customer_reference) == ("Acme", "PO-4500123")

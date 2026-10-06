@@ -249,3 +249,79 @@ async def test_an_unknown_order_is_a_404(client: httpx.AsyncClient) -> None:
     response = await client.get(f"/api/v1/orders/{uuid.uuid7()}", headers=bearer())
 
     assert (response.status_code, response.json()["code"]) == (404, "not_found")
+
+
+async def test_orders_are_listed_newest_first_filtered_and_paged(
+    client: httpx.AsyncClient,
+) -> None:
+    first = (await convert(client, await accepted(client), key=None)).json()
+    second = (await convert(client, await accepted(client), key=None)).json()
+    manager = bearer(Role.SALES_MANAGER, uuid.uuid7())
+
+    listed = await client.get("/api/v1/orders", headers=manager)
+    oldest = await client.get("/api/v1/orders", params={"sort": "created_at"}, headers=manager)
+    by_number = await client.get(
+        "/api/v1/orders", params={"number": "NFO-2026-000001"}, headers=manager
+    )
+    by_customer = await client.get(
+        "/api/v1/orders",
+        params={"customer_id": str(ACME.id), "status": "open", "created_by": str(REP)},
+        headers=manager,
+    )
+    page = await client.get("/api/v1/orders", params={"limit": 1}, headers=manager)
+    rest = await client.get(
+        "/api/v1/orders", params={"limit": 1, "cursor": page.json()["next_cursor"]}, headers=manager
+    )
+
+    assert [order["id"] for order in listed.json()["items"]] == [second["id"], first["id"]]
+    assert [order["id"] for order in oldest.json()["items"]] == [first["id"], second["id"]]
+    assert [order["id"] for order in by_number.json()["items"]] == [first["id"]]
+    assert len(by_customer.json()["items"]) == 2
+    assert [order["id"] for order in page.json()["items"] + rest.json()["items"]] == [
+        second["id"],
+        first["id"],
+    ]
+    assert rest.json()["next_cursor"] is None
+    assert listed.json()["items"][0] == {
+        "id": second["id"],
+        "number": "NFO-2026-000002",
+        "quote_id": second["quote_id"],
+        "quote_number": "NF-2026-000002",
+        "customer_id": str(ACME.id),
+        "customer_name": "Acme",
+        "customer_reference": None,
+        "status": "open",
+        "total": second["total"],
+        "created_by": {"type": "user", "id": str(REP)},
+        "created_at": second["created_at"],
+        "status_changed_at": second["status_changed_at"],
+        "version": 1,
+    }
+
+
+async def test_an_order_list_cursor_works_only_with_its_own_query(
+    client: httpx.AsyncClient,
+) -> None:
+    for _ in range(2):
+        await convert(client, await accepted(client), key=None)
+    page = await client.get("/api/v1/orders", params={"limit": 1}, headers=bearer())
+
+    response = await client.get(
+        "/api/v1/orders",
+        params={"limit": 1, "status": "open", "cursor": page.json()["next_cursor"]},
+        headers=bearer(),
+    )
+
+    assert (response.status_code, response.json()["code"]) == (422, "invalid_cursor")
+
+
+async def test_listing_orders_needs_orders_read(client: httpx.AsyncClient) -> None:
+    await convert(client, await accepted(client), key=None)
+    reader = await api_key(client, "orders:read")
+    stranger = await api_key(client, "quotes:read")
+
+    allowed = await client.get("/api/v1/orders", headers=reader)
+    refused = await client.get("/api/v1/orders", headers=stranger)
+
+    assert len(allowed.json()["items"]) == 1
+    assert (refused.status_code, refused.json()["code"]) == (403, "permission_denied")

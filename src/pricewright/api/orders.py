@@ -4,19 +4,23 @@ committed to, their prices copied unchanged (ADR-0023); costs and margins only r
 
 from datetime import datetime
 from decimal import Decimal
+from enum import StrEnum
 from http import HTTPStatus
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
 from pricewright.api.idempotency import IdempotencyKey, idempotent_request, mark_replayed
 from pricewright.api.money import MoneyJson
+from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.pricing import ratio
 from pricewright.api.quotes import ActorJson, IfMatch, PricedLineJson
-from pricewright.application.orders import get_order
+from pricewright.application.orders import get_order, list_orders
+from pricewright.application.ports import OrderQuery, OrderSummary
 from pricewright.application.quotes import convert_quote
 from pricewright.domain.auth import Principal
 from pricewright.domain.orders import MAX_CUSTOMER_REFERENCE_LENGTH, Order, OrderLine, OrderStatus
@@ -184,3 +188,98 @@ async def read_order(
 ) -> OrderResponse:
     order = await get_order(principal, order_id, unit_of_work=services.unit_of_work)
     return _respond(response, order, principal)
+
+
+class OrderSummaryJson(BaseModel):
+    """An order as lists show it: no lines."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    number: str
+    quote_id: UUID
+    quote_number: str = Field(examples=["NF-2026-000123-R2"])
+    customer_id: UUID
+    customer_name: str = Field(description="As the order was placed.")
+    customer_reference: str | None
+    # Open-ended (ADR-0015): fulfilment and invoicing would add statuses.
+    status: str = Field(
+        description="New statuses may appear; handle unknown ones.", examples=list(OrderStatus)
+    )
+    total: MoneyJson
+    created_by: ActorJson
+    created_at: datetime
+    status_changed_at: datetime
+    version: int
+
+    @classmethod
+    def of(cls, order: OrderSummary) -> OrderSummaryJson:
+        return cls(
+            id=order.id,
+            number=order.number,
+            quote_id=order.quote_id,
+            quote_number=order.quote_number,
+            customer_id=order.customer_id,
+            customer_name=order.customer_name,
+            customer_reference=order.customer_reference,
+            status=order.status.value,
+            total=MoneyJson.of(order.total),
+            created_by=ActorJson.of(order.created_by),
+            created_at=order.created_at,
+            status_changed_at=order.status_changed_at,
+            version=order.version,
+        )
+
+
+class OrderPage(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    items: list[OrderSummaryJson]
+    next_cursor: str | None
+
+
+class OrderOrder(StrEnum):
+    NEWEST = "-created_at"
+    OLDEST = "created_at"
+
+
+@router.get("/orders", summary="List orders, newest first by default", responses=_ERRORS)
+async def read_orders(
+    principal: PrincipalDep,
+    services: ServicesDep,
+    status: OrderStatus | None = None,
+    customer_id: UUID | None = None,
+    number: Annotated[
+        str | None,
+        Query(min_length=1, max_length=24, description="The exact order number."),
+    ] = None,
+    created_by: Annotated[UUID | None, Query(description="The person who converted it.")] = None,
+    sort: Annotated[OrderOrder, Query(description="`-` sorts descending.")] = OrderOrder.NEWEST,
+    limit: Limit = DEFAULT_LIMIT,
+    cursor: Cursor = None,
+) -> OrderPage:
+    query = OrderQuery(
+        status=status,
+        customer_id=customer_id,
+        number=number,
+        created_by=created_by,
+        descending=sort is OrderOrder.NEWEST,
+    )
+    fingerprint = {
+        "status": status,
+        "customer_id": None if customer_id is None else str(customer_id),
+        "number": number,
+        "created_by": None if created_by is None else str(created_by),
+        "sort": sort,
+    }
+    page = await list_orders(
+        principal,
+        query,
+        after=decode_cursor(cursor, fingerprint),
+        limit=limit,
+        unit_of_work=services.unit_of_work,
+    )
+    return OrderPage(
+        items=[OrderSummaryJson.of(order) for order in page.items],
+        next_cursor=encode_cursor(page.next_after, fingerprint),
+    )

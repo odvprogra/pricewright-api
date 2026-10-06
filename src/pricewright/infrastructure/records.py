@@ -632,6 +632,10 @@ class OrderRecord(Base):
         UniqueConstraint("tenant_id", "id"),  # target of the lines and the quote's link
         UniqueConstraint("tenant_id", "number"),
         UniqueConstraint("tenant_id", "quote_id"),  # one quote, one order
+        # The list's filters (ADR-0014); by creation, the primary key serves.
+        Index(None, "tenant_id", "status", "id"),
+        Index(None, "tenant_id", "customer_id", "id"),
+        Index(None, "tenant_id", "created_by_id", "id"),
         # The tenant's currency (ADR-0003); this key also proves the tenant exists.
         ForeignKeyConstraint(["tenant_id", "currency"], ["tenants.id", "tenants.currency"]),
         ForeignKeyConstraint(["tenant_id", "quote_id"], ["quotes.tenant_id", "quotes.id"]),

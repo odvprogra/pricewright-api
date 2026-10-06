@@ -8,9 +8,10 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import ColumnElement, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricewright.application.ports import OrderQuery, OrderSummary
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.catalog import UnitOfMeasure
@@ -129,6 +130,24 @@ def _to_order(record: OrderRecord, lines: Sequence[OrderLineRecord]) -> Order:
     )
 
 
+def _to_summary(record: OrderRecord) -> OrderSummary:
+    return OrderSummary(
+        id=record.id,
+        number=record.number,
+        quote_id=record.quote_id,
+        quote_number=record.quote_number,
+        customer_id=record.customer_id,
+        customer_name=record.customer_name,
+        customer_reference=record.customer_reference,
+        status=OrderStatus(record.status),
+        total=Money(record.total, record.currency),
+        created_by=Actor(ActorType(record.created_by_type), record.created_by_id),
+        created_at=record.created_at,
+        status_changed_at=record.status_changed_at,
+        version=record.version,
+    )
+
+
 class SqlAlchemyOrderRepository:
     def __init__(self, session: AsyncSession, scope: TenantScope) -> None:
         self._session = session
@@ -165,6 +184,29 @@ class SqlAlchemyOrderRepository:
             .order_by(OrderLineRecord.position)
         )
         return _to_order(record, list(lines))
+
+    async def page(
+        self, query: OrderQuery, *, after: UUID | None, limit: int
+    ) -> list[OrderSummary]:
+        conditions: list[ColumnElement[bool]] = [OrderRecord.tenant_id == self._scope.tenant_id]
+        if query.status is not None:
+            conditions.append(OrderRecord.status == query.status.value)
+        if query.customer_id is not None:
+            conditions.append(OrderRecord.customer_id == query.customer_id)
+        if query.number is not None:
+            conditions.append(OrderRecord.number == query.number)
+        if query.created_by is not None:
+            conditions.append(OrderRecord.created_by_id == query.created_by)
+        # Keyset on the UUIDv7 id, which follows creation (ADR-0014): one index range scan.
+        if after is not None:
+            conditions.append(
+                OrderRecord.id < after if query.descending else OrderRecord.id > after
+            )
+        order = OrderRecord.id.desc() if query.descending else OrderRecord.id.asc()
+        records = await self._session.scalars(
+            select(OrderRecord).where(*conditions).order_by(order).limit(limit)
+        )
+        return [_to_summary(record) for record in records]
 
     async def save(self, order: Order) -> None:
         self._require_own(order)
