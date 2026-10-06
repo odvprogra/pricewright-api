@@ -45,9 +45,9 @@ class Fixture:
         return FakeUnitOfWork(self.database)
 
     async def add(self, new: NewCustomer = ACME) -> Customer:
-        return await create_customer(
-            self.rep, new, unit_of_work=self.unit_of_work, clock=self.clock
-        )
+        return (
+            await create_customer(self.rep, new, unit_of_work=self.unit_of_work, clock=self.clock)
+        ).value
 
     async def change(
         self, customer: Customer, changes: CustomerChanges, version: int = 1

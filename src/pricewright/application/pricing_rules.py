@@ -8,6 +8,12 @@ from uuid import UUID
 
 from pricewright.application.audit import pricing_rule_fields, record
 from pricewright.application.catalog import ensure_category_exists, ensure_product_exists
+from pricewright.application.idempotency import (
+    Created,
+    earlier_creation,
+    remember_creation,
+    replay,
+)
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
     Clock,
@@ -15,10 +21,11 @@ from pricewright.application.ports import (
     PricingRuleSort,
     UnitOfWorkFactory,
 )
-from pricewright.domain.audit import AuditAction, changed, created
+from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.customers import CustomerTier
 from pricewright.domain.errors import NotFoundError, StaleVersionError
+from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
 from pricewright.domain.updates import KEEP, Keep
 
@@ -38,12 +45,21 @@ class NewPricingRule:
 
 
 async def create_pricing_rule(
-    principal: Principal, new: NewPricingRule, *, unit_of_work: UnitOfWorkFactory, clock: Clock
-) -> PricingRule:
+    principal: Principal,
+    new: NewPricingRule,
+    *,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+    idempotency: IdempotentRequest | None = None,
+) -> Created[PricingRule]:
+    """A retry with the same ``Idempotency-Key`` gets the rule back, never a duplicate: rules
+    have no natural key (ADR-0022)."""
     principal.require(Permission.PRICING_MANAGE)
     now = clock()
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return await replay(uow.pricing_rules.get(earlier))
         rule = PricingRule.create(
             tenant_id=principal.tenant_id,
             kind=new.kind,
@@ -61,8 +77,11 @@ async def create_pricing_rule(
         await uow.pricing_rules.add(rule)
         changes = created(pricing_rule_fields(rule))
         await record(uow, principal, AuditAction.PRICING_RULE_CREATED, rule.id, changes, now=now)
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.PRICING_RULE, rule.id, now=now
+        )
         await uow.commit()
-    return rule
+    return Created(rule)
 
 
 def _position(rule: PricingRule, sort: PricingRuleSort) -> Keyset:

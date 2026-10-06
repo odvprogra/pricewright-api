@@ -35,9 +35,11 @@ class Fixture:
         return FakeUnitOfWork(self.database)
 
     async def add(self, name: str) -> ProductCategory:
-        return await create_category(
-            self.admin, name=name, unit_of_work=self.unit_of_work, clock=self.clock
-        )
+        return (
+            await create_category(
+                self.admin, name=name, unit_of_work=self.unit_of_work, clock=self.clock
+            )
+        ).value
 
     async def rename(
         self, category: ProductCategory, name: str, version: int = 1
@@ -76,9 +78,11 @@ async def test_another_tenant_may_use_the_same_name() -> None:
     await fixture.add("Fasteners")
     outsider = Principal(fixture.larkspur.id, uuid.uuid7(), Role.ADMIN)
 
-    category = await create_category(
-        outsider, name="Fasteners", unit_of_work=fixture.unit_of_work, clock=fixture.clock
-    )
+    category = (
+        await create_category(
+            outsider, name="Fasteners", unit_of_work=fixture.unit_of_work, clock=fixture.clock
+        )
+    ).value
 
     assert category.tenant_id == fixture.larkspur.id
 

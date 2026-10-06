@@ -5,12 +5,18 @@ from http import HTTPStatus
 from typing import Annotated, Self
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, Response
+from fastapi import APIRouter, Header, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
+from pricewright.api.idempotency import (
+    IdempotencyKey,
+    idempotency_errors,
+    idempotent_request,
+    mark_replayed,
+)
 from pricewright.api.money import MoneyJson
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.application.catalog import (
@@ -196,19 +202,26 @@ async def read_product(
     "",
     status_code=HTTPStatus.CREATED,
     summary="Add a product to the catalog",
-    responses=_ERRORS
-    | {
-        409: {"description": "The SKU is already in the catalog, ignoring case"},
-        422: {
-            "description": "Invalid fields, an unknown category, or prices not in the "
-            "tenant's currency"
-        },
-    },
+    responses=idempotency_errors(
+        _ERRORS
+        | {
+            409: {"description": "The SKU is already in the catalog, ignoring case"},
+            422: {
+                "description": "Invalid fields, an unknown category, or prices not in the "
+                "tenant's currency"
+            },
+        }
+    ),
 )
 async def add_product(
-    body: CreateProductRequest, principal: PrincipalDep, services: ServicesDep, response: Response
+    body: CreateProductRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    request: Request,
+    response: Response,
+    idempotency_key: IdempotencyKey = None,
 ) -> ProductResponse:
-    product = await create_product(
+    created = await create_product(
         principal,
         NewProduct(
             sku=body.sku,
@@ -220,7 +233,10 @@ async def add_product(
         ),
         unit_of_work=services.unit_of_work,
         clock=services.clock,
+        idempotency=idempotent_request(idempotency_key, request, body),
     )
+    product = created.value
+    mark_replayed(response, created.replayed)
     response.headers["Location"] = f"{router.prefix}/{product.id}"
     response.headers["ETag"] = etag(product.version)
     return ProductResponse.of(product, principal)

@@ -71,9 +71,9 @@ class Fixture:
         return FakeUnitOfWork(self.database)
 
     async def add(self, new: NewProduct) -> Product:
-        return await create_product(
-            self.admin, new, unit_of_work=self.unit_of_work, clock=self.clock
-        )
+        return (
+            await create_product(self.admin, new, unit_of_work=self.unit_of_work, clock=self.clock)
+        ).value
 
     async def change(self, product: Product, changes: ProductChanges, version: int = 1) -> Product:
         return await change_product(

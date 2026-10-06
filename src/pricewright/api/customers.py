@@ -5,11 +5,17 @@ from http import HTTPStatus
 from typing import Annotated, Self
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query, Response
+from fastapi import APIRouter, Header, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pricewright.api.concurrency import etag, expected_version
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
+from pricewright.api.idempotency import (
+    IdempotencyKey,
+    idempotency_errors,
+    idempotent_request,
+    mark_replayed,
+)
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.application.customers import (
     CustomerChanges,
@@ -194,12 +200,19 @@ async def read_customer(
     "",
     status_code=HTTPStatus.CREATED,
     summary="Add a customer",
-    responses=_ERRORS | {409: {"description": "The account number exists, ignoring case"}},
+    responses=idempotency_errors(
+        _ERRORS | {409: {"description": "The account number exists, ignoring case"}}
+    ),
 )
 async def add_customer(
-    body: CreateCustomerRequest, principal: PrincipalDep, services: ServicesDep, response: Response
+    body: CreateCustomerRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    request: Request,
+    response: Response,
+    idempotency_key: IdempotencyKey = None,
 ) -> CustomerResponse:
-    customer = await create_customer(
+    created = await create_customer(
         principal,
         NewCustomer(
             account_number=body.account_number,
@@ -210,7 +223,10 @@ async def add_customer(
         ),
         unit_of_work=services.unit_of_work,
         clock=services.clock,
+        idempotency=idempotent_request(idempotency_key, request, body),
     )
+    customer = created.value
+    mark_replayed(response, created.replayed)
     response.headers["Location"] = f"{router.prefix}/{customer.id}"
     response.headers["ETag"] = etag(customer.version)
     return CustomerResponse.of(customer)

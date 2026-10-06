@@ -4,11 +4,18 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from pricewright.application.audit import record, user_fields
+from pricewright.application.idempotency import (
+    Created,
+    earlier_creation,
+    remember_creation,
+    replay,
+)
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import Clock, PasswordHasher, UnitOfWork, UnitOfWorkFactory
-from pricewright.domain.audit import AuditAction, changed, created
+from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
+from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.users import (
     EmailAlreadyRegisteredError,
     LastAdminError,
@@ -55,17 +62,26 @@ async def create_user(
     unit_of_work: UnitOfWorkFactory,
     hasher: PasswordHasher,
     clock: Clock,
-) -> User:
+    idempotency: IdempotentRequest | None = None,
+) -> Created[User]:
+    """A retry with the same ``Idempotency-Key`` gets the user back (ADR-0022). The password is
+    not part of the request's fingerprint: a hash of it would be a fast hash of a secret."""
     principal.require(Permission.USERS_MANAGE)
+    now = clock()
     user = await prepare_user(principal.tenant_id, new_user, hasher)
     async with unit_of_work() as uow:
-        await ensure_email_is_free(uow, user.email)
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return await replay(uow.users.get(earlier))
+        await ensure_email_is_free(uow, user.email)
         await uow.users.add(user)
         changes = created(user_fields(user))
-        await record(uow, principal, AuditAction.USER_CREATED, user.id, changes, now=clock())
+        await record(uow, principal, AuditAction.USER_CREATED, user.id, changes, now=now)
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.USER, user.id, now=now
+        )
         await uow.commit()
-    return user
+    return Created(user)
 
 
 async def list_users(

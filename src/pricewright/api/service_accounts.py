@@ -5,10 +5,16 @@ from http import HTTPStatus
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
+from pricewright.api.idempotency import (
+    IdempotencyKey,
+    idempotency_errors,
+    idempotent_request,
+    mark_replayed,
+)
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.application.service_accounts import (
     create_service_account,
@@ -115,18 +121,28 @@ class ApiKeyList(BaseModel):
     "",
     status_code=HTTPStatus.CREATED,
     summary="Add a service account",
-    responses=_ERRORS | {409: {"description": "The tenant already has an account with that name"}},
+    responses=idempotency_errors(
+        _ERRORS | {409: {"description": "The tenant already has an account with that name"}}
+    ),
 )
 async def add_service_account(
-    body: ServiceAccountRequest, principal: PrincipalDep, services: ServicesDep, response: Response
+    body: ServiceAccountRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    request: Request,
+    response: Response,
+    idempotency_key: IdempotencyKey = None,
 ) -> ServiceAccountResponse:
-    account = await create_service_account(
+    created = await create_service_account(
         principal,
         name=body.name,
         scopes=frozenset(body.scopes),
         unit_of_work=services.unit_of_work,
         clock=services.clock,
+        idempotency=idempotent_request(idempotency_key, request, body),
     )
+    account = created.value
+    mark_replayed(response, created.replayed)
     response.headers["Location"] = f"{router.prefix}/{account.id}"
     return ServiceAccountResponse.of(account)
 

@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from pricewright.application.audit import customer_fields, record
+from pricewright.application.idempotency import (
+    Created,
+    earlier_creation,
+    remember_creation,
+    replay,
+)
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
     Clock,
@@ -11,7 +17,7 @@ from pricewright.application.ports import (
     CustomerSort,
     UnitOfWorkFactory,
 )
-from pricewright.domain.audit import AuditAction, changed, created
+from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.customers import (
     DEFAULT_PAYMENT_TERMS_DAYS,
@@ -20,6 +26,7 @@ from pricewright.domain.customers import (
     CustomerTier,
 )
 from pricewright.domain.errors import NotFoundError, StaleVersionError
+from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.updates import KEEP, Keep
 
 
@@ -33,9 +40,16 @@ class NewCustomer:
 
 
 async def create_customer(
-    principal: Principal, new: NewCustomer, *, unit_of_work: UnitOfWorkFactory, clock: Clock
-) -> Customer:
+    principal: Principal,
+    new: NewCustomer,
+    *,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+    idempotency: IdempotentRequest | None = None,
+) -> Created[Customer]:
+    """A retry with the same ``Idempotency-Key`` gets the customer back (ADR-0022)."""
     principal.require(Permission.CUSTOMERS_MANAGE)
+    now = clock()
     customer = Customer.create(
         tenant_id=principal.tenant_id,
         account_number=new.account_number,
@@ -46,15 +60,20 @@ async def create_customer(
     )
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return await replay(uow.customers.get(earlier))
         holder = await uow.customers.with_account_number(customer.account_number)
         if holder is not None:
             raise AccountNumberTakenError(f"account {holder.account_number} already exists")
         await uow.customers.add(customer)
         changes = created(customer_fields(customer))
         action = AuditAction.CUSTOMER_CREATED
-        await record(uow, principal, action, customer.id, changes, now=clock())
+        await record(uow, principal, action, customer.id, changes, now=now)
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.CUSTOMER, customer.id, now=now
+        )
         await uow.commit()  # the unique index still settles a race on the account number
-    return customer
+    return Created(customer)
 
 
 def _position(customer: Customer, sort: CustomerSort) -> Keyset:
