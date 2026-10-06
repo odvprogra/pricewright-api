@@ -19,11 +19,17 @@ from pricewright.api.money import MoneyJson
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.pricing import ratio
 from pricewright.api.quotes import ActorJson, IfMatch, PricedLineJson
-from pricewright.application.orders import get_order, list_orders
+from pricewright.application.orders import cancel_order, get_order, list_orders
 from pricewright.application.ports import OrderQuery, OrderSummary
 from pricewright.application.quotes import convert_quote
 from pricewright.domain.auth import Principal
-from pricewright.domain.orders import MAX_CUSTOMER_REFERENCE_LENGTH, Order, OrderLine, OrderStatus
+from pricewright.domain.orders import (
+    MAX_CANCEL_REASON_LENGTH,
+    MAX_CUSTOMER_REFERENCE_LENGTH,
+    Order,
+    OrderLine,
+    OrderStatus,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["orders"])
 
@@ -283,3 +289,46 @@ async def read_orders(
         items=[OrderSummaryJson.of(order) for order in page.items],
         next_cursor=encode_cursor(page.next_after, fingerprint),
     )
+
+
+class CancelOrderRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reason: str = Field(
+        min_length=1,
+        max_length=MAX_CANCEL_REASON_LENGTH,
+        examples=["Entered for the wrong customer"],
+    )
+
+
+@router.post(
+    "/orders/{order_id}/cancel",
+    summary="Cancel an open order, with a reason (people only)",
+    description="The order stays, as every document does, and its quote stays `converted`.",
+    responses=_ERRORS
+    | _NOT_FOUND
+    | {
+        403: {"description": "Needs `orders:manage`; never integrations"},
+        409: {"description": "The order is not open (`invalid_transition`)"},
+        412: {"description": "If-Match is stale: someone else changed the order; reload it"},
+        422: {"description": "A reason is required (`invalid_order`, `validation_error`)"},
+        428: {"description": "If-Match is required"},
+    },
+)
+async def cancel(
+    order_id: UUID,
+    body: CancelOrderRequest,
+    principal: PrincipalDep,
+    services: ServicesDep,
+    response: Response,
+    if_match: IfMatch = None,
+) -> OrderResponse:
+    order = await cancel_order(
+        principal,
+        order_id,
+        body.reason,
+        expected_version=expected_version(if_match),
+        unit_of_work=services.unit_of_work,
+        clock=services.clock,
+    )
+    return _respond(response, order, principal)

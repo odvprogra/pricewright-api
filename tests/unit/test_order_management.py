@@ -11,7 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from pricewright.application.idempotency import Created
-from pricewright.application.orders import get_order
+from pricewright.application.orders import cancel_order, get_order
 from pricewright.application.ports import UnitOfWork
 from pricewright.application.quotes import convert_quote
 from pricewright.domain.actors import Actor
@@ -27,7 +27,7 @@ from pricewright.domain.idempotency import (
 )
 from pricewright.domain.money import Money
 from pricewright.domain.numbering import NumberSeries
-from pricewright.domain.orders import Order, OrderStatus
+from pricewright.domain.orders import InvalidOrderError, Order, OrderStatus
 from pricewright.domain.pricing import ArchivedCustomerError
 from pricewright.domain.quote_lifecycle import InvalidTransitionError, QuoteStatus
 from pricewright.domain.quotes import LineChange, PricingContext, Quote
@@ -309,3 +309,75 @@ def test_retries_never_make_a_second_order_and_get_the_same_one_back(
         order.status is OrderStatus.OPEN and order.quote_id == f.quote.id
         for order in f.database.orders.values()
     )
+
+
+async def cancel(
+    f: Fixture, order: Order, *, version: int = 1, caller: Principal | None = None
+) -> Order:
+    return await cancel_order(
+        caller or f.rep,
+        order.id,
+        "Entered for the wrong customer",
+        expected_version=version,
+        unit_of_work=f.unit_of_work,
+        clock=f.clock,
+    )
+
+
+async def test_cancel_order_withdraws_it_and_records_the_reason(f: Fixture) -> None:
+    order = (await f.convert()).value
+
+    cancelled = await cancel(f, order)
+
+    assert (cancelled.status, cancelled.cancel_reason, cancelled.version) == (
+        OrderStatus.CANCELLED,
+        "Entered for the wrong customer",
+        2,
+    )
+    assert f.database.orders[order.id] == cancelled
+    assert f.database.quotes[f.quote.id].status is QuoteStatus.CONVERTED  # the quote stays
+    [event] = [
+        e for e in f.database.audit_events.values() if e.action is AuditAction.ORDER_CANCELLED
+    ]
+    assert (event.resource_id, event.changes) == (
+        order.id,
+        {
+            "status": ("open", "cancelled"),
+            "cancel_reason": (None, "Entered for the wrong customer"),
+        },
+    )
+
+
+async def test_cancel_order_is_refused_when_stale_cancelled_or_not_a_person(f: Fixture) -> None:
+    order = (await f.convert()).value
+    integration = Principal(
+        f.northfield.id, uuid.uuid7(), scopes=frozenset({Permission.ORDERS_MANAGE})
+    )
+
+    with pytest.raises(StaleVersionError):
+        await cancel(f, order, version=2)
+    with pytest.raises(PermissionDeniedError, match="orders:manage"):
+        await cancel(f, order, caller=integration)
+    await cancel(f, order)
+    with pytest.raises(InvalidTransitionError, match="cancelled"):
+        await cancel(f, order, version=2)
+    with pytest.raises(NotFoundError):
+        await cancel_order(
+            f.rep,
+            uuid.uuid7(),
+            "No such order",
+            expected_version=1,
+            unit_of_work=f.unit_of_work,
+            clock=f.clock,
+        )
+
+
+async def test_cancel_order_needs_a_reason(f: Fixture) -> None:
+    order = (await f.convert()).value
+
+    with pytest.raises(InvalidOrderError, match="reason"):
+        await cancel_order(
+            f.rep, order.id, "   ", expected_version=1, unit_of_work=f.unit_of_work, clock=f.clock
+        )
+
+    assert f.database.orders[order.id].status is OrderStatus.OPEN

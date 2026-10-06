@@ -69,6 +69,7 @@ class AuditAction(StrEnum):
     QUOTE_REJECTED = "quote.rejected"
     QUOTE_CONVERTED = "quote.converted"
     ORDER_CREATED = "order.created"
+    ORDER_CANCELLED = "order.cancelled"
 
     @property
     def resource_type(self) -> AuditResourceType:

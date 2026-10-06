@@ -104,4 +104,10 @@ CASES = (
         "POST", "/api/v1/quotes/{quote_id}/convert", json={}, headers={"If-Match": '"1"'}
     ),
     IsolationCase("GET", "/api/v1/orders/{order_id}"),
+    IsolationCase(
+        "POST",
+        "/api/v1/orders/{order_id}/cancel",
+        json={"reason": "Hijacked"},
+        headers={"If-Match": '"1"'},
+    ),
 )
