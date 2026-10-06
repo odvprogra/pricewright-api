@@ -104,7 +104,12 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
      `EXPIRED` too. An expired offer allows only `revise`, before and after the job persists
      `EXPIRED`.
 
-5. Converting to an order is **idempotent** (`Idempotency-Key`) and snapshots prices and tax.
+5. Converting to an order is **idempotent** (`Idempotency-Key`) and snapshots prices and tax. Agreed
+   in M6: one order per accepted quote, a separate document that copies the quote's snapshot
+   unchanged and the customer as it was; orders can be cancelled with a reason, and the quote stays
+   converted ([ADR-0023](adr/0023-orders-converted-once-from-accepted-quotes.md)). Every creation
+   takes an optional `Idempotency-Key`
+   ([ADR-0022](adr/0022-idempotency-keys-stored-with-the-change.md)).
 6. Totals: line totals rounded to the currency's minor units (2 decimals for USD) half up, ties away
    from zero (`ROUND_HALF_UP`, [ADR-0003](adr/0003-money-as-an-exact-decimal-with-its-currency.md));
    net subtotal = sum of rounded lines; tax = flat tenant `tax_rate` applied once to the net
@@ -208,6 +213,8 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0019 | [Quote pricing: a snapshot per line, frozen once submitted](adr/0019-quote-pricing-snapshot.md)                                         | M4        |
 | 0020 | [Quote approvals: a request per submission, decided by four eyes](adr/0020-quote-approvals-with-four-eyes.md)                           | M4        |
 | 0021 | [Quote numbers: the tenant's prefix, the year and a counter](adr/0021-quote-numbers-per-tenant-and-year.md)                             | M4        |
+| 0022 | [Idempotency keys: stored with the change, per caller](adr/0022-idempotency-keys-stored-with-the-change.md)                             | M6        |
+| 0023 | [Orders: converted once from an accepted quote, prices copied](adr/0023-orders-converted-once-from-accepted-quotes.md)                  | M6        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 

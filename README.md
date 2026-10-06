@@ -37,7 +37,7 @@ Pricewright is built in milestones; this table shows what works today. The full 
 | Audit trail: every change with its actor, before/after values and request ID              | M2        | Done   |
 | Pricing engine: rules kept by managers; previews that explain every price, step by step   | M3        | Done   |
 | Quotes priced line by line, with revisions, expiration, four-eyes approvals and an inbox  | M4        | Done   |
-| Idempotent conversion of accepted quotes into orders                                      | M6        |        |
+| Orders converted once from accepted quotes; `Idempotency-Key` on every creation           | M6        | Done   |
 | Transactional outbox, worker, quote PDFs and email notifications                          | M5        |        |
 
 The web app lives in a separate repository, `pricewright-web` (from M7). It consumes this API the
@@ -86,6 +86,8 @@ generates its client from the `openapi.json` attached to it. Details in
 | [ADR-0019](docs/adr/0019-quote-pricing-snapshot.md) A pricing snapshot per quote line                                        | Drafts reprice on every change; submitted quotes never drift from what was approved and sent        |
 | [ADR-0020](docs/adr/0020-quote-approvals-with-four-eyes.md) Approvals decided by four eyes                                   | Nobody approves a discount they set; every decision names who asked, who decided and why            |
 | [ADR-0021](docs/adr/0021-quote-numbers-per-tenant-and-year.md) Quote numbers per tenant and year                             | Readable numbers without gaps (`NF-2026-000123-R2`) that never reveal another tenant's volume       |
+| [ADR-0022](docs/adr/0022-idempotency-keys-stored-with-the-change.md) Idempotency keys, stored with the change                | A retried creation gets back what the first one made, even with an old ETag; never two of anything  |
+| [ADR-0023](docs/adr/0023-orders-converted-once-from-accepted-quotes.md) Orders converted once, prices copied                 | An order is exactly what the customer accepted, and keeps the customer as it was                    |
 
 ## Run it locally
 
@@ -101,7 +103,8 @@ Tenants are onboarded by an operator. With the database up, create one and its f
 password is prompted for, or read from standard input with `--password-stdin`):
 
 ```sh
-uv run pricewright-admin create-tenant --name "Northfield Supply" --currency USD --tax-rate 0.0725 \n  --admin-email avery@northfield.example --admin-name "Avery Admin"
+uv run pricewright-admin create-tenant --name "Northfield Supply" --currency USD --tax-rate 0.0725 \
+  --admin-email avery@northfield.example --admin-name "Avery Admin"
 ```
 
 Then sign in at `POST /api/v1/auth/login` and paste the `access_token` into **Authorize** in the
@@ -149,9 +152,12 @@ docs/                # product brief, architecture and ADRs
 - **Admins set initial passwords.** Email invitations arrive with the worker and email in M5.
 - **Isolation lives in the application and in composite keys.** PostgreSQL row-level security would
   add a fourth layer (ADR-0006); it stays a stretch goal.
-- **`Idempotency-Key`** arrives with orders (M6). Until then the creation endpoints are protected by
-  natural keys (a user's email, an account's name, a SKU, a customer's account number); a quote has
-  none, so a retried `POST /quotes` can leave a second draft to cancel.
+- **Idempotency keys are kept for 24 hours** and a replay shows the resource as it is now, not the
+  first response's bytes (ADR-0022); expired keys stay in their table until the M5 worker purges
+  them. Issuing an API key is the one creation without a key: its secret is shown once.
+- **Orders stop at the commitment.** One order per accepted quote, copied whole, open or cancelled
+  (ADR-0023): no partial conversions, deliveries or invoices. Payment terms come from the customer
+  at conversion, since quotes do not carry them yet; a cancelled order's quote cannot convert again.
 - **Quotes follow UTC.** `valid_until` ends at midnight UTC and quote numbers take the UTC year
   until tenants have time zones (ADR-0005, ADR-0021).
 - **Every change to a draft's lines reprices all of them** (ADR-0019), and a line whose product was
