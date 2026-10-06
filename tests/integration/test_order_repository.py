@@ -19,23 +19,9 @@ from pricewright.domain.quotes import Quote
 from pricewright.domain.tenants import Tenant
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from tests.integration.data import Sessions
-from tests.integration.stock import NOW, Stock, draft, stock, usd
+from tests.integration.stock import NOW, Stock, accepted, stock, usd
 
 pytestmark = pytest.mark.integration
-
-
-async def accepted(sessions: Sessions, stock: Stock) -> Quote:
-    """A stored quote, approved by the director (a line is below its floor), sent and accepted."""
-    quote = draft(stock)
-    quote.submit(by=Actor.person(stock.rep.id), context=stock.pricing())
-    quote.approve(by=Actor.person(stock.director.id), now=NOW)
-    quote.send(now=NOW)
-    quote.accept(now=NOW)
-    async with SqlAlchemyUnitOfWork(sessions) as uow:
-        uow.bind_tenant(stock.tenant.id)
-        await uow.quotes.add(quote)
-        await uow.commit()
-    return quote
 
 
 async def convert(sessions: Sessions, stock: Stock, quote: Quote) -> Order:

@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from http import HTTPStatus
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 from uuid import UUID
 
 from fastapi import APIRouter, Header, Query, Request, Response
@@ -43,6 +43,7 @@ from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import UnitOfMeasure
+from pricewright.domain.orders import OrderLine
 from pricewright.domain.pricing import (
     MAX_REASON_LENGTH,
     ApprovalReason,
@@ -117,7 +118,9 @@ class OverrideJson(BaseModel):
     set_by: UUID | None = Field(description="The person who set it.")
 
 
-class QuoteLineJson(BaseModel):
+class PricedLineJson(BaseModel):
+    """A product and quantity priced by the engine, explained step by step (ADR-0019)."""
+
     model_config = ConfigDict(frozen=True)
 
     id: UUID
@@ -146,35 +149,35 @@ class QuoteLineJson(BaseModel):
     margin_floor: MarginFloorJson | None = Field(description="The floor that applies, if any.")
     below_margin_floor: bool = Field(description="True when the line needs approval for it.")
     override: OverrideJson | None
-    added_by: ActorJson
 
-    @classmethod
-    def of(cls, line: QuoteLine, caller: Principal) -> QuoteLineJson:
+    @staticmethod
+    def fields_of(line: QuoteLine | OrderLine, caller: Principal) -> dict[str, Any]:
+        """The fields every priced line shows; ``Any`` at this boundary, one type per field."""
         pricing, floor, override = line.pricing, line.pricing.margin_floor, line.override
         margin_rate = pricing.margin_rate
-        return cls(
-            id=line.id,
-            product_id=line.product_id,
-            sku=line.sku,
-            product_name=line.product_name,
-            unit=line.unit.value,
-            quantity=line.quantity.quantize(_QUANTITY_PLACES),
-            list_unit_price=MoneyJson.of(pricing.breakdown.list_unit_price),
-            steps=[StepJson.of(step) for step in pricing.breakdown.steps],
-            net_unit_price=MoneyJson.of(pricing.breakdown.net_unit_price),
-            list_total=MoneyJson.of(pricing.list_total),
-            net_total=MoneyJson.of(pricing.net_total),
-            margin=MarginJson(
+        return {
+            "id": line.id,
+            "product_id": line.product_id,
+            "sku": line.sku,
+            "product_name": line.product_name,
+            "unit": line.unit.value,
+            "quantity": line.quantity.quantize(_QUANTITY_PLACES),
+            "list_unit_price": MoneyJson.of(pricing.breakdown.list_unit_price),
+            "steps": [StepJson.of(step) for step in pricing.breakdown.steps],
+            "net_unit_price": MoneyJson.of(pricing.breakdown.net_unit_price),
+            "list_total": MoneyJson.of(pricing.list_total),
+            "net_total": MoneyJson.of(pricing.net_total),
+            "margin": MarginJson(
                 amount=MoneyJson.of(pricing.margin),
                 rate=None if margin_rate is None else ratio(margin_rate),
             )
             if caller.holds(Permission.COSTS_READ)
             else None,
-            margin_floor=None
+            "margin_floor": None
             if floor is None
             else MarginFloorJson(rule_id=floor.rule_id, label=floor.label, rate=ratio(floor.rate)),
-            below_margin_floor=pricing.below_margin_floor,
-            override=None
+            "below_margin_floor": pricing.below_margin_floor,
+            "override": None
             if override is None
             else OverrideJson(
                 rate=ratio(override.rate) if isinstance(override, RateOverride) else None,
@@ -184,8 +187,15 @@ class QuoteLineJson(BaseModel):
                 reason=override.reason,
                 set_by=line.override_by,
             ),
-            added_by=ActorJson.of(line.added_by),
-        )
+        }
+
+
+class QuoteLineJson(PricedLineJson):
+    added_by: ActorJson
+
+    @classmethod
+    def of(cls, line: QuoteLine, caller: Principal) -> QuoteLineJson:
+        return cls(**cls.fields_of(line, caller), added_by=ActorJson.of(line.added_by))
 
 
 class ApprovalRequestJson(BaseModel):
@@ -272,6 +282,7 @@ class QuoteResponse(BaseModel):
     cancel_reason: str | None
     supersedes_id: UUID | None = Field(description="The revision this one replaced.")
     superseded_by_id: UUID | None = Field(description="The revision that replaced this one.")
+    order_id: UUID | None = Field(description="The order this quote became, once converted.")
     approvals: list[ApprovalRequestJson] = Field(
         description="This revision's approval requests, oldest first; at most one pending."
     )
@@ -310,6 +321,7 @@ class QuoteResponse(BaseModel):
             cancel_reason=quote.cancel_reason,
             supersedes_id=quote.supersedes_id,
             superseded_by_id=quote.superseded_by_id,
+            order_id=quote.order_id,
             approvals=[ApprovalRequestJson.of(request) for request in quote.approvals],
             version=quote.version,
         )

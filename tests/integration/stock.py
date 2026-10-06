@@ -115,3 +115,17 @@ def draft(stock: Stock, number: str = "NF-2026-000001") -> Quote:
         context=stock.pricing(),
     )
     return quote
+
+
+async def accepted(sessions: Sessions, stock: Stock) -> Quote:
+    """A stored quote, approved by the director (a line is below its floor), sent and accepted."""
+    quote = draft(stock)
+    quote.submit(by=Actor.person(stock.rep.id), context=stock.pricing())
+    quote.approve(by=Actor.person(stock.director.id), now=NOW)
+    quote.send(now=NOW)
+    quote.accept(now=NOW)
+    async with SqlAlchemyUnitOfWork(sessions) as uow:
+        uow.bind_tenant(stock.tenant.id)
+        await uow.quotes.add(quote)
+        await uow.commit()
+    return quote

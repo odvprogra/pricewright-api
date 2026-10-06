@@ -33,6 +33,7 @@ class AuditResourceType(StrEnum):
     CUSTOMER = "customer"
     PRICING_RULE = "pricing_rule"
     QUOTE = "quote"
+    ORDER = "order"
 
 
 class AuditAction(StrEnum):
@@ -66,6 +67,8 @@ class AuditAction(StrEnum):
     QUOTE_REVISED = "quote.revised"
     QUOTE_APPROVED = "quote.approved"
     QUOTE_REJECTED = "quote.rejected"
+    QUOTE_CONVERTED = "quote.converted"
+    ORDER_CREATED = "order.created"
 
     @property
     def resource_type(self) -> AuditResourceType:

@@ -10,8 +10,9 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from pricewright.application.audit import quote_fields, quote_line_fields, record
+from pricewright.application.audit import order_fields, quote_fields, quote_line_fields, record
 from pricewright.application.idempotency import Created, earlier_creation, remember_creation
+from pricewright.application.orders import order_of
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
     ApprovalSummary,
@@ -22,13 +23,14 @@ from pricewright.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
-from pricewright.application.pricing import pricing_context, tenant_of
+from pricewright.application.pricing import customer_of, pricing_context, tenant_of
 from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created, removed
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
 from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.numbering import document_number
+from pricewright.domain.orders import Order
 from pricewright.domain.pricing import ManualOverride
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quotes import LineChange, PricingContext, Quote
@@ -394,6 +396,59 @@ async def accept_quote(
         unit_of_work=unit_of_work,
         clock=clock,
     )
+
+
+async def convert_quote(
+    principal: Principal,
+    quote_id: UUID,
+    reference: str | None,
+    *,
+    expected_version: int,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+    idempotency: IdempotentRequest | None = None,
+) -> Created[Order]:
+    """Turn an accepted quote into its order, numbered in the order series (ADR-0023).
+
+    A retry with the same ``Idempotency-Key`` gets the same order back before the quote's version
+    is checked: the client never saw the version its own conversion made (ADR-0022).
+    """
+    principal.require(Permission.ORDERS_MANAGE)
+    now = clock()
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        if (earlier := await earlier_creation(uow, principal, idempotency, now=now)) is not None:
+            return Created(await order_of(uow, earlier), replayed=True)
+        quote = await _quote_at(uow, quote_id, expected_version)
+        tenant = await tenant_of(uow, principal.tenant_id)
+        customer = await customer_of(uow, quote.customer_id)
+        before = quote_fields(quote)
+        year = now.astimezone(UTC).year
+        # A conversion refused below rolls the unit of work back, and the number with it.
+        number = document_number(
+            tenant.settings.order_prefix, year, await uow.orders.allocate_number(year)
+        )
+        order = quote.convert(
+            number=number, customer=customer, by=Actor.of(principal), now=now, reference=reference
+        )
+        # The quote first: its version decides between concurrent conversions (ADR-0012).
+        await uow.quotes.save(quote)
+        await uow.orders.add(order)
+        converted = changed(before, quote_fields(quote))
+        await record(uow, principal, AuditAction.QUOTE_CONVERTED, quote.id, converted, now=now)
+        await record(
+            uow,
+            principal,
+            AuditAction.ORDER_CREATED,
+            order.id,
+            created(order_fields(order)),
+            now=now,
+        )
+        await remember_creation(
+            uow, principal, idempotency, AuditResourceType.ORDER, order.id, now=now
+        )
+        await uow.commit()
+    return Created(order)
 
 
 async def cancel_quote(
