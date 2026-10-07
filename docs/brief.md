@@ -188,6 +188,19 @@ and office supplies, so forecasts map 1:1 to Pricewright products. A small commi
 holds only codes → names (no demand data), so `just seed` never needs the dataset or a Kaggle token.
 Fallback if time is short: a fully synthetic catalog, mapped later.
 
+Agreed for the presentable checkpoint:
+
+- The catalog keeps the dataset's 300 products with the most demand, which fall into 8 categories
+  rather than the estimated 10, so every top-N of `demand-forecast` stays inside it
+  ([ADR-0025](adr/0025-northfield-catalog-from-the-demand-dataset.md)).
+- Order prefixes `NFO` and `LTO`, after the tenants' quote prefixes.
+- Everything is loaded through the use cases, dated relative to an as-of date (today by default) and
+  reproducible from a seed. `just seed` resets the local database and loads again. The command
+  refuses staging and production, and every demo user signs in with a published passphrase
+  ([ADR-0024](adr/0024-demo-data-through-the-use-cases.md)).
+- Northfield's 150 quotes end in every state of the lifecycle, including revisions, cancelled orders
+  and offers expired on the as-of date.
+
 ## 9. Expected ADRs
 
 | ADR  | Topic                                                                                                                                   | Milestone |
@@ -215,6 +228,8 @@ Fallback if time is short: a fully synthetic catalog, mapped later.
 | 0021 | [Quote numbers: the tenant's prefix, the year and a counter](adr/0021-quote-numbers-per-tenant-and-year.md)                             | M4        |
 | 0022 | [Idempotency keys: stored with the change, per caller](adr/0022-idempotency-keys-stored-with-the-change.md)                             | M6        |
 | 0023 | [Orders: converted once from an accepted quote, prices copied](adr/0023-orders-converted-once-from-accepted-quotes.md)                  | M6        |
+| 0024 | [Demo data through the use cases, from a seed and a date](adr/0024-demo-data-through-the-use-cases.md)                                  | —         |
+| 0025 | [Northfield's catalog from the demand dataset](adr/0025-northfield-catalog-from-the-demand-dataset.md)                                  | —         |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 
