@@ -1,0 +1,301 @@
+dataset_code,dataset_category,sku,name,category,unit,list_price,unit_cost
+Product_0002,Category_005,OFP-0002,"Copy Paper, Ledger 11 x 17 in, 28 lb, 98 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,59.75,45.97
+Product_0011,Category_005,OFP-0011,"Ruled Writing Pads, Junior 5 x 8 in, Canary, Pack of 12",Office Paper & Mailing,XPK,14.19,10.78
+Product_0012,Category_005,OFP-0012,"Copy Paper, Ledger 11 x 17 in, 20 lb, 98 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,52.09,36.17
+Product_0016,Category_005,OFP-0016,"Thermal Receipt Paper Rolls, 3-1/8 in x 230 ft, Case of 50",Office Paper & Mailing,XCS,42.83,32.72
+Product_0018,Category_005,OFP-0018,"Kraft Clasp Envelopes, 6 x 9 in, Box of 500",Office Paper & Mailing,XBX,24.11,16.86
+Product_0021,Category_005,OFP-0021,"Kraft Clasp Envelopes, 10 x 15 in, Box of 100",Office Paper & Mailing,XBX,19.51,14.13
+Product_0031,Category_005,OFP-0031,"Sticky Notes, 3 x 3 in, Yellow, Pack of 12 Pads",Office Paper & Mailing,XPK,8.45,5.76
+Product_0033,Category_005,OFP-0033,"Cardstock, White, 65 lb, Letter, Pack of 250 Sheets",Office Paper & Mailing,XPK,23.79,17.86
+Product_0036,Category_005,OFP-0036,"File Folders, Letter, Straight-Cut Tab, Manila, Box of 100",Office Paper & Mailing,XBX,30.65,23.96
+Product_0063,Category_019,FST-0063,"Zinc-Plated Sleeve Anchor, 1/2 in x 3-3/4 in, Box of 25",Fasteners & Fixings,XBX,51.23,30.74
+Product_0064,Category_019,FST-0064,"Ribbed Plastic Wall Anchor with Screws, #12, Pack of 100",Fasteners & Fixings,XPK,8.32,4.44
+Product_0065,Category_019,FST-0065,"18-8 Stainless Steel Flat Washer, #10, Box of 50",Fasteners & Fixings,XBX,9.37,5.00
+Product_0066,Category_019,FST-0066,"Zinc-Plated Steel Hex Lag Screw, 1/2 in x 1-1/2 in, Box of 50",Fasteners & Fixings,XBX,15.78,9.52
+Product_0070,Category_019,FST-0070,"Grade 8 Yellow-Zinc Steel Split Lock Washer, M10, Box of 100",Fasteners & Fixings,XBX,21.39,11.88
+Product_0071,Category_019,FST-0071,"Zinc-Plated Steel Socket Head Cap Screw, 1/4-20 x 1-1/4 in, Box of 25",Fasteners & Fixings,XBX,21.68,12.78
+Product_0072,Category_019,FST-0072,"Zinc-Plated Sleeve Anchor, 1/4 in x 4-1/4 in, Box of 25",Fasteners & Fixings,XBX,33.41,19.78
+Product_0073,Category_019,FST-0073,"Zinc-Plated Sleeve Anchor, 3/8 in x 3 in, Box of 50",Fasteners & Fixings,XBX,65.62,35.86
+Product_0077,Category_019,FST-0077,"18-8 Stainless Steel Socket Head Cap Screw, 1/4-20 x 1-1/2 in, Box of 50",Fasteners & Fixings,XBX,19.18,10.69
+Product_0079,Category_019,FST-0079,"Grade 5 Zinc-Plated Steel Hex Cap Screw, 5/8-11 x 2 in, Box of 250",Fasteners & Fixings,XBX,41.75,21.30
+Product_0082,Category_019,FST-0082,"Steel Blind Rivet, 1/8 in x 0.188-0.250 in Grip, Box of 50",Fasteners & Fixings,XBX,15.04,7.53
+Product_0083,Category_019,FST-0083,"Grade 8 Yellow-Zinc Steel Split Lock Washer, #10, Box of 250",Fasteners & Fixings,XBX,17.46,8.77
+Product_0084,Category_019,FST-0084,"Grade 5 Zinc-Plated Steel Hex Washer Head Self-Drilling Screw, #14 x 1-1/2 in, Box of 100",Fasteners & Fixings,XBX,20.30,10.44
+Product_0085,Category_019,FST-0085,"Black-Oxide Steel Nylon-Insert Lock Nut, M5 x 0.8, Box of 250",Fasteners & Fixings,XBX,10.46,5.72
+Product_0086,Category_019,FST-0086,"Zinc-Plated Steel Hex Washer Head Self-Drilling Screw, #8 x 1/2 in, Box of 50",Fasteners & Fixings,XBX,31.37,16.68
+Product_0089,Category_019,FST-0089,"Ribbed Plastic Wall Anchor with Screws, #6, Pack of 250",Fasteners & Fixings,XPK,11.92,7.53
+Product_0093,Category_019,FST-0093,"Hot-Dip Galvanized Steel Flat Washer, #10, Box of 100",Fasteners & Fixings,XBX,7.25,3.97
+Product_0094,Category_019,FST-0094,"Grade 5 Zinc-Plated Steel Hex Lag Screw, 5/8 in x 3/4 in, Box of 25",Fasteners & Fixings,XBX,15.01,7.71
+Product_0098,Category_019,FST-0098,"Grade 8 Yellow-Zinc Steel Pan Head Machine Screw, #8 x 2 in, Box of 100",Fasteners & Fixings,XBX,6.18,3.38
+Product_0099,Category_019,FST-0099,"Grade 8 Yellow-Zinc Steel Hex Washer Head Self-Drilling Screw, #12 x 1 in, Box of 100",Fasteners & Fixings,XBX,11.99,6.98
+Product_0108,Category_006,SAF-0108,"High-Visibility Safety Vest, ANSI Class 2, Orange, Large",Safety & PPE,EA,19.43,12.53
+Product_0109,Category_006,SAF-0109,"Hooded Disposable Coveralls, X-Large, Case of 25",Safety & PPE,XCS,72.80,47.30
+Product_0145,Category_005,OFP-0145,"Ruled Writing Pads, Junior 5 x 8 in, White, Pack of 12",Office Paper & Mailing,XPK,22.99,15.87
+Product_0146,Category_005,OFP-0146,"Copy Paper, Letter 8.5 x 11 in, 20 lb, 92 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,45.87,34.13
+Product_0202,Category_007,ELC-0202,"LED A19 Light Bulb, 800 lm, 5000 K, Dimmable, Pack of 4",Electrical & Lighting,XPK,18.36,10.67
+Product_0357,Category_005,OFP-0357,"Shipping Labels, 3-1/3 x 4 in, White, Box of 3,000",Office Paper & Mailing,XBX,20.93,16.06
+Product_0374,Category_030,PKG-0374,"Stretch Wrap Film, 15 in x 1,500 ft, 80 Gauge, Case of 4",Packaging & Shipping,XCS,99.05,66.26
+Product_0379,Category_030,PKG-0379,"Kraft Packing Paper Roll, 30 lb, 24 in x 1,200 ft",Packaging & Shipping,XRO,47.47,29.41
+Product_0387,Category_030,PKG-0387,"Air Bubble Cushioning Roll, 3/16 in Bubbles, 12 in x 175 ft",Packaging & Shipping,XRO,43.60,31.51
+Product_0407,Category_019,FST-0407,"Hot-Dip Galvanized Steel Carriage Bolt, 3/8-16 x 1/2 in, Box of 25",Fasteners & Fixings,XBX,13.40,7.92
+Product_0408,Category_019,FST-0408,"Zinc-Plated Wedge Anchor, 5/8 in x 2-1/4 in, Box of 25",Fasteners & Fixings,XBX,46.46,28.63
+Product_0418,Category_019,FST-0418,"Hot-Dip Galvanized Steel Hex Cap Screw, M10 x 1.5 x 12 mm, Box of 100",Fasteners & Fixings,XBX,17.44,10.11
+Product_0420,Category_019,FST-0420,"Grade 5 Zinc-Plated Steel Split Lock Washer, 3/8 in, Box of 50",Fasteners & Fixings,XBX,29.20,16.68
+Product_0422,Category_019,FST-0422,"18-8 Stainless Steel Split Lock Washer, M12, Box of 100",Fasteners & Fixings,XBX,13.51,6.78
+Product_0424,Category_019,FST-0424,"Grade 8 Yellow-Zinc Steel Flat Head Wood Screw, #10 x 1/2 in, Box of 50",Fasteners & Fixings,XBX,21.35,13.79
+Product_0427,Category_019,FST-0427,"Zinc-Plated Steel Nylon-Insert Lock Nut, M8 x 1.25, Box of 50",Fasteners & Fixings,XBX,9.02,4.99
+Product_0556,Category_030,PKG-0556,"Stretch Wrap Film, 20 in x 1,500 ft, 80 Gauge, Case of 4",Packaging & Shipping,XCS,90.46,54.83
+Product_0558,Category_030,PKG-0558,"Kraft Packing Paper Roll, 30 lb, 24 in x 600 ft",Packaging & Shipping,XRO,51.16,32.62
+Product_0829,Category_006,SAF-0829,"Safety Glasses, Indoor/Outdoor Mirror Lens, Anti-Fog, ANSI Z87.1+",Safety & PPE,EA,6.52,3.45
+Product_0837,Category_019,FST-0837,"18-8 Stainless Steel Flat Washer, M6, Box of 250",Fasteners & Fixings,XBX,24.11,13.28
+Product_0929,Category_006,SAF-0929,"N95 Particulate Respirator, With Exhalation Valve, Box of 20",Safety & PPE,XBX,14.54,9.74
+Product_0930,Category_006,SAF-0930,"Foam Earplugs, NRR 29 dB, Uncorded, Box of 200 Pairs",Safety & PPE,XBX,20.11,12.85
+Product_0931,Category_006,SAF-0931,"Hard Hat, Type I Class E, White, 4-Point Ratchet Suspension",Safety & PPE,EA,20.33,13.79
+Product_0932,Category_006,SAF-0932,"Cowhide Leather Work Gloves, Keystone Thumb, Large",Safety & PPE,PR,11.83,6.19
+Product_0933,Category_006,SAF-0933,"High-Visibility Safety Vest, ANSI Class 2, Orange, X-Large",Safety & PPE,EA,10.43,7.12
+Product_0935,Category_006,SAF-0935,"Over-the-Head Earmuffs, NRR 30 dB",Safety & PPE,EA,14.78,9.07
+Product_0936,Category_006,SAF-0936,"Nitrile Disposable Gloves, 4 mil, Powder-Free, Medium, Box of 100",Safety & PPE,XBX,17.84,11.52
+Product_0937,Category_006,SAF-0937,"Safety Glasses, Gray Lens, Anti-Fog, ANSI Z87.1+",Safety & PPE,EA,5.17,2.82
+Product_0938,Category_006,SAF-0938,"Cut-Resistant Gloves, ANSI A4, Latex-Coated Palm, X-Large",Safety & PPE,PR,10.17,5.44
+Product_0941,Category_005,OFP-0941,"File Folders, Letter, Straight-Cut Tab, Assorted Colors, Box of 100",Office Paper & Mailing,XBX,18.16,14.22
+Product_0942,Category_005,OFP-0942,"File Folders, Letter, 1/3-Cut Tab, Manila, Box of 100",Office Paper & Mailing,XBX,12.95,9.23
+Product_0943,Category_005,OFP-0943,"Kraft Clasp Envelopes, 9 x 12 in, Box of 250",Office Paper & Mailing,XBX,27.29,20.77
+Product_0975,Category_028,JAN-0975,"Microfiber Cleaning Cloths, 16 x 16 in, Blue, Pack of 24",Janitorial & Sanitation,XPK,17.03,11.73
+Product_0979,Category_028,JAN-0979,"Trash Can Liners, 55-60 gal, 1.2 mil, Black, Case of 100",Janitorial & Sanitation,XCS,41.76,29.91
+Product_0980,Category_028,JAN-0980,"Microfiber Cleaning Cloths, 16 x 16 in, Assorted Colors, Pack of 24",Janitorial & Sanitation,XPK,37.67,25.06
+Product_0981,Category_028,JAN-0981,"Bath Tissue, 2-Ply, 400 Sheets per Roll, Case of 96 Rolls",Janitorial & Sanitation,XCS,50.88,34.98
+Product_0982,Category_028,JAN-0982,"Disinfecting Wipes, Canister of 80, Unscented, Case of 6",Janitorial & Sanitation,XCS,48.36,30.03
+Product_0984,Category_028,JAN-0984,"Foaming Hand Soap Refill, Mild Fragrance, 1,000 mL, Case of 6",Janitorial & Sanitation,XCS,45.19,28.04
+Product_0985,Category_028,JAN-0985,"Multi-Surface Cleaner Concentrate, Unscented, 1 gal, Case of 4",Janitorial & Sanitation,XCS,35.08,21.22
+Product_0998,Category_028,JAN-0998,"Trash Can Liners, 33 gal, 1.5 mil, Black, Case of 150",Janitorial & Sanitation,XCS,33.76,20.38
+Product_1000,Category_028,JAN-1000,"Trash Can Liners, 55-60 gal, 2.0 mil, Black, Case of 150",Janitorial & Sanitation,XCS,42.52,27.72
+Product_1001,Category_028,JAN-1001,"Hardwound Paper Towel Rolls, White, 800 ft, Case of 6",Janitorial & Sanitation,XCS,33.82,21.05
+Product_1008,Category_006,SAF-1008,"Cowhide Leather Work Gloves, Keystone Thumb, Medium",Safety & PPE,PR,8.14,5.37
+Product_1016,Category_007,ELC-1016,"LED A19 Light Bulb, 800 lm, 4000 K, Dimmable, Pack of 4",Electrical & Lighting,XPK,9.74,6.10
+Product_1018,Category_007,ELC-1018,"LED T8 Tube Lamp, 4 ft, 4000 K, Case of 10",Electrical & Lighting,XCS,104.40,66.10
+Product_1023,Category_007,ELC-1023,"Extension Cord, 12/3 AWG, 100 ft, Orange",Electrical & Lighting,EA,30.38,20.51
+Product_1047,Category_006,SAF-1047,"Indirect-Vent Safety Goggles, Gray Lens",Safety & PPE,EA,17.66,9.80
+Product_1048,Category_006,SAF-1048,"Nitrile Disposable Gloves, 5 mil, Powder-Free, Small, Box of 100",Safety & PPE,XBX,12.69,8.08
+Product_1101,Category_032,TLS-1101,"Combination Wrench Set, SAE, 11-Piece",Hand Tools,SET,98.79,64.55
+Product_1134,Category_005,OFP-1134,"Copy Paper, Legal 8.5 x 14 in, 24 lb, 92 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,42.68,31.83
+Product_1135,Category_005,OFP-1135,"Kraft Clasp Envelopes, 10 x 13 in, Box of 250",Office Paper & Mailing,XBX,18.27,14.37
+Product_1147,Category_006,SAF-1147,"Nitrile Disposable Gloves, 6 mil, Powder-Free, Small, Box of 100",Safety & PPE,XBX,18.52,12.13
+Product_1148,Category_006,SAF-1148,"Hard Hat, Type I Class E, Blue, 4-Point Ratchet Suspension",Safety & PPE,EA,29.33,17.44
+Product_1149,Category_006,SAF-1149,"N95 Particulate Respirator, Without Valve, Box of 20",Safety & PPE,XBX,18.43,11.62
+Product_1150,Category_006,SAF-1150,"Safety Glasses, Clear Lens, Anti-Fog, ANSI Z87.1+",Safety & PPE,EA,9.54,6.67
+Product_1151,Category_006,SAF-1151,"Hooded Disposable Coveralls, Large, Case of 25",Safety & PPE,XCS,60.35,40.12
+Product_1152,Category_006,SAF-1152,"Cut-Resistant Gloves, ANSI A4, Polyurethane-Coated Palm, Large",Safety & PPE,PR,16.92,9.71
+Product_1153,Category_006,SAF-1153,"First Aid Kit, ANSI Class B, 25-Person",Safety & PPE,EA,51.96,32.22
+Product_1154,Category_006,SAF-1154,"Nitrile Disposable Gloves, 4 mil, Powder-Free, 2X-Large, Box of 100",Safety & PPE,XBX,17.69,9.60
+Product_1155,Category_006,SAF-1155,"Cut-Resistant Gloves, ANSI A4, Nitrile-Coated Palm, 2X-Large",Safety & PPE,PR,7.01,4.06
+Product_1156,Category_006,SAF-1156,"Over-the-Head Earmuffs, NRR 25 dB",Safety & PPE,EA,18.68,10.19
+Product_1157,Category_006,SAF-1157,"High-Visibility Safety Vest, ANSI Class 2, Lime, Small",Safety & PPE,EA,7.61,4.16
+Product_1158,Category_006,SAF-1158,"Cowhide Leather Work Gloves, Keystone Thumb, 2X-Large",Safety & PPE,PR,16.82,11.49
+Product_1159,Category_006,SAF-1159,"Indirect-Vent Safety Goggles, Amber Lens",Safety & PPE,EA,14.68,9.42
+Product_1162,Category_006,SAF-1162,"Hooded Disposable Coveralls, Small, Case of 25",Safety & PPE,XCS,105.50,64.08
+Product_1163,Category_006,SAF-1163,"Cowhide Leather Work Gloves, Keystone Thumb, Small",Safety & PPE,PR,8.18,5.53
+Product_1164,Category_006,SAF-1164,"Hard Hat, Type I Class E, Yellow, 4-Point Ratchet Suspension",Safety & PPE,EA,16.41,9.67
+Product_1165,Category_006,SAF-1165,"Nitrile Disposable Gloves, 8 mil, Powder-Free, Small, Box of 100",Safety & PPE,XBX,20.82,10.84
+Product_1166,Category_006,SAF-1166,"High-Visibility Safety Vest, ANSI Class 2, Lime, 2X-Large",Safety & PPE,EA,8.58,5.22
+Product_1167,Category_006,SAF-1167,"Over-the-Head Earmuffs, NRR 27 dB",Safety & PPE,EA,25.48,15.39
+Product_1195,Category_019,FST-1195,"Zinc-Plated Steel Split Lock Washer, M8, Box of 50",Fasteners & Fixings,XBX,12.45,6.26
+Product_1198,Category_019,FST-1198,"Zinc-Plated Sleeve Anchor, 1/2 in x 3 in, Box of 50",Fasteners & Fixings,XBX,52.72,30.19
+Product_1213,Category_019,FST-1213,"Hot-Dip Galvanized Steel Pan Head Machine Screw, #6 x 3/4 in, Box of 50",Fasteners & Fixings,XBX,10.51,6.07
+Product_1215,Category_019,FST-1215,"Grade 8 Yellow-Zinc Steel Hex Nut, 5/8-11, Box of 50",Fasteners & Fixings,XBX,28.94,15.61
+Product_1216,Category_019,FST-1216,"Black-Oxide Steel Split Lock Washer, M10, Box of 250",Fasteners & Fixings,XBX,4.41,2.77
+Product_1221,Category_006,SAF-1221,"Cut-Resistant Gloves, ANSI A4, Nitrile-Coated Palm, X-Large",Safety & PPE,PR,8.48,5.71
+Product_1222,Category_019,FST-1222,"Grade 8 Yellow-Zinc Steel Hex Cap Screw, M6 x 1.0 x 50 mm, Box of 50",Fasteners & Fixings,XBX,27.57,16.42
+Product_1224,Category_019,FST-1224,"Hot-Dip Galvanized Steel Hex Washer Head Self-Drilling Screw, #14 x 3 in, Box of 250",Fasteners & Fixings,XBX,8.36,4.33
+Product_1233,Category_019,FST-1233,"Ribbed Plastic Wall Anchor with Screws, #10, Pack of 250",Fasteners & Fixings,XPK,7.58,4.88
+Product_1234,Category_019,FST-1234,"Grade 8 Yellow-Zinc Steel Socket Head Cap Screw, M10 x 1.5 x 50 mm, Box of 25",Fasteners & Fixings,XBX,35.45,19.05
+Product_1235,Category_019,FST-1235,"Stainless Steel Blind Rivet, 3/16 in x 0.188-0.250 in Grip, Box of 100",Fasteners & Fixings,XBX,14.46,8.91
+Product_1237,Category_019,FST-1237,"Steel Blind Rivet, 5/32 in x 0.188-0.250 in Grip, Box of 50",Fasteners & Fixings,XBX,20.21,10.92
+Product_1239,Category_019,FST-1239,"Zinc-Plated Sleeve Anchor, 1/4 in x 5-1/2 in, Box of 50",Fasteners & Fixings,XBX,38.86,22.82
+Product_1241,Category_019,FST-1241,"18-8 Stainless Steel Hex Nut, 1/4-20, Box of 50",Fasteners & Fixings,XBX,7.28,4.70
+Product_1242,Category_019,FST-1242,"18-8 Stainless Steel Hex Cap Screw, 5/16-18 x 1/2 in, Box of 250",Fasteners & Fixings,XBX,11.72,7.48
+Product_1243,Category_019,FST-1243,"Steel Blind Rivet, 5/32 in x 0.188-0.250 in Grip, Box of 250",Fasteners & Fixings,XBX,16.32,9.82
+Product_1244,Category_019,FST-1244,"Grade 5 Zinc-Plated Steel Hex Lag Screw, 1/4 in x 3 in, Box of 25",Fasteners & Fixings,XBX,24.70,14.04
+Product_1245,Category_019,FST-1245,"Ribbed Plastic Wall Anchor with Screws, #14, Pack of 100",Fasteners & Fixings,XPK,12.44,7.67
+Product_1246,Category_019,FST-1246,"Aluminum Blind Rivet, 3/16 in x 0.251-0.375 in Grip, Box of 50",Fasteners & Fixings,XBX,7.24,4.74
+Product_1247,Category_019,FST-1247,"Black-Oxide Steel Hex Washer Head Self-Drilling Screw, #8 x 3 in, Box of 50",Fasteners & Fixings,XBX,13.77,8.03
+Product_1248,Category_019,FST-1248,"Zinc-Plated Steel Split Lock Washer, 3/8 in, Box of 100",Fasteners & Fixings,XBX,28.10,15.61
+Product_1250,Category_019,FST-1250,"Stainless Steel Blind Rivet, 5/32 in x 0.251-0.375 in Grip, Box of 100",Fasteners & Fixings,XBX,11.94,6.70
+Product_1253,Category_019,FST-1253,"18-8 Stainless Steel Socket Head Cap Screw, 5/8-11 x 1-1/4 in, Box of 25",Fasteners & Fixings,XBX,28.44,18.60
+Product_1256,Category_019,FST-1256,"Grade 8 Yellow-Zinc Steel Flat Head Wood Screw, #8 x 3 in, Box of 50",Fasteners & Fixings,XBX,11.99,6.36
+Product_1262,Category_019,FST-1262,"Black-Oxide Steel Hex Cap Screw, M12 x 1.75 x 12 mm, Box of 250",Fasteners & Fixings,XBX,37.10,20.91
+Product_1263,Category_019,FST-1263,"Black-Oxide Steel Hex Washer Head Self-Drilling Screw, #10 x 1/2 in, Box of 100",Fasteners & Fixings,XBX,13.12,7.45
+Product_1264,Category_019,FST-1264,"Zinc-Plated Steel Hex Lag Screw, 1/2 in x 3/4 in, Box of 25",Fasteners & Fixings,XBX,26.40,13.98
+Product_1266,Category_019,FST-1266,"Zinc-Plated Steel Hex Cap Screw, 5/16-18 x 3 in, Box of 100",Fasteners & Fixings,XBX,52.54,27.95
+Product_1267,Category_019,FST-1267,"Grade 8 Yellow-Zinc Steel Threaded Rod, 1/4-20 x 6 ft",Fasteners & Fixings,EA,5.83,3.62
+Product_1268,Category_019,FST-1268,"Steel Blind Rivet, 1/8 in x 0.126-0.187 in Grip, Box of 250",Fasteners & Fixings,XBX,23.57,13.35
+Product_1269,Category_019,FST-1269,"Grade 8 Yellow-Zinc Steel Hex Washer Head Self-Drilling Screw, #6 x 3 in, Box of 50",Fasteners & Fixings,XBX,8.65,5.59
+Product_1270,Category_019,FST-1270,"Zinc-Plated Steel Socket Head Cap Screw, 1/2-13 x 1 in, Box of 50",Fasteners & Fixings,XBX,17.15,8.89
+Product_1273,Category_019,FST-1273,"Grade 5 Zinc-Plated Steel Threaded Rod, 5/8-11 x 3 ft",Fasteners & Fixings,EA,10.21,5.26
+Product_1274,Category_019,FST-1274,"Zinc-Plated Wedge Anchor, 5/8 in x 2-1/4 in, Box of 50",Fasteners & Fixings,XBX,24.54,13.57
+Product_1278,Category_019,FST-1278,"18-8 Stainless Steel Hex Washer Head Self-Drilling Screw, #6 x 1-1/4 in, Box of 100",Fasteners & Fixings,XBX,31.62,18.71
+Product_1279,Category_019,FST-1279,"Zinc-Plated Steel Hex Washer Head Self-Drilling Screw, #12 x 3 in, Box of 100",Fasteners & Fixings,XBX,32.74,19.40
+Product_1280,Category_019,FST-1280,"Zinc-Plated Sleeve Anchor, 3/8 in x 4-1/4 in, Box of 50",Fasteners & Fixings,XBX,63.04,34.72
+Product_1281,Category_019,FST-1281,"Zinc-Plated Steel Carriage Bolt, 3/8-16 x 3/4 in, Box of 25",Fasteners & Fixings,XBX,16.16,10.52
+Product_1282,Category_033,ADH-1282,"Two-Part Epoxy, 30-Minute Cure, 1 oz Syringe, Pack of 6",Adhesives & Sealants,XPK,23.48,14.10
+Product_1286,Category_019,FST-1286,"Grade 5 Zinc-Plated Steel Nylon-Insert Lock Nut, M6 x 1.0, Box of 50",Fasteners & Fixings,XBX,7.40,4.70
+Product_1287,Category_019,FST-1287,"18-8 Stainless Steel Socket Head Cap Screw, 3/8-16 x 1-1/4 in, Box of 25",Fasteners & Fixings,XBX,73.88,43.63
+Product_1288,Category_019,FST-1288,"Steel Blind Rivet, 1/8 in x 0.188-0.250 in Grip, Box of 100",Fasteners & Fixings,XBX,27.41,17.88
+Product_1289,Category_019,FST-1289,"Grade 8 Yellow-Zinc Steel Hex Cap Screw, M12 x 1.75 x 25 mm, Box of 250",Fasteners & Fixings,XBX,61.47,35.47
+Product_1290,Category_019,FST-1290,"Hot-Dip Galvanized Steel Split Lock Washer, #10, Box of 50",Fasteners & Fixings,XBX,6.63,4.10
+Product_1294,Category_019,FST-1294,"Zinc-Plated Wedge Anchor, 3/8 in x 7 in, Box of 50",Fasteners & Fixings,XBX,23.23,13.15
+Product_1295,Category_019,FST-1295,"18-8 Stainless Steel Nylon-Insert Lock Nut, M8 x 1.25, Box of 100",Fasteners & Fixings,XBX,32.97,18.76
+Product_1299,Category_019,FST-1299,"18-8 Stainless Steel Flat Washer, M6, Box of 50",Fasteners & Fixings,XBX,18.80,12.30
+Product_1312,Category_019,FST-1312,"Hot-Dip Galvanized Steel Pan Head Machine Screw, #14 x 1-1/4 in, Box of 100",Fasteners & Fixings,XBX,10.29,5.37
+Product_1314,Category_019,FST-1314,"Stainless Steel Blind Rivet, 5/32 in x 0.188-0.250 in Grip, Box of 100",Fasteners & Fixings,XBX,29.45,17.47
+Product_1315,Category_019,FST-1315,"Grade 8 Yellow-Zinc Steel Threaded Rod, 5/8-11 x 10 ft",Fasteners & Fixings,EA,17.49,11.36
+Product_1316,Category_019,FST-1316,"Stainless Steel Blind Rivet, 3/16 in x 0.188-0.250 in Grip, Box of 250",Fasteners & Fixings,XBX,8.22,4.49
+Product_1341,Category_019,FST-1341,"18-8 Stainless Steel Hex Lag Screw, 1/2 in x 3/4 in, Box of 25",Fasteners & Fixings,XBX,25.01,14.79
+Product_1342,Category_019,FST-1342,"Grade 5 Zinc-Plated Steel Nylon-Insert Lock Nut, M6 x 1.0, Box of 250",Fasteners & Fixings,XBX,28.32,17.32
+Product_1343,Category_019,FST-1343,"18-8 Stainless Steel Hex Nut, 5/16-18, Box of 100",Fasteners & Fixings,XBX,22.04,11.86
+Product_1344,Category_019,FST-1344,"Grade 8 Yellow-Zinc Steel Flat Head Wood Screw, #10 x 1/2 in, Box of 100",Fasteners & Fixings,XBX,14.68,8.02
+Product_1345,Category_019,FST-1345,"Grade 8 Yellow-Zinc Steel Split Lock Washer, 5/16 in, Box of 100",Fasteners & Fixings,XBX,6.64,4.30
+Product_1346,Category_019,FST-1346,"Zinc-Plated Wedge Anchor, 1/4 in x 5-1/2 in, Box of 25",Fasteners & Fixings,XBX,81.23,48.40
+Product_1347,Category_019,FST-1347,"Ribbed Plastic Wall Anchor with Screws, #10, Pack of 100",Fasteners & Fixings,XPK,7.06,4.53
+Product_1348,Category_019,FST-1348,"Grade 8 Yellow-Zinc Steel Hex Washer Head Self-Drilling Screw, #8 x 3 in, Box of 250",Fasteners & Fixings,XBX,15.66,10.20
+Product_1349,Category_019,FST-1349,"Zinc-Plated Steel Pan Head Machine Screw, #14 x 1 in, Box of 50",Fasteners & Fixings,XBX,6.38,4.05
+Product_1350,Category_019,FST-1350,"Grade 5 Zinc-Plated Steel Hex Cap Screw, 5/16-18 x 2 in, Box of 100",Fasteners & Fixings,XBX,15.21,7.62
+Product_1351,Category_019,FST-1351,"Hot-Dip Galvanized Steel Nylon-Insert Lock Nut, M5 x 0.8, Box of 100",Fasteners & Fixings,XBX,27.05,16.62
+Product_1354,Category_019,FST-1354,"18-8 Stainless Steel Pan Head Machine Screw, #14 x 3/4 in, Box of 100",Fasteners & Fixings,XBX,15.43,8.58
+Product_1355,Category_019,FST-1355,"Grade 8 Yellow-Zinc Steel Socket Head Cap Screw, M5 x 0.8 x 25 mm, Box of 25",Fasteners & Fixings,XBX,48.26,25.71
+Product_1356,Category_019,FST-1356,"Black-Oxide Steel Socket Head Cap Screw, 3/8-16 x 1/2 in, Box of 25",Fasteners & Fixings,XBX,69.41,43.46
+Product_1357,Category_019,FST-1357,"18-8 Stainless Steel Hex Nut, 1/4-20, Box of 100",Fasteners & Fixings,XBX,29.80,16.76
+Product_1358,Category_019,FST-1358,"Black-Oxide Steel Pan Head Machine Screw, #8 x 1 in, Box of 50",Fasteners & Fixings,XBX,20.75,10.48
+Product_1359,Category_019,FST-1359,"Grade 8 Yellow-Zinc Steel Threaded Rod, 5/16-18 x 10 ft",Fasteners & Fixings,EA,14.21,7.54
+Product_1360,Category_019,FST-1360,"18-8 Stainless Steel Hex Cap Screw, 3/8-16 x 3/4 in, Box of 100",Fasteners & Fixings,XBX,9.33,4.73
+Product_1361,Category_033,ADH-1361,"Silicone Sealant, White, 10.1 oz Cartridge, Case of 12",Adhesives & Sealants,XCS,74.71,45.95
+Product_1363,Category_033,ADH-1363,"Two-Part Epoxy, 5-Minute Cure, 1 oz Syringe, Pack of 6",Adhesives & Sealants,XPK,27.36,16.28
+Product_1368,Category_019,FST-1368,"Zinc-Plated Wedge Anchor, 3/8 in x 3-3/4 in, Box of 50",Fasteners & Fixings,XBX,29.73,17.20
+Product_1369,Category_019,FST-1369,"Aluminum Blind Rivet, 5/32 in x 0.251-0.375 in Grip, Box of 50",Fasteners & Fixings,XBX,15.78,8.98
+Product_1371,Category_019,FST-1371,"Grade 8 Yellow-Zinc Steel Hex Nut, 3/8-16, Box of 100",Fasteners & Fixings,XBX,5.18,3.19
+Product_1372,Category_019,FST-1372,"Black-Oxide Steel Carriage Bolt, 1/4-20 x 1 in, Box of 50",Fasteners & Fixings,XBX,38.74,22.75
+Product_1374,Category_019,FST-1374,"Grade 8 Yellow-Zinc Steel Pan Head Machine Screw, #12 x 2 in, Box of 50",Fasteners & Fixings,XBX,10.21,5.33
+Product_1375,Category_019,FST-1375,"Aluminum Blind Rivet, 5/32 in x 0.188-0.250 in Grip, Box of 100",Fasteners & Fixings,XBX,7.07,3.64
+Product_1376,Category_019,FST-1376,"18-8 Stainless Steel Carriage Bolt, 3/8-16 x 3 in, Box of 25",Fasteners & Fixings,XBX,22.65,12.61
+Product_1377,Category_019,FST-1377,"Black-Oxide Steel Pan Head Machine Screw, #14 x 3 in, Box of 50",Fasteners & Fixings,XBX,25.90,16.08
+Product_1378,Category_019,FST-1378,"Aluminum Blind Rivet, 5/32 in x 0.188-0.250 in Grip, Box of 250",Fasteners & Fixings,XBX,24.25,15.24
+Product_1380,Category_019,FST-1380,"Grade 5 Zinc-Plated Steel Hex Nut, 5/16-18, Box of 50",Fasteners & Fixings,XBX,8.62,5.42
+Product_1381,Category_019,FST-1381,"18-8 Stainless Steel Hex Cap Screw, 1/2-13 x 4 in, Box of 250",Fasteners & Fixings,XBX,27.28,13.66
+Product_1382,Category_019,FST-1382,"Stainless Steel Blind Rivet, 1/8 in x 0.188-0.250 in Grip, Box of 100",Fasteners & Fixings,XBX,38.04,19.23
+Product_1387,Category_019,FST-1387,"Hot-Dip Galvanized Steel Hex Cap Screw, M10 x 1.5 x 50 mm, Box of 100",Fasteners & Fixings,XBX,47.40,25.21
+Product_1388,Category_019,FST-1388,"Aluminum Blind Rivet, 1/8 in x 0.188-0.250 in Grip, Box of 100",Fasteners & Fixings,XBX,26.19,17.06
+Product_1392,Category_019,FST-1392,"Zinc-Plated Steel Threaded Rod, 5/16-18 x 3 ft",Fasteners & Fixings,EA,25.52,13.18
+Product_1393,Category_019,FST-1393,"Grade 8 Yellow-Zinc Steel Hex Washer Head Self-Drilling Screw, #6 x 1-1/2 in, Box of 100",Fasteners & Fixings,XBX,28.00,15.58
+Product_1394,Category_019,FST-1394,"Steel Blind Rivet, 5/32 in x 0.251-0.375 in Grip, Box of 100",Fasteners & Fixings,XBX,13.10,8.45
+Product_1396,Category_019,FST-1396,"Grade 5 Zinc-Plated Steel Split Lock Washer, 1/2 in, Box of 250",Fasteners & Fixings,XBX,11.44,6.00
+Product_1397,Category_019,FST-1397,"Zinc-Plated Wedge Anchor, 5/8 in x 3 in, Box of 25",Fasteners & Fixings,XBX,78.07,42.32
+Product_1398,Category_019,FST-1398,"Hot-Dip Galvanized Steel Hex Lag Screw, 1/4 in x 1-1/4 in, Box of 50",Fasteners & Fixings,XBX,26.71,14.20
+Product_1399,Category_019,FST-1399,"Black-Oxide Steel Nylon-Insert Lock Nut, M5 x 0.8, Box of 100",Fasteners & Fixings,XBX,33.74,19.12
+Product_1400,Category_019,FST-1400,"Zinc-Plated Steel Pan Head Machine Screw, #12 x 1-1/4 in, Box of 250",Fasteners & Fixings,XBX,8.46,4.46
+Product_1401,Category_019,FST-1401,"Zinc-Plated Wedge Anchor, 1/2 in x 4-1/4 in, Box of 50",Fasteners & Fixings,XBX,56.04,31.25
+Product_1402,Category_019,FST-1402,"Zinc-Plated Steel Hex Nut, 1/2-13, Box of 100",Fasteners & Fixings,XBX,9.28,5.96
+Product_1403,Category_019,FST-1403,"Ribbed Plastic Wall Anchor with Screws, #14, Pack of 50",Fasteners & Fixings,XPK,16.25,9.59
+Product_1404,Category_019,FST-1404,"Hot-Dip Galvanized Steel Hex Cap Screw, 3/8-16 x 1/2 in, Box of 250",Fasteners & Fixings,XBX,35.53,19.88
+Product_1407,Category_019,FST-1407,"Zinc-Plated Wedge Anchor, 5/8 in x 4-1/4 in, Box of 25",Fasteners & Fixings,XBX,42.14,23.90
+Product_1410,Category_019,FST-1410,"Grade 8 Yellow-Zinc Steel Flat Washer, #10, Box of 100",Fasteners & Fixings,XBX,17.80,8.95
+Product_1416,Category_019,FST-1416,"Grade 5 Zinc-Plated Steel Split Lock Washer, 5/16 in, Box of 100",Fasteners & Fixings,XBX,13.61,7.05
+Product_1418,Category_019,FST-1418,"Zinc-Plated Sleeve Anchor, 5/8 in x 4-1/4 in, Box of 50",Fasteners & Fixings,XBX,59.92,37.03
+Product_1419,Category_019,FST-1419,"18-8 Stainless Steel Pan Head Machine Screw, #14 x 1/2 in, Box of 50",Fasteners & Fixings,XBX,6.94,3.77
+Product_1420,Category_019,FST-1420,"18-8 Stainless Steel Threaded Rod, 1/4-20 x 10 ft",Fasteners & Fixings,EA,6.53,3.68
+Product_1424,Category_019,FST-1424,"Zinc-Plated Steel Pan Head Machine Screw, #10 x 1-1/4 in, Box of 50",Fasteners & Fixings,XBX,12.17,6.24
+Product_1427,Category_019,FST-1427,"Zinc-Plated Steel Threaded Rod, 1/4-20 x 10 ft",Fasteners & Fixings,EA,17.69,9.92
+Product_1429,Category_019,FST-1429,"Ribbed Plastic Wall Anchor with Screws, #12, Pack of 50",Fasteners & Fixings,XPK,7.02,3.55
+Product_1430,Category_019,FST-1430,"Ribbed Plastic Wall Anchor with Screws, #6, Pack of 50",Fasteners & Fixings,XPK,8.54,5.10
+Product_1431,Category_019,FST-1431,"Grade 8 Yellow-Zinc Steel Flat Washer, M6, Box of 100",Fasteners & Fixings,XBX,27.36,13.99
+Product_1432,Category_019,FST-1432,"Black-Oxide Steel Carriage Bolt, 1/2-13 x 2 in, Box of 50",Fasteners & Fixings,XBX,11.37,5.74
+Product_1435,Category_019,FST-1435,"Grade 5 Zinc-Plated Steel Hex Nut, 1/2-13, Box of 50",Fasteners & Fixings,XBX,7.34,4.45
+Product_1437,Category_019,FST-1437,"Aluminum Blind Rivet, 5/32 in x 0.251-0.375 in Grip, Box of 100",Fasteners & Fixings,XBX,8.99,4.74
+Product_1438,Category_019,FST-1438,"Hot-Dip Galvanized Steel Hex Washer Head Self-Drilling Screw, #14 x 1-1/4 in, Box of 100",Fasteners & Fixings,XBX,33.41,18.93
+Product_1439,Category_019,FST-1439,"Zinc-Plated Steel Carriage Bolt, 1/2-13 x 3 in, Box of 50",Fasteners & Fixings,XBX,19.78,11.06
+Product_1440,Category_019,FST-1440,"18-8 Stainless Steel Threaded Rod, 5/16-18 x 3 ft",Fasteners & Fixings,EA,15.83,9.62
+Product_1450,Category_019,FST-1450,"Black-Oxide Steel Threaded Rod, 1/4-20 x 6 ft",Fasteners & Fixings,EA,7.19,3.96
+Product_1451,Category_019,FST-1451,"18-8 Stainless Steel Flat Washer, 1/2 in, Box of 250",Fasteners & Fixings,XBX,27.02,15.39
+Product_1452,Category_019,FST-1452,"Black-Oxide Steel Socket Head Cap Screw, 5/8-11 x 3 in, Box of 25",Fasteners & Fixings,XBX,24.99,13.49
+Product_1453,Category_019,FST-1453,"Hot-Dip Galvanized Steel Hex Nut, 3/8-16, Box of 100",Fasteners & Fixings,XBX,9.99,6.00
+Product_1455,Category_019,FST-1455,"Aluminum Blind Rivet, 5/32 in x 0.251-0.375 in Grip, Box of 250",Fasteners & Fixings,XBX,12.56,7.79
+Product_1456,Category_019,FST-1456,"Grade 5 Zinc-Plated Steel Pan Head Machine Screw, #14 x 3 in, Box of 100",Fasteners & Fixings,XBX,22.65,13.20
+Product_1458,Category_019,FST-1458,"Zinc-Plated Sleeve Anchor, 1/2 in x 5-1/2 in, Box of 50",Fasteners & Fixings,XBX,48.47,25.56
+Product_1459,Category_019,FST-1459,"Zinc-Plated Sleeve Anchor, 1/2 in x 7 in, Box of 50",Fasteners & Fixings,XBX,27.14,15.79
+Product_1460,Category_019,FST-1460,"Zinc-Plated Steel Threaded Rod, 5/8-11 x 3 ft",Fasteners & Fixings,EA,8.43,4.98
+Product_1461,Category_019,FST-1461,"Black-Oxide Steel Flat Washer, M8, Box of 250",Fasteners & Fixings,XBX,11.67,7.27
+Product_1463,Category_019,FST-1463,"Zinc-Plated Steel Hex Nut, 1/2-13, Box of 50",Fasteners & Fixings,XBX,24.47,14.94
+Product_1464,Category_019,FST-1464,"Black-Oxide Steel Hex Nut, 5/16-18, Box of 100",Fasteners & Fixings,XBX,15.68,8.14
+Product_1465,Category_019,FST-1465,"Grade 8 Yellow-Zinc Steel Hex Cap Screw, 5/16-18 x 1/2 in, Box of 100",Fasteners & Fixings,XBX,13.53,8.24
+Product_1466,Category_019,FST-1466,"Grade 8 Yellow-Zinc Steel Split Lock Washer, 5/16 in, Box of 250",Fasteners & Fixings,XBX,7.94,4.07
+Product_1469,Category_019,FST-1469,"Zinc-Plated Steel Flat Head Wood Screw, #12 x 1-1/4 in, Box of 100",Fasteners & Fixings,XBX,22.97,14.53
+Product_1470,Category_019,FST-1470,"Zinc-Plated Steel Socket Head Cap Screw, 3/8-16 x 1/2 in, Box of 50",Fasteners & Fixings,XBX,73.82,44.54
+Product_1478,Category_019,FST-1478,"Grade 8 Yellow-Zinc Steel Split Lock Washer, M6, Box of 250",Fasteners & Fixings,XBX,13.60,7.14
+Product_1479,Category_019,FST-1479,"Zinc-Plated Steel Pan Head Machine Screw, #6 x 3/4 in, Box of 100",Fasteners & Fixings,XBX,13.58,6.90
+Product_1480,Category_019,FST-1480,"Zinc-Plated Sleeve Anchor, 5/8 in x 4-1/4 in, Box of 25",Fasteners & Fixings,XBX,20.39,11.56
+Product_1483,Category_019,FST-1483,"Zinc-Plated Steel Flat Washer, M12, Box of 250",Fasteners & Fixings,XBX,14.59,8.60
+Product_1485,Category_019,FST-1485,"Grade 5 Zinc-Plated Steel Hex Nut, 1/4-20, Box of 250",Fasteners & Fixings,XBX,13.51,8.55
+Product_1486,Category_019,FST-1486,"Grade 5 Zinc-Plated Steel Socket Head Cap Screw, 5/16-18 x 1/2 in, Box of 50",Fasteners & Fixings,XBX,15.54,8.96
+Product_1493,Category_019,FST-1493,"Black-Oxide Steel Socket Head Cap Screw, 1/4-20 x 3/4 in, Box of 50",Fasteners & Fixings,XBX,25.23,13.31
+Product_1496,Category_019,FST-1496,"Zinc-Plated Steel Pan Head Machine Screw, #8 x 1-1/4 in, Box of 100",Fasteners & Fixings,XBX,11.11,6.86
+Product_1502,Category_019,FST-1502,"Stainless Steel Blind Rivet, 1/8 in x 0.126-0.187 in Grip, Box of 100",Fasteners & Fixings,XBX,21.63,11.25
+Product_1507,Category_019,FST-1507,"Black-Oxide Steel Socket Head Cap Screw, 1/2-13 x 3/4 in, Box of 50",Fasteners & Fixings,XBX,20.87,10.54
+Product_1508,Category_019,FST-1508,"18-8 Stainless Steel Carriage Bolt, 1/4-20 x 2 in, Box of 50",Fasteners & Fixings,XBX,40.12,22.69
+Product_1512,Category_019,FST-1512,"Black-Oxide Steel Hex Nut, 3/8-16, Box of 50",Fasteners & Fixings,XBX,16.83,10.05
+Product_1513,Category_019,FST-1513,"Hot-Dip Galvanized Steel Flat Head Wood Screw, #14 x 3 in, Box of 250",Fasteners & Fixings,XBX,19.75,11.00
+Product_1515,Category_019,FST-1515,"Black-Oxide Steel Hex Cap Screw, 5/16-18 x 3/4 in, Box of 50",Fasteners & Fixings,XBX,20.19,13.24
+Product_1520,Category_019,FST-1520,"Grade 5 Zinc-Plated Steel Split Lock Washer, M8, Box of 100",Fasteners & Fixings,XBX,6.77,3.68
+Product_1521,Category_019,FST-1521,"Hot-Dip Galvanized Steel Split Lock Washer, M6, Box of 50",Fasteners & Fixings,XBX,5.48,3.33
+Product_1523,Category_019,FST-1523,"Zinc-Plated Steel Carriage Bolt, 1/2-13 x 1-1/2 in, Box of 25",Fasteners & Fixings,XBX,50.04,30.37
+Product_1526,Category_019,FST-1526,"Grade 8 Yellow-Zinc Steel Flat Head Wood Screw, #14 x 3/4 in, Box of 50",Fasteners & Fixings,XBX,6.52,4.21
+Product_1548,Category_019,FST-1548,"Hot-Dip Galvanized Steel Hex Lag Screw, 3/8 in x 2 in, Box of 25",Fasteners & Fixings,XBX,33.30,20.65
+Product_1552,Category_019,FST-1552,"Black-Oxide Steel Hex Lag Screw, 3/8 in x 1-1/4 in, Box of 50",Fasteners & Fixings,XBX,22.74,13.56
+Product_1554,Category_019,FST-1554,"18-8 Stainless Steel Flat Washer, M10, Box of 250",Fasteners & Fixings,XBX,21.56,13.49
+Product_1555,Category_019,FST-1555,"Zinc-Plated Sleeve Anchor, 3/8 in x 3 in, Box of 25",Fasteners & Fixings,XBX,14.29,7.35
+Product_1556,Category_019,FST-1556,"Zinc-Plated Steel Split Lock Washer, M8, Box of 100",Fasteners & Fixings,XBX,8.72,4.95
+Product_1567,Category_019,FST-1567,"Grade 5 Zinc-Plated Steel Hex Washer Head Self-Drilling Screw, #14 x 1 in, Box of 250",Fasteners & Fixings,XBX,36.56,19.12
+Product_1570,Category_019,FST-1570,"Grade 8 Yellow-Zinc Steel Hex Cap Screw, 1/4-20 x 1-1/4 in, Box of 100",Fasteners & Fixings,XBX,16.54,9.70
+Product_1571,Category_019,FST-1571,"Black-Oxide Steel Pan Head Machine Screw, #6 x 3 in, Box of 100",Fasteners & Fixings,XBX,27.97,15.32
+Product_1573,Category_019,FST-1573,"Grade 5 Zinc-Plated Steel Split Lock Washer, M6, Box of 100",Fasteners & Fixings,XBX,12.75,6.88
+Product_1574,Category_019,FST-1574,"Grade 8 Yellow-Zinc Steel Hex Cap Screw, M8 x 1.25 x 16 mm, Box of 250",Fasteners & Fixings,XBX,42.05,21.51
+Product_1577,Category_019,FST-1577,"Black-Oxide Steel Hex Lag Screw, 1/2 in x 1 in, Box of 50",Fasteners & Fixings,XBX,26.41,15.99
+Product_1578,Category_019,FST-1578,"Grade 8 Yellow-Zinc Steel Socket Head Cap Screw, M8 x 1.25 x 20 mm, Box of 50",Fasteners & Fixings,XBX,27.13,15.33
+Product_1581,Category_005,OFP-1581,"Copy Paper, Ledger 11 x 17 in, 20 lb, 96 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,83.99,57.41
+Product_1603,Category_030,PKG-1603,"Air Bubble Cushioning Roll, 5/16 in Bubbles, 12 in x 175 ft",Packaging & Shipping,XRO,29.22,20.60
+Product_1624,Category_019,FST-1624,"Grade 8 Yellow-Zinc Steel Carriage Bolt, 5/16-18 x 1/2 in, Box of 50",Fasteners & Fixings,XBX,17.31,10.26
+Product_1637,Category_019,FST-1637,"Zinc-Plated Wedge Anchor, 1/2 in x 3 in, Box of 25",Fasteners & Fixings,XBX,64.75,40.33
+Product_1643,Category_019,FST-1643,"Grade 5 Zinc-Plated Steel Flat Washer, M6, Box of 250",Fasteners & Fixings,XBX,24.11,13.10
+Product_1766,Category_005,OFP-1766,"Poly Bubble Mailers, #4 9.5 x 14.5 in, Pack of 50",Office Paper & Mailing,XPK,37.47,29.60
+Product_1787,Category_006,SAF-1787,"First Aid Kit, ANSI Class A, 100-Person",Safety & PPE,EA,38.24,25.69
+Product_1788,Category_006,SAF-1788,"High-Visibility Safety Vest, ANSI Class 2, Lime, X-Large",Safety & PPE,EA,22.03,12.94
+Product_1812,Category_006,SAF-1812,"N95 Particulate Respirator, With Exhalation Valve, Box of 10",Safety & PPE,XBX,40.72,21.68
+Product_1817,Category_006,SAF-1817,"Nitrile Disposable Gloves, 5 mil, Powder-Free, 2X-Large, Box of 100",Safety & PPE,XBX,16.53,10.51
+Product_1818,Category_006,SAF-1818,"Hooded Disposable Coveralls, 2X-Large, Case of 25",Safety & PPE,XCS,63.88,36.08
+Product_1823,Category_006,SAF-1823,"Cut-Resistant Gloves, ANSI A5, Nitrile-Coated Palm, Large",Safety & PPE,PR,6.54,4.04
+Product_1824,Category_006,SAF-1824,"Safety Glasses, Blue Mirror Lens, Anti-Fog, ANSI Z87.1+",Safety & PPE,EA,3.32,1.73
+Product_1825,Category_006,SAF-1825,"Hooded Disposable Coveralls, Medium, Case of 25",Safety & PPE,XCS,110.71,58.95
+Product_1826,Category_006,SAF-1826,"Indirect-Vent Safety Goggles, Blue Mirror Lens",Safety & PPE,EA,6.34,3.74
+Product_1835,Category_006,SAF-1835,"First Aid Kit, ANSI Class A, 10-Person",Safety & PPE,EA,113.06,68.94
+Product_1839,Category_006,SAF-1839,"Nitrile Disposable Gloves, 5 mil, Powder-Free, Large, Box of 100",Safety & PPE,XBX,21.55,12.52
+Product_1841,Category_006,SAF-1841,"Safety Glasses, Amber Lens, Anti-Fog, ANSI Z87.1+",Safety & PPE,EA,12.33,7.40
+Product_1846,Category_006,SAF-1846,"First Aid Kit, ANSI Class B, 10-Person",Safety & PPE,EA,27.44,16.45
+Product_1878,Category_005,OFP-1878,"Copy Paper, Legal 8.5 x 14 in, 28 lb, 98 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,81.43,66.10
+Product_1886,Category_007,ELC-1886,"LED T8 Tube Lamp, 4 ft, 3000 K, Case of 10",Electrical & Lighting,XCS,82.86,52.26
+Product_1904,Category_019,FST-1904,"Zinc-Plated Wedge Anchor, 5/8 in x 3-3/4 in, Box of 50",Fasteners & Fixings,XBX,23.13,15.09
+Product_1967,Category_005,OFP-1967,"Cardstock, White, 110 lb, Letter, Pack of 250 Sheets",Office Paper & Mailing,XPK,30.74,21.20
+Product_1969,Category_005,OFP-1969,"Copy Paper, Ledger 11 x 17 in, 28 lb, 96 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,64.73,47.47
+Product_1970,Category_005,OFP-1970,"Shipping Labels, 1 x 2-5/8 in, White, Box of 1,000",Office Paper & Mailing,XBX,52.35,37.12
+Product_1988,Category_005,OFP-1988,"Sticky Notes, 3 x 5 in, Yellow, Pack of 12 Pads",Office Paper & Mailing,XPK,6.50,4.77
+Product_1991,Category_005,OFP-1991,"File Folders, Letter, 1/5-Cut Tab, Kraft, Box of 100",Office Paper & Mailing,XBX,14.54,10.18
+Product_1997,Category_005,OFP-1997,"File Folders, Letter, 1/3-Cut Tab, Assorted Colors, Box of 100",Office Paper & Mailing,XBX,30.22,23.46
+Product_2001,Category_005,OFP-2001,"Copy Paper, Legal 8.5 x 14 in, 28 lb, 92 Bright, Case of 10 Reams",Office Paper & Mailing,XCS,59.37,44.71
+Product_2004,Category_005,OFP-2004,"Shipping Labels, 2 x 4 in, White, Box of 500",Office Paper & Mailing,XBX,52.29,38.49
+Product_2015,Category_005,OFP-2015,"Sticky Notes, 4 x 6 in, Assorted Pastel, Pack of 12 Pads",Office Paper & Mailing,XPK,13.81,10.27
+Product_2019,Category_005,OFP-2019,"Thermal Receipt Paper Rolls, 3-1/8 in x 230 ft, Case of 24",Office Paper & Mailing,XCS,51.86,41.80
+Product_2032,Category_006,SAF-2032,"Indirect-Vent Safety Goggles, Indoor/Outdoor Mirror Lens",Safety & PPE,EA,7.71,4.17
+Product_2033,Category_006,SAF-2033,"Cut-Resistant Gloves, ANSI A5, Latex-Coated Palm, Small",Safety & PPE,PR,6.13,3.21
+Product_2034,Category_006,SAF-2034,"Over-the-Head Earmuffs, NRR 22 dB",Safety & PPE,EA,23.57,14.01
+Product_2035,Category_006,SAF-2035,"Nitrile Disposable Gloves, 6 mil, Powder-Free, X-Large, Box of 100",Safety & PPE,XBX,18.73,9.94
+Product_2036,Category_006,SAF-2036,"Hard Hat, Type I Class E, Orange, 4-Point Ratchet Suspension",Safety & PPE,EA,21.80,14.26
+Product_2042,Category_019,FST-2042,"Steel Blind Rivet, 3/16 in x 0.188-0.250 in Grip, Box of 250",Fasteners & Fixings,XBX,28.42,17.82
+Product_2043,Category_019,FST-2043,"Black-Oxide Steel Nylon-Insert Lock Nut, M10 x 1.5, Box of 250",Fasteners & Fixings,XBX,7.36,3.82
+Product_2044,Category_019,FST-2044,"Grade 8 Yellow-Zinc Steel Hex Washer Head Self-Drilling Screw, #8 x 2 in, Box of 50",Fasteners & Fixings,XBX,25.06,15.41
+Product_2046,Category_019,FST-2046,"18-8 Stainless Steel Pan Head Machine Screw, #10 x 3 in, Box of 250",Fasteners & Fixings,XBX,10.22,6.38
