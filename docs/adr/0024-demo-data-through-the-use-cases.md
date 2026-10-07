@@ -43,6 +43,13 @@ passes, by the real clock (ADR-0005), and ids are UUIDv7 drawn from the real clo
   the person who would act: the admin builds the catalog, each rep enters the customers they manage,
   the manager keeps the pricing rules. Validation, prices, approvals, numbers and audit events are
   the real ones; no SQL is written around them.
+- **History as stories.** Each quote number is a story of dated steps (draft, submit, approve or
+  reject, send, accept, convert, revise, cancel, cancel the order), told by kind in the numbers the
+  tenant's plan asks for (Northfield: 150, ending in every state of the lifecycle). The steps of
+  every story are played in date order, so numbers follow creation dates and the audit trail reads
+  in time. Quotes meant to need approval go to gold customers in quantities past the threshold; a
+  story the application contradicts (one that should need approval and does not) stops the load
+  instead of leaving data that drifted from its script.
 - **A simulated clock and a seed.** Every use case gets a clock that the seed moves: the tenants go
   live 190 days before the as-of date (`--as-of`, default today in UTC), and the history ends before
   it. Dates are relative to that day, as Odoo's are, so offers are still open and the approval inbox
@@ -90,7 +97,7 @@ passes, by the real clock (ADR-0005), and ids are UUIDv7 drawn from the real clo
 - **Positive:** the demo exercises the real rules end to end; its tests double as tests of the use
   cases at volume; the data reads the same for every reviewer on the same day; a load is checked
   equal on the fakes and on PostgreSQL.
-- **Negative:** loading takes seconds, not milliseconds; products and customers show the time they
-  were loaded as `created_at` (the database sets it), while their audit events carry the simulated
-  date; the same seed on another day shifts every date; anyone running the API locally with demo
-  data knows the passphrase, by design.
+- **Negative:** loading takes about half a minute on PostgreSQL, not milliseconds; products and
+  customers show the time they were loaded as `created_at` (the database sets it), while their audit
+  events carry the simulated date; the same seed on another day shifts every date; anyone running
+  the API locally with demo data knows the passphrase, by design.

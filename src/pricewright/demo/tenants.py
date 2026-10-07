@@ -1,12 +1,15 @@
-"""Who the demo tenants are: settings, people, products, customers and pricing rules (ADR-0024).
+"""Who the demo tenants are: settings, people, products, customers, pricing rules and the kinds
+of quotes in their history (ADR-0024).
 
 Both are fictional. Northfield Supply distributes industrial and office supplies and sells the
 demand dataset's products (ADR-0025); Larkspur Tool Co. is a small tool supplier that exists to
 show tenant isolation. People's emails use ``.example``, a domain reserved for examples (RFC 2606).
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 
 from pricewright.application.customers import NewCustomer
 from pricewright.demo.catalog import northfield_catalog
@@ -51,6 +54,42 @@ class RuleSpec:
     ends: int | None = None
 
 
+class StoryKind(StrEnum):
+    """How a quote's story goes, from its draft to where it stands on the as-of date."""
+
+    WON = "won"
+    WON_ORDER_CANCELLED = "won, order cancelled"
+    WON_AFTER_REJECTION = "won after a rejection and a revision"
+    WON_AFTER_CHANGE = "won after the customer asked for a change"
+    WON_AFTER_EXPIRY = "won after the offer expired and was revised"
+    SENT_AFTER_EXPIRY = "sent again after the offer expired"
+    WON_AFTER_RECALL = "won after a recall"
+    WON_WITH_OVERRIDE = "won with a manager's price override"
+    MANAGER_OFFER = "a manager's offer, sent"
+    LOST = "lost: sent, then cancelled"
+    CANCELLED_DRAFT = "draft cancelled"
+    CANCELLED_APPROVED = "approved, then cancelled"
+    REJECTED = "rejected"
+    EXPIRED_SENT = "sent and expired"
+    EXPIRED_APPROVED = "approved and expired"
+    EXPIRED_PENDING = "pending approval and expired"
+    PENDING = "pending approval"
+    APPROVED = "approved"
+    SENT = "sent"
+    ACCEPTED = "accepted"
+    DRAFT = "draft"
+
+
+@dataclass(frozen=True, slots=True)
+class StoryPlan:
+    """How many quotes of each kind the history holds, and the line quantities, by category, that
+    need approval with a gold customer (``heavy``) or no longer do (``eased``)."""
+
+    counts: Mapping[StoryKind, int]
+    heavy: Mapping[str, tuple[int, int]]
+    eased: Mapping[str, tuple[int, int]]
+
+
 @dataclass(frozen=True, slots=True)
 class DemoTenant:
     name: str
@@ -66,9 +105,29 @@ class DemoTenant:
     products: tuple[ProductSpec, ...]
     customers: tuple[NewCustomer, ...]
     rules: tuple[RuleSpec, ...]
+    stories: StoryPlan
 
     def with_role(self, role: Role) -> tuple[Person, ...]:
         return tuple(person for person in (self.admin, *self.people) if person.role is role)
+
+    @property
+    def account_owners(self) -> Mapping[str, str]:
+        """Each account's rep, by email: the reps take the accounts in turn."""
+        reps = self.with_role(Role.SALES_REP)
+        return {
+            customer.account_number: reps[index % len(reps)].email
+            for index, customer in enumerate(self.customers)
+        }
+
+    @property
+    def manager(self) -> Person | None:
+        managers = self.with_role(Role.SALES_MANAGER)
+        return managers[0] if managers else None
+
+    @property
+    def approver(self) -> Person:
+        """Who keeps the rules and decides the reps' approvals: a manager, else the admin."""
+        return self.manager or self.admin
 
 
 def _brackets(*steps: tuple[int, str]) -> tuple[Bracket, ...]:
@@ -137,6 +196,38 @@ NORTHFIELD_RULES = (
 )
 
 
+_K = StoryKind
+NORTHFIELD_STORIES = StoryPlan(
+    counts={
+        _K.WON: 49,
+        _K.WON_ORDER_CANCELLED: 5,
+        _K.WON_AFTER_REJECTION: 4,
+        _K.WON_AFTER_CHANGE: 4,
+        _K.WON_AFTER_EXPIRY: 2,
+        _K.SENT_AFTER_EXPIRY: 1,
+        _K.WON_AFTER_RECALL: 2,
+        _K.WON_WITH_OVERRIDE: 3,
+        _K.MANAGER_OFFER: 2,
+        _K.LOST: 10,
+        _K.CANCELLED_DRAFT: 4,
+        _K.CANCELLED_APPROVED: 2,
+        _K.REJECTED: 5,
+        _K.EXPIRED_SENT: 8,
+        _K.EXPIRED_APPROVED: 2,
+        _K.EXPIRED_PENDING: 2,
+        _K.PENDING: 8,
+        _K.APPROVED: 6,
+        _K.SENT: 14,
+        _K.ACCEPTED: 5,
+        _K.DRAFT: 12,
+    },
+    # A gold customer's fasteners from 50 boxes (12% + 6%) and safety items from 48 (10% + 9%)
+    # give away more than the 15% threshold; at 12 to 40 they stay under it.
+    heavy={FASTENERS: (50, 120), SAFETY: (48, 96)},
+    eased={FASTENERS: (12, 40), SAFETY: (12, 40)},
+)
+
+
 def _northfield(seed: int) -> DemoTenant:
     return DemoTenant(
         name="Northfield Supply",
@@ -165,6 +256,7 @@ def _northfield(seed: int) -> DemoTenant:
             tiers={CustomerTier.GOLD: 10, CustomerTier.SILVER: 20, CustomerTier.STANDARD: 50},
         ),
         rules=NORTHFIELD_RULES,
+        stories=NORTHFIELD_STORIES,
     )
 
 
@@ -220,6 +312,14 @@ LARKSPUR_RULES = (
 )
 
 
+LARKSPUR_STORIES = StoryPlan(
+    counts={_K.WON: 4, _K.LOST: 1, _K.SENT: 2, _K.PENDING: 1, _K.EXPIRED_SENT: 1, _K.DRAFT: 1},
+    # Accessories from 24 (10%) for the gold contractor (5%) pass Larkspur's 10% threshold.
+    heavy={_TOOLS: (24, 40)},
+    eased={_TOOLS: (6, 18)},
+)
+
+
 def _larkspur(seed: int) -> DemoTenant:
     return DemoTenant(
         name="Larkspur Tool Co.",
@@ -238,6 +338,7 @@ def _larkspur(seed: int) -> DemoTenant:
             tiers={CustomerTier.GOLD: 1, CustomerTier.SILVER: 2, CustomerTier.STANDARD: 5},
         ),
         rules=LARKSPUR_RULES,
+        stories=LARKSPUR_STORIES,
     )
 
 
