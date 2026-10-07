@@ -144,7 +144,7 @@ async def test_seed_loads_the_demo_tenants_and_says_who_can_sign_in() -> None:
     assert output.startswith("Loaded the demo data as of 2026-10-07 (seed 2026):\n")
     assert (
         "  Northfield Supply (NF quotes, NFO orders): 5 users, 8 categories, 300 products, "
-        "80 customers, 13 pricing rules\n"
+        "80 customers, 13 pricing rules, 150 quotes, 11 revisions, 69 orders\n"
     ) in output
     assert 'Sign in as any of them with the passphrase "pricewright demo":\n' in output
     assert "  morgan@northfield.example  sales_manager  Northfield Supply\n" in output

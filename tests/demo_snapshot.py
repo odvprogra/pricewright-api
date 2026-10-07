@@ -6,23 +6,89 @@ number, a category or rule name). Two loads with the same seed and date give equ
 the fakes and on PostgreSQL alike.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from uuid import UUID
 
 from pricewright.application.ports import (
     AuditEventFilter,
     CustomerQuery,
     CustomerSort,
+    OrderQuery,
     PricingRuleQuery,
     PricingRuleSort,
     ProductQuery,
     ProductSort,
+    QuoteQuery,
     UnitOfWorkFactory,
 )
 from pricewright.domain.audit import AuditValue
+from pricewright.domain.orders import Order
+from pricewright.domain.pricing import PricedLine
+from pricewright.domain.quotes import Quote
 
 LIMIT = 100_000
 type Picture = dict[str, object]
+type Key = Callable[[UUID | None], str | None]
+
+
+def _priced(line: PricedLine, key: Key) -> tuple[object, ...]:
+    breakdown, floor = line.breakdown, line.margin_floor
+    steps = tuple(
+        (step.stage, step.label, key(step.rule_id), step.rate, step.amount, step.unit_price)
+        for step in breakdown.steps
+    )
+    return (
+        (key(line.product_id), line.quantity, breakdown.list_unit_price, steps),
+        (line.list_total, line.net_total, line.cost_total),
+        None if floor is None else (key(floor.rule_id), floor.label, floor.rate),
+    )
+
+
+def _quote(quote: Quote, key: Key) -> tuple[object, ...]:
+    totals, submitted = quote.totals, quote.submitted_by
+    lines = [
+        (
+            (line.sku, line.product_name, line.unit, line.quantity, key(line.added_by.id)),
+            (_priced(line.pricing, key), line.override, key(line.override_by)),
+        )
+        for line in quote.lines
+    ]
+    approvals = [
+        (
+            (a.requested_at, key(a.requested_by.id), a.reasons, a.discount, a.approval_threshold),
+            (a.list_subtotal, a.net_subtotal, a.status, key(a.decided_by), a.decided_at, a.comment),
+        )
+        for a in quote.approvals
+    ]
+    return (
+        (quote.display_number, key(quote.customer_id), quote.status, quote.valid_until),
+        (quote.created_at, key(quote.created_by.id), quote.status_changed_at, quote.notes),
+        (quote.submitted_at, None if submitted is None else key(submitted.id)),
+        (totals.list_subtotal, totals.net_subtotal, totals.tax_rate, totals.tax, totals.total),
+        (totals.approval_threshold, totals.priced_at, quote.cancel_reason, quote.version),
+        (key(quote.supersedes_id), key(quote.superseded_by_id), key(quote.order_id)),
+        lines,
+        approvals,
+    )
+
+
+def _order(order: Order, key: Key) -> tuple[object, ...]:
+    totals, customer = order.totals, order.customer
+    lines = [
+        (
+            (line.sku, line.product_name, line.unit, line.quantity, _priced(line.pricing, key)),
+            (line.override, key(line.override_by)),
+        )
+        for line in order.lines
+    ]
+    return (
+        (order.number, key(order.quote_id), order.quote_number, order.customer_reference),
+        (key(customer.id), customer.name, customer.tax_id, customer.payment_terms_days),
+        (totals.list_subtotal, totals.net_subtotal, totals.tax_rate, totals.tax, totals.total),
+        (totals.priced_at, order.created_at, key(order.created_by.id)),
+        (order.status, order.status_changed_at, order.cancel_reason, order.version),
+        lines,
+    )
 
 
 def _named(value: AuditValue, keys: Mapping[UUID, str]) -> object:
@@ -47,14 +113,28 @@ async def _tenant(unit_of_work: UnitOfWorkFactory, tenant_id: UUID) -> Picture:
         customers = await uow.customers.page(by_account, after=None, limit=LIMIT)
         by_name = PricingRuleQuery(sort=PricingRuleSort.NAME)
         rules = await uow.pricing_rules.page(by_name, after=None, limit=LIMIT)
+        oldest_first = QuoteQuery(descending=False)
+        summaries = await uow.quotes.page(oldest_first, after=None, limit=LIMIT)
+        quotes = [await uow.quotes.get(summary.id) for summary in summaries]
+        placed = await uow.orders.page(OrderQuery(descending=False), after=None, limit=LIMIT)
+        orders = [await uow.orders.get(summary.id) for summary in placed]
         events = await uow.audit_events.page(AuditEventFilter(), before=None, limit=LIMIT)
     assert tenant is not None
+    stored_quotes = [quote for quote in quotes if quote is not None]
+    stored_orders = [order for order in orders if order is not None]
     keys: dict[UUID, str] = {
         **{user.id: user.email for user in users},
         **{category.id: category.name for category in categories},
         **{product.id: product.sku for product in products},
         **{customer.id: customer.account_number for customer in customers},
         **{rule.id: rule.name for rule in rules},
+        **{quote.id: quote.display_number for quote in stored_quotes},
+        **{
+            line.id: f"{quote.display_number} line {position}"
+            for quote in stored_quotes
+            for position, line in enumerate(quote.lines, 1)
+        },
+        **{order.id: order.number for order in stored_orders},
     }
 
     def key(record_id: UUID | None) -> str | None:
@@ -80,6 +160,8 @@ async def _tenant(unit_of_work: UnitOfWorkFactory, tenant_id: UUID) -> Picture:
             )
             for rule in rules
         ],
+        "quotes": [_quote(quote, key) for quote in stored_quotes],
+        "orders": [_order(order, key) for order in stored_orders],
         "audit": [
             (
                 event.occurred_at,

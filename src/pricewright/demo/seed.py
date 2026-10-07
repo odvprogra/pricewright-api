@@ -1,11 +1,12 @@
 """Load the demo tenants through the use cases, as their people would (ADR-0024).
 
 Nothing is written around the application: every record goes through the use case a person would
-call, with that person's permissions, so validation, audit events and numbering are the real ones.
-A simulated clock dates everything relative to the as-of date: the tenants go live
-``GO_LIVE_DAYS`` before it.
+call, with that person's permissions, so validation, prices, approvals, numbers and audit events
+are the real ones. A simulated clock dates everything relative to the as-of date: the tenants go
+live ``GO_LIVE_DAYS`` before it, and their quotes' stories (``stories.py``) fill the months between.
 """
 
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -17,6 +18,10 @@ from pricewright.application.onboarding import RegisterTenant, register_tenant
 from pricewright.application.ports import PasswordHasher, UnitOfWorkFactory
 from pricewright.application.pricing_rules import NewPricingRule, create_pricing_rule
 from pricewright.application.users import NewUser, create_user
+from pricewright.demo.clock import DemoClock
+from pricewright.demo.history import HistoryPlayer, Roster
+from pricewright.demo.randomness import generator
+from pricewright.demo.stories import Act, Story, tell_stories
 from pricewright.demo.tenants import DemoTenant, Person, RuleSpec, demo_tenants
 from pricewright.domain.auth import Principal
 from pricewright.domain.money import Money
@@ -28,21 +33,6 @@ DEMO_PASSWORD = "pricewright demo"  # noqa: S105 - published on purpose, for loc
 run outside local and test environments (ADR-0024)."""
 GO_LIVE_DAYS = 190
 GO_LIVE_HOUR = time(14, tzinfo=UTC)
-STEP = timedelta(seconds=10)
-"""How long each record takes to enter at go-live, so audit events keep their order in time."""
-
-
-class DemoClock:
-    """The time the demo's people act at; it only moves forward."""
-
-    def __init__(self, now: datetime) -> None:
-        self.now = now
-
-    def __call__(self) -> datetime:
-        return self.now
-
-    def advance(self, delta: timedelta = STEP) -> None:
-        self.now += delta
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,19 +66,12 @@ class TenantLoader:
     """By SKU."""
     customers: dict[str, UUID] = field(default_factory=dict)
     """By account number."""
-    owners: dict[str, str] = field(default_factory=dict)
-    """The email of the rep who manages each account."""
     rules: int = 0
+    stories: tuple[Story, ...] = ()
 
     @property
     def admin(self) -> Principal:
         return self.people[self.spec.admin.email]
-
-    @property
-    def pricing_manager(self) -> Principal:
-        """A sales manager keeps the rules (brief §2); without one, the admin does."""
-        managers = self.spec.with_role(Role.SALES_MANAGER)
-        return self.people[(managers or (self.spec.admin,))[0].email]
 
     async def register(self, hasher: PasswordHasher, password: str) -> None:
         spec, admin = self.spec, self.spec.admin
@@ -140,24 +123,24 @@ class TenantLoader:
             self.clock.advance()
 
     async def load_customers(self) -> None:
-        """Each rep enters the accounts they manage, in turn."""
-        reps = self.spec.with_role(Role.SALES_REP)
-        for index, new in enumerate(self.spec.customers):
-            owner = reps[index % len(reps)].email
+        """Each rep enters the accounts they manage."""
+        owners = self.spec.account_owners
+        for new in self.spec.customers:
             customer = await create_customer(
-                self.people[owner], new, unit_of_work=self.unit_of_work, clock=self.clock
+                self.people[owners[new.account_number]],
+                new,
+                unit_of_work=self.unit_of_work,
+                clock=self.clock,
             )
             self.customers[new.account_number] = customer.value.id
-            self.owners[new.account_number] = owner
             self.clock.advance()
 
     async def load_rules(self, as_of: date) -> None:
+        """A sales manager keeps the rules (brief §2); without one, the admin does."""
+        keeper = self.people[self.spec.approver.email]
         for spec in self.spec.rules:
             await create_pricing_rule(
-                self.pricing_manager,
-                self._rule(spec, as_of),
-                unit_of_work=self.unit_of_work,
-                clock=self.clock,
+                keeper, self._rule(spec, as_of), unit_of_work=self.unit_of_work, clock=self.clock
             )
             self.rules += 1
             self.clock.advance()
@@ -178,8 +161,16 @@ class TenantLoader:
             valid_to=None if spec.ends is None else day(spec.ends),
         )
 
+    async def play_history(self, seed: int, as_of: date) -> None:
+        """The quotes of the months since going live, in the order they happened."""
+        rng = generator(seed, f"{self.spec.name}/stories")
+        self.stories = tell_stories(self.spec, rng, as_of)
+        roster = Roster(self.people, self.products, self.customers, self.spec.currency)
+        await HistoryPlayer(roster, self.unit_of_work, self.clock).play(self.stories)
+
     def report(self) -> SeededTenant:
         spec = self.spec
+        acts = Counter(step.act for story in self.stories for step in story.steps)
         return SeededTenant(
             name=spec.name,
             tenant_id=self.admin.tenant_id,
@@ -192,6 +183,9 @@ class TenantLoader:
                 "products": len(self.products),
                 "customers": len(self.customers),
                 "pricing rules": self.rules,
+                "quotes": len(self.stories),
+                "revisions": acts[Act.REVISE],
+                "orders": acts[Act.CONVERT],
             },
         )
 
@@ -209,13 +203,35 @@ async def seed_demo(
     Raise ``EmailAlreadyRegisteredError``, having changed nothing, when Northfield is already
     loaded: demo data goes into a database without it (``just seed`` resets the local one).
     """
-    seeded = []
-    for spec in demo_tenants(seed):
-        go_live = datetime.combine(as_of - timedelta(days=GO_LIVE_DAYS), GO_LIVE_HOUR)
-        loader = TenantLoader(spec, unit_of_work, DemoClock(go_live))
-        await loader.register(hasher, password)
-        await loader.load_catalog()
-        await loader.load_customers()
-        await loader.load_rules(as_of)
-        seeded.append(loader.report())
+    seeded = [
+        await load_tenant(
+            spec,
+            unit_of_work=unit_of_work,
+            hasher=hasher,
+            as_of=as_of,
+            seed=seed,
+            password=password,
+        )
+        for spec in demo_tenants(seed)
+    ]
     return SeedReport(as_of=as_of, seed=seed, tenants=tuple(seeded))
+
+
+async def load_tenant(
+    spec: DemoTenant,
+    *,
+    unit_of_work: UnitOfWorkFactory,
+    hasher: PasswordHasher,
+    as_of: date,
+    seed: int,
+    password: str,
+) -> SeededTenant:
+    """One tenant: its people, catalog, customers and rules at go-live, then its history."""
+    go_live = datetime.combine(as_of - timedelta(days=GO_LIVE_DAYS), GO_LIVE_HOUR)
+    loader = TenantLoader(spec, unit_of_work, DemoClock(go_live))
+    await loader.register(hasher, password)
+    await loader.load_catalog()
+    await loader.load_customers()
+    await loader.load_rules(as_of)
+    await loader.play_history(seed, as_of)
+    return loader.report()
