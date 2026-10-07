@@ -78,12 +78,15 @@ select = [
     "S101",  # assert is how pytest checks
     "S105", "S106",  # fake credentials are test data; gitleaks scans the history for real ones
 ]
+# Demo data needs randomness that repeats from a seed, never randomness that keeps a secret.
+"src/pricewright/demo/**" = ["S311"]
+"scripts/**" = ["S311"]
 
 # --- Types (ADR-0003 in engineering-standards) -----------------------------------------------------
 
 [tool.mypy]
 strict = true
-files = ["src", "tests", "migrations"]
+files = ["src", "tests", "migrations", "scripts"]
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 plugins = ["pydantic.mypy"]
@@ -98,6 +101,7 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+pythonpath = ["."]  # tests import the development scripts in scripts/
 xfail_strict = true
 filterwarnings = ["error"]
 asyncio_mode = "auto"
@@ -126,6 +130,7 @@ type = "layers"
 layers = [
     "pricewright.main",
     "pricewright.api | pricewright.cli | pricewright.infrastructure",
+    "pricewright.demo",
     "pricewright.application",
     "pricewright.domain",
 ]
