@@ -20,6 +20,7 @@ from pricewright.demo.seed import DEMO_PASSWORD, seed_demo
 from pricewright.infrastructure.database import Base, create_engine
 from pricewright.infrastructure.passwords import Argon2PasswordHasher
 from pricewright.main import admin, units_of_work
+from tests.demo_invariants import check_demo
 from tests.demo_snapshot import Picture, picture
 from tests.fakes import FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
 
@@ -55,6 +56,19 @@ async def _seeded(database_url: str) -> tuple[list[Picture], bool]:
         opens = [await hasher.verify(user.password_hash, DEMO_PASSWORD) for user in admins]
         tenants = await picture(unit_of_work, [user.tenant_id for user in admins])
         return tenants, len(opens) == len(ADMINS) and all(opens)
+    finally:
+        await engine.dispose()
+
+
+async def _check(database_url: str) -> None:
+    engine = create_engine(database_url)
+    try:
+        unit_of_work = units_of_work(engine)
+        async with unit_of_work() as uow:
+            found = [await uow.identities.user_by_email(email) for email in ADMINS]
+        tenant_ids = [user.tenant_id for user in found if user is not None]
+        assert len(tenant_ids) == len(ADMINS)
+        await check_demo(unit_of_work, tenant_ids, date.fromisoformat(AS_OF))
     finally:
         await engine.dispose()
 
@@ -105,6 +119,10 @@ def test_seed_loads_into_postgresql_exactly_what_it_loads_into_the_fakes(
 
     assert seeded == expected
     assert passphrase_opens
+
+
+def test_seed_keeps_every_business_rule_in_postgresql(seeded_url: str) -> None:
+    asyncio.run(_check(seeded_url))  # assertions in tests/demo_invariants
 
 
 def test_seed_refuses_a_second_load_and_leaves_the_database_as_it_was(
