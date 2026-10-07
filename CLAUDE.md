@@ -22,8 +22,8 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **presentable checkpoint** (seed data and README;
-  then M5).
+- Work one milestone at a time. Current milestone: **M5** (transactional outbox, worker, PDF, email,
+  expiry job, idempotency-key purge).
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.
@@ -38,7 +38,9 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 just setup | just dev | just check | just test | just lint | just typecheck | just fmt
 just migrate | just migration "<message>"
 just openapi
+just seed                                       # reset the local database, load the demo
 uv run pricewright-admin create-tenant --help   # operator commands (src/pricewright/cli.py)
+uv run pricewright-admin seed --help            # demo data: --as-of, --seed, --check
 ```
 
 `just check` must pass before a task is considered done.
@@ -50,6 +52,7 @@ src/pricewright/domain/          pure business logic, no I/O
 src/pricewright/application/     use cases + ports (Protocols)
 src/pricewright/infrastructure/  adapters (logging, database, ...)
 src/pricewright/api/             FastAPI app, routers, Problem Details
+src/pricewright/demo/            demo tenants and their history, loaded through the use cases
 src/pricewright/main.py          composition root
 ```
 
@@ -58,7 +61,8 @@ Read first: `main.py` (wiring), `application/ports.py` (unit of work and reposit
 `api/concurrency.py` (ETag / If-Match), `application/audit.py` (the audit trail),
 `api/pagination.py` (cursors), `domain/money.py`, `domain/pricing.py` (the engine),
 `domain/quote_lifecycle.py` (the transition table), `domain/quotes.py` (the quote aggregate),
-`domain/orders.py`, `application/idempotency.py` (`Idempotency-Key`), `tests/fakes.py`.
+`domain/orders.py`, `application/idempotency.py` (`Idempotency-Key`), `tests/fakes.py`,
+`demo/seed.py` and `demo/stories.py` (the demo data).
 
 Rules the code relies on:
 
@@ -77,6 +81,8 @@ Rules the code relies on:
   check it first in the unit of work, remember what was created in the same one (ADR-0022).
 - Fakes in `tests/fakes.py` enforce the same rules as the adapters; keep them in step.
 - Test secrets are generated at runtime: gitleaks flags literals.
+- The demo seed (`pricewright.demo`) drives only use cases, as the tenants' people; a new rule the
+  demo data must keep goes into `tests/demo_invariants.py` (ADR-0024).
 
 ## Decisions already made
 
@@ -107,5 +113,8 @@ expected ADRs and their milestones are listed in the brief (§9).
   and year (ADR-0021), quote, line and transition endpoints, the approval inbox (v0.5.0). M6 —
   `Idempotency-Key` on every creation (ADR-0022), the order prefix, orders converted once from
   accepted quotes with their snapshot (ADR-0023), listed and cancelled (v0.6.0)
+- Presentable checkpoint — Northfield's catalog from the demand dataset (ADR-0025), demo data
+  through the use cases with a history of quotes and orders (ADR-0024), the README's demo and
+  walkthrough
 - In progress: —
-- Next: seed data and README for the presentable checkpoint, then M5
+- Next: M5

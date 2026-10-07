@@ -199,6 +199,23 @@ sequenceDiagram
     U-->>C: 201, Location /orders/{id}, ETag "1"
 ```
 
+## Loading the demo
+
+`just seed` checks that demo data may be loaded here, migrates the local database down and up, and
+runs `pricewright-admin seed` (ADR-0024). The seed is one more driver of the use cases, like the
+HTTP API: it acts as each tenant's people, on a clock it moves from go-live to the as-of date.
+
+```mermaid
+flowchart LR
+    seed[pricewright-admin seed] --> loader[TenantLoader]
+    loader -->|go-live: users, catalog, customers, rules| cases[use cases]
+    loader --> stories[stories: dated steps per quote]
+    stories --> player[HistoryPlayer: steps in date order]
+    player -->|create, submit, approve, send, accept, convert, revise, cancel| cases
+    clock[DemoClock] -.now.-> cases
+    cases --> uow[unit of work] --> db[(PostgreSQL)]
+```
+
 ## Rules
 
 - Dependencies point inward; the domain imports no framework or infrastructure library. Enforced by
@@ -222,3 +239,5 @@ sequenceDiagram
   approving, sending and overriding prices stay with people (ADR-0020).
 - Use cases bind the unit of work to the caller's tenant; only authentication reads across tenants
   (ADR-0006).
+- Demo data goes through the use cases, never around them, and only where `ENVIRONMENT` is local or
+  test (ADR-0024).
