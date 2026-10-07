@@ -1,7 +1,9 @@
 """In-memory fakes of the ports (handbook §7: don't mock what you own, write a fake).
 
 They follow the same rules as the SQLAlchemy adapters, whose integration tests pin those rules down:
-tenant scoping, explicit commits and unique emails.
+tenant scoping, explicit commits and unique emails. Like rows read from a database, records are
+copied on the way in and out: a stored record is never changed in place, only replaced, so a unit
+of work stages each table without copying every record in it.
 """
 
 import copy
@@ -113,7 +115,7 @@ class FakeTenantRepository:
         self._tenants = tenants
 
     async def add(self, tenant: Tenant) -> None:
-        self._tenants[tenant.id] = tenant
+        self._tenants[tenant.id] = copy.deepcopy(tenant)
 
     async def get(self, tenant_id: UUID) -> Tenant | None:
         return copy.deepcopy(self._tenants.get(tenant_id))
@@ -134,7 +136,7 @@ class FakeUserRepository:
     async def add(self, user: User) -> None:
         if user.tenant_id != self._uow.tenant_id:
             raise RuntimeError("a user can only be added to the unit of work's tenant")
-        self._users[user.id] = user
+        self._users[user.id] = copy.deepcopy(user)
 
     async def get(self, user_id: UUID) -> User | None:
         user = self._users.get(user_id)
@@ -150,12 +152,13 @@ class FakeUserRepository:
         return copy.deepcopy([user for user in owned if after is None or user.id > after][:limit])
 
     def _stored(self, user: User) -> User:
+        """A copy of the stored row, to change and put back."""
         if user.tenant_id != self._uow.tenant_id:
             raise RuntimeError("only a user of the unit of work's tenant can be saved")
         stored = self._users.get(user.id)
         if stored is None:
             raise RuntimeError("only an existing user can be saved")
-        return stored
+        return copy.deepcopy(stored)
 
     async def save(self, user: User) -> None:
         stored = self._stored(user)
@@ -164,6 +167,7 @@ class FakeUserRepository:
         stored.full_name, stored.role, stored.is_active = user.full_name, user.role, user.is_active
         stored.version += 1
         user.version = stored.version
+        self._users[user.id] = stored
 
     async def save_login_state(self, user: User) -> None:
         stored = self._stored(user)
@@ -172,6 +176,7 @@ class FakeUserRepository:
         stored.failed_login_attempts = user.failed_login_attempts
         stored.password_hash = user.password_hash
         user.version = stored.version
+        self._users[user.id] = stored
 
     async def lock_active_admins(self) -> list[UUID]:
         users = self._users.values()
@@ -190,19 +195,19 @@ class FakeRefreshTokenRepository:
     async def add(self, token: RefreshToken) -> None:
         if token.tenant_id != self._uow.tenant_id:
             raise RuntimeError("a refresh token can only be added to the unit of work's tenant")
-        self._tokens[token.id] = token
+        self._tokens[token.id] = copy.deepcopy(token)
 
     async def claim(self, token_id: UUID, now: datetime) -> bool:
         token = next((token for token in self._owned() if token.id == token_id), None)
         if token is None or token.used_at is not None or token.revoked_at is not None:
             return False
-        token.used_at = now
+        self._tokens[token.id] = dataclasses.replace(token, used_at=now)
         return True
 
     async def revoke_family(self, family_id: UUID, now: datetime) -> None:
         for token in self._owned():
             if token.family_id == family_id and token.revoked_at is None:
-                token.revoked_at = now
+                self._tokens[token.id] = dataclasses.replace(token, revoked_at=now)
 
 
 class FakeServiceAccountRepository:
@@ -213,7 +218,7 @@ class FakeServiceAccountRepository:
     async def add(self, account: ServiceAccount) -> None:
         if account.tenant_id != self._uow.tenant_id:
             raise RuntimeError("a service account can only be added to the unit of work's tenant")
-        self._accounts[account.id] = account
+        self._accounts[account.id] = copy.deepcopy(account)
 
     async def get(self, account_id: UUID, *, lock: bool = False) -> ServiceAccount | None:
         del lock  # one fake unit of work at a time: there is nothing to lock against
@@ -238,7 +243,7 @@ class FakeApiKeyRepository:
     async def add(self, key: ApiKey) -> None:
         if key.tenant_id != self._uow.tenant_id:
             raise RuntimeError("an API key can only be added to the unit of work's tenant")
-        self._keys[key.id] = key
+        self._keys[key.id] = copy.deepcopy(key)
 
     async def get(self, key_id: UUID) -> ApiKey | None:
         key = self._keys.get(key_id)
@@ -257,7 +262,9 @@ class FakeApiKeyRepository:
     async def save(self, key: ApiKey) -> None:
         stored = self._keys.get(key.id)
         if stored is not None and stored.tenant_id == self._uow.tenant_id:
-            stored.last_used_at, stored.revoked_at = key.last_used_at, key.revoked_at
+            self._keys[key.id] = dataclasses.replace(
+                stored, last_used_at=key.last_used_at, revoked_at=key.revoked_at
+            )
 
 
 class FakeAuditEventRepository:
@@ -305,7 +312,7 @@ class FakeProductCategoryRepository:
     async def add(self, category: ProductCategory) -> None:
         if category.tenant_id != self._uow.tenant_id:
             raise RuntimeError("a category can only be added to the unit of work's tenant")
-        self._categories[category.id] = category
+        self._categories[category.id] = copy.deepcopy(category)
 
     async def get(self, category_id: UUID) -> ProductCategory | None:
         found = next((c for c in self._owned() if c.id == category_id), None)
@@ -331,8 +338,10 @@ class FakeProductCategoryRepository:
             raise RuntimeError("only a category of the unit of work's tenant can be saved")
         if stored.version != category.version:
             raise StaleVersionError("the category was changed by someone else; reload it")
-        stored.name, stored.version = category.name, stored.version + 1
-        category.version = stored.version
+        category.version = stored.version + 1
+        self._categories[category.id] = dataclasses.replace(
+            stored, name=category.name, version=category.version
+        )
 
 
 class FakeProductRepository:
@@ -346,7 +355,7 @@ class FakeProductRepository:
     async def add(self, product: Product) -> None:
         if product.tenant_id != self._uow.tenant_id:
             raise RuntimeError("only a product of the unit of work's tenant can be stored")
-        self._products[product.id] = product
+        self._products[product.id] = copy.deepcopy(product)
 
     async def get(self, product_id: UUID) -> Product | None:
         return copy.deepcopy(next((p for p in self._owned() if p.id == product_id), None))
@@ -403,7 +412,7 @@ class FakePricingRuleRepository:
     async def add(self, rule: PricingRule) -> None:
         if rule.tenant_id != self._uow.tenant_id:
             raise RuntimeError("only a pricing rule of the unit of work's tenant can be stored")
-        self._rules[rule.id] = rule
+        self._rules[rule.id] = copy.deepcopy(rule)
 
     async def get(self, rule_id: UUID) -> PricingRule | None:
         return copy.deepcopy(next((rule for rule in self._owned() if rule.id == rule_id), None))
@@ -476,7 +485,7 @@ class FakeCustomerRepository:
     async def add(self, customer: Customer) -> None:
         if customer.tenant_id != self._uow.tenant_id:
             raise RuntimeError("only a customer of the unit of work's tenant can be stored")
-        self._customers[customer.id] = customer
+        self._customers[customer.id] = copy.deepcopy(customer)
 
     async def get(self, customer_id: UUID) -> Customer | None:
         return copy.deepcopy(next((c for c in self._owned() if c.id == customer_id), None))
@@ -770,8 +779,22 @@ class FakeIdentityLookup:
         return copy.deepcopy(next((key for key in keys if key.key_digest == key_digest), None))
 
 
+def _tables(database: InMemoryDatabase) -> InMemoryDatabase:
+    """A copy of every table that shares the records: stored records are only ever replaced, never
+    changed in place, so a copy of each table is enough to stage or commit. The held keys are
+    shared, like locks."""
+    return InMemoryDatabase(
+        **{
+            table.name: copy.copy(getattr(database, table.name))
+            for table in dataclasses.fields(InMemoryDatabase)
+            if table.name != "held_keys"
+        },
+        held_keys=database.held_keys,
+    )
+
+
 class FakeUnitOfWork:
-    """Works on a copy of the database; ``commit`` writes the copy back."""
+    """Works on staged copies of the tables; ``commit`` writes them back."""
 
     tenants: TenantRepository
     users: UserRepository
@@ -793,7 +816,7 @@ class FakeUnitOfWork:
         self._tenant_id: UUID | None = None
 
     async def __aenter__(self) -> Self:
-        self._staged = copy.deepcopy(self._database)
+        self._staged = _tables(self._database)
         self.tenants = FakeTenantRepository(self._staged.tenants)
         self.users = FakeUserRepository(self._staged.users, self)
         self.refresh_tokens = FakeRefreshTokenRepository(self._staged.refresh_tokens, self)
@@ -874,8 +897,9 @@ class FakeUnitOfWork:
             raise RuntimeError("a converted quote points to an order that does not exist")
         if any(order.quote_id not in staged.quotes for order in orders):
             raise RuntimeError("an order points to a quote that does not exist")
+        committed = _tables(staged)  # the unit of work keeps its own staged tables
         for table in dataclasses.fields(InMemoryDatabase):  # every table, new ones included
-            setattr(self._database, table.name, copy.deepcopy(getattr(staged, table.name)))
+            setattr(self._database, table.name, getattr(committed, table.name))
 
 
 class FakePasswordHasher:
