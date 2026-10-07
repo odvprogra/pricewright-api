@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0](https://github.com/odvprogra/pricewright-api/compare/v0.6.0...v0.7.0) (2026-10-07)
+
+
+### Features
+
+* build Northfield's catalog from the demand dataset's top products ([#73](https://github.com/odvprogra/pricewright-api/issues/73)) ([61ca15c](https://github.com/odvprogra/pricewright-api/commit/61ca15c8df6b284e6c388b43a20808bd6825507a))
+* seed a history of quotes and orders through the use cases ([#78](https://github.com/odvprogra/pricewright-api/issues/78)) ([b16446c](https://github.com/odvprogra/pricewright-api/commit/b16446c7f3f3b3d52dc9a9e152b20af28d300b90))
+* seed the demo tenants' master data through the use cases ([#76](https://github.com/odvprogra/pricewright-api/issues/76)) ([2c32395](https://github.com/odvprogra/pricewright-api/commit/2c323951b4281b117f903a3246ee912de283a663))
+* tell the demo tenants' quotes as stories of dated steps ([#77](https://github.com/odvprogra/pricewright-api/issues/77)) ([38045aa](https://github.com/odvprogra/pricewright-api/commit/38045aa75aedac8782ee6a8e8a2f8f11ce8843ae))
+
+
+### Documentation
+
+* close the presentable checkpoint in the README, CLAUDE.md, architecture and brief ([#79](https://github.com/odvprogra/pricewright-api/issues/79)) ([f0054c9](https://github.com/odvprogra/pricewright-api/commit/f0054c9646543c3b5f8298b5611b3095775ad804))
+
 ## [0.6.0](https://github.com/odvprogra/pricewright-api/compare/v0.5.0...v0.6.0) (2026-10-06)
 
 
