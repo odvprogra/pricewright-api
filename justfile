@@ -43,6 +43,14 @@ fmt:
 migrate:
     uv run alembic upgrade head
 
+# Reset the local database and load the demo tenants as of today (ADR-0024): local data is replaced
+seed *args:
+    uv run pricewright-admin seed --check
+    docker compose up --detach --wait postgres
+    uv run alembic downgrade base
+    uv run alembic upgrade head
+    uv run pricewright-admin seed {{ args }}
+
 # Generate a migration from model changes: just migration "add orders table"
 migration message:
     uv run alembic revision --autogenerate -m "{{ message }}"

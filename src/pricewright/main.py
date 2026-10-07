@@ -21,7 +21,10 @@ from pricewright.infrastructure.logging import configure_logging
 from pricewright.infrastructure.passwords import Argon2PasswordHasher
 from pricewright.infrastructure.tokens import JwtAccessTokens
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
-from pricewright.settings import LogFormat, Settings
+from pricewright.settings import Environment, LogFormat, Settings
+
+DEMO_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.TEST})
+"""Where ``pricewright-admin seed`` may load demo users with their published passphrase."""
 
 
 def units_of_work(engine: AsyncEngine) -> UnitOfWorkFactory:
@@ -111,6 +114,8 @@ def admin() -> None:
                 unit_of_work=units_of_work(engine),
                 hasher=Argon2PasswordHasher(),
                 console=cli.Console(stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr),
+                clock=utc_now,
+                demo_data_allowed=settings.environment in DEMO_ENVIRONMENTS,
             )
         finally:
             await engine.dispose()
