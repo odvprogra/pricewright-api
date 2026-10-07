@@ -1,12 +1,13 @@
 import io
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 import pytest
 
 from pricewright import cli
 from pricewright.application.ports import UnitOfWork
 from pricewright.domain.users import Role
-from tests.fakes import FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
+from tests.fakes import FakeClock, FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
 
 PASSWORD = "northfield admin passphrase"
 CREATE_NORTHFIELD = [
@@ -39,12 +40,24 @@ class Terminal:
         )
 
 
-async def run(argv: list[str], terminal: Terminal, database: InMemoryDatabase) -> int:
+async def run(
+    argv: list[str],
+    terminal: Terminal,
+    database: InMemoryDatabase,
+    *,
+    clock: FakeClock | None = None,
+    demo_data_allowed: bool = True,
+) -> int:
     def unit_of_work() -> UnitOfWork:
         return FakeUnitOfWork(database)
 
     return await cli.run(
-        argv, unit_of_work=unit_of_work, hasher=FakePasswordHasher(), console=terminal.console
+        argv,
+        unit_of_work=unit_of_work,
+        hasher=FakePasswordHasher(),
+        console=terminal.console,
+        clock=clock or FakeClock(),
+        demo_data_allowed=demo_data_allowed,
     )
 
 
@@ -118,3 +131,76 @@ async def test_create_tenant_rejects_a_tax_rate_that_is_not_a_number(
 
     assert exit_info.value.code == 2  # argparse's usage error
     assert "not a decimal number: 'seven'" in capsys.readouterr().err
+
+
+async def test_seed_loads_the_demo_tenants_and_says_who_can_sign_in() -> None:
+    database, terminal = InMemoryDatabase(), Terminal()
+    clock = FakeClock(datetime(2026, 10, 7, 23, 30, tzinfo=UTC))
+
+    exit_code = await run(["seed"], terminal, database, clock=clock)
+
+    output = terminal.stdout.getvalue()
+    assert exit_code == cli.EXIT_OK
+    assert output.startswith("Loaded the demo data as of 2026-10-07 (seed 2026):\n")
+    assert (
+        "  Northfield Supply (NF quotes, NFO orders): 5 users, 8 categories, 300 products, "
+        "80 customers, 13 pricing rules\n"
+    ) in output
+    assert 'Sign in as any of them with the passphrase "pricewright demo":\n' in output
+    assert "  morgan@northfield.example  sales_manager  Northfield Supply\n" in output
+    assert "  riley@larkspur.example     sales_rep      Larkspur Tool Co.\n" in output
+    assert len(database.tenants) == 2
+
+
+async def test_seed_takes_the_as_of_date_and_the_seed() -> None:
+    terminal = Terminal()
+
+    exit_code = await run(
+        ["seed", "--as-of", "2026-01-15", "--seed", "42"], terminal, InMemoryDatabase()
+    )
+
+    assert exit_code == cli.EXIT_OK
+    assert terminal.stdout.getvalue().startswith("Loaded the demo data as of 2026-01-15 (seed 42)")
+
+
+async def test_seed_refuses_a_date_that_is_not_iso(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        await run(["seed", "--as-of", "15/01/2026"], Terminal(), InMemoryDatabase())
+
+    assert exit_info.value.code == 2
+    assert "not a date (YYYY-MM-DD): '15/01/2026'" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("argv", [["seed"], ["seed", "--check"]])
+async def test_seed_refuses_deployed_environments_and_loads_nothing(argv: list[str]) -> None:
+    database, terminal = InMemoryDatabase(), Terminal()
+
+    exit_code = await run(argv, terminal, database, demo_data_allowed=False)
+
+    assert exit_code == cli.EXIT_FAILED
+    assert terminal.stderr.getvalue() == (
+        "error: demo data is loaded only where ENVIRONMENT is local or test\n"
+    )
+    assert database == InMemoryDatabase()
+
+
+async def test_seed_refuses_to_load_the_demo_data_twice() -> None:
+    database, terminal = InMemoryDatabase(), Terminal()
+    await run(["seed"], Terminal(), database)
+    tenants = dict(database.tenants)
+
+    exit_code = await run(["seed"], terminal, database)
+
+    assert exit_code == cli.EXIT_FAILED
+    assert "the demo data is already loaded; `just seed` resets" in terminal.stderr.getvalue()
+    assert database.tenants == tenants
+
+
+async def test_seed_check_only_says_that_demo_data_may_be_loaded() -> None:
+    database, terminal = InMemoryDatabase(), Terminal()
+
+    exit_code = await run(["seed", "--check"], terminal, database)
+
+    assert exit_code == cli.EXIT_OK
+    assert terminal.stdout.getvalue() == "Demo data may be loaded here.\n"
+    assert database == InMemoryDatabase()
