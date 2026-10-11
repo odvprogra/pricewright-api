@@ -43,4 +43,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
 EXPOSE 8000
 
 USER 10001
+# The worker runs from the same image: docker run <image> pricewright-api-worker
 CMD ["pricewright-api"]

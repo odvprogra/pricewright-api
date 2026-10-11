@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+from datetime import timedelta
 from functools import partial
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from pricewright.infrastructure.logging import configure_logging
 from pricewright.infrastructure.passwords import Argon2PasswordHasher
 from pricewright.infrastructure.tokens import JwtAccessTokens
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
+from pricewright.infrastructure.worker import PeriodicTask, Worker, stop_on_signals
 from pricewright.settings import Environment, LogFormat, Settings
 
 DEMO_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.TEST})
@@ -121,6 +123,34 @@ def admin() -> None:
             await engine.dispose()
 
     sys.exit(asyncio.run(run()))
+
+
+def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
+    """The worker's periodic tasks: add the service's own here (ADR-0008 of the template)."""
+    # A failed check is logged as task.failed; the worker keeps running and tries again.
+    return [PeriodicTask("database_check", timedelta(minutes=1), partial(ping, engine))]
+
+
+async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
+    """Run the worker's tasks until ``stop`` is set."""
+    engine = create_engine(settings.database_url.get_secret_value())
+    try:
+        await Worker(worker_tasks(engine)).run(stop)
+    finally:
+        await engine.dispose()
+
+
+def worker() -> None:
+    """Start the background worker (``pricewright-api-worker``); SIGINT or SIGTERM stop it."""
+    settings = Settings()
+    configure_logging(settings.log_level, json=settings.log_format is LogFormat.JSON)
+
+    async def until_stopped() -> None:
+        stop = asyncio.Event()
+        stop_on_signals(stop)
+        await run_worker(settings, stop)
+
+    asyncio.run(until_stopped())
 
 
 if __name__ == "__main__":
