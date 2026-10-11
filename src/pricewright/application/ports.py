@@ -492,14 +492,20 @@ class TenantRecordRef:
 
 
 class Housekeeping(Protocol):
-    """What the worker's jobs read across tenants (ADR-0026): only which records are due. Each
-    change then runs in a unit of work bound to the record's tenant (ADR-0006)."""
+    """What the worker's jobs do across tenants (ADR-0026): find which records are due, ids only,
+    so each change runs in a unit of work bound to the record's tenant (ADR-0006); and purge
+    expired technical records, which no tenant reads any more."""
 
     async def offers_past_validity(
         self, today: date, *, after: UUID | None, limit: int
     ) -> list[TenantRecordRef]:
         """Up to ``limit`` offers in flight (pending approval, approved or sent) whose
         ``valid_until`` is before ``today``, of every tenant, by quote id after ``after``."""
+        ...
+
+    async def purge_idempotency_keys(self, now: datetime, *, limit: int) -> int:
+        """Delete up to ``limit`` idempotency keys of any tenant that expired by ``now``; they
+        already count as absent (ADR-0022). A key renewed meanwhile stays. Return how many."""
         ...
 
 

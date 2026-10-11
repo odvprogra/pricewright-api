@@ -759,6 +759,7 @@ class IdempotencyKeyRecord(Base):
         CheckConstraint("idempotency_key <> ''", name="key_not_empty"),
         CheckConstraint("fingerprint ~ '^[0-9a-f]{64}$'", name="fingerprint_is_sha256"),
         CheckConstraint("expires_at > created_at", name="expires_after_creation"),
+        Index(None, "expires_at"),  # the worker's purge (ADR-0022)
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)

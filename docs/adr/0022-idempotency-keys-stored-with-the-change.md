@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-05
+- **Amended:** 2026-10-11 — the worker purges expired keys every hour, in batches
 
 ## Context
 
@@ -60,7 +61,9 @@ Practice:
   business rules. A replay ignores a stale `If-Match`, as RFC 9110 allows: the client never saw the
   version its own request created.
 - **Expiry:** 24 hours. An expired record counts as absent and is replaced by the next request with
-  its key; the worker (M5) purges them.
+  its key. The worker deletes expired records every hour, a thousand per transaction, through an
+  index on `expires_at` (amendment, M5; ADR-0026). Each row is checked again as it is deleted, so a
+  key a request renews meanwhile stays.
 
 ## Alternatives considered
 
@@ -87,6 +90,6 @@ Practice:
 - **Positive:** a retried creation never creates twice and gets back what the first one created; a
   key commits or rolls back with its change; 409 and 422 tell a client whether to wait or fix a bug.
 - **Negative:** a replay shows the resource as it is now, so an order cancelled since shows as
-  cancelled; expired keys accumulate until the M5 purge; two keys whose 64-bit lock ids collide can
-  get a needless 409; issuing an API key is not idempotent (a retry issues a second key, and the
-  unused one is revoked).
+  cancelled; expired keys stay up to an hour before the purge; two keys whose 64-bit lock ids
+  collide can get a needless 409; issuing an API key is not idempotent (a retry issues a second key,
+  and the unused one is revoked).

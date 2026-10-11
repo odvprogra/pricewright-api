@@ -1,17 +1,25 @@
 """The worker's jobs on in-memory fakes (ADR-0026). Two runs at once are tested on PostgreSQL."""
 
 import dataclasses
+import hashlib
 import uuid
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from pricewright.application.housekeeping import expire_offers
+from pricewright.application.housekeeping import expire_offers, purge_idempotency_keys
 from pricewright.application.ports import UnitOfWork
-from pricewright.domain.audit import SYSTEM_ACTOR_ID, ActorType, AuditAction, AuditEvent
+from pricewright.domain.audit import (
+    SYSTEM_ACTOR_ID,
+    ActorType,
+    AuditAction,
+    AuditEvent,
+    AuditResourceType,
+)
+from pricewright.domain.idempotency import KEY_LIFETIME, IdempotencyRecord, IdempotentRequest
 from pricewright.domain.pricing import RateOverride
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quote_lifecycle import EXPIRABLE, QuoteStatus
@@ -193,3 +201,49 @@ async def test_expire_offers_any_number_of_runs_expire_each_overdue_offer_once(
         expected = QuoteStatus.EXPIRED if quote.id in overdue else quote.status
         assert database.quotes[quote.id].status is expected
     assert sorted(e.resource_id for e in expiries(database)) == sorted(overdue)
+
+
+def key_from(tenant: uuid.UUID, created: datetime) -> IdempotencyRecord:
+    """A key a rep sent with a creation at ``created``; it expires a day later."""
+    return IdempotencyRecord.first(
+        IdempotentRequest(str(uuid.uuid4()), hashlib.sha256(b"{}").hexdigest()),
+        tenant_id=tenant,
+        actor=REP,
+        resource_type=AuditResourceType.QUOTE,
+        resource_id=uuid.uuid7(),
+        now=created,
+    )
+
+
+def keys_of(*records: IdempotencyRecord) -> InMemoryDatabase:
+    return InMemoryDatabase(idempotency_keys={(r.tenant_id, r.actor, r.key): r for r in records})
+
+
+async def purge(database: InMemoryDatabase, clock: FakeClock, *, batch: int = 1000) -> int:
+    def unit_of_work() -> UnitOfWork:
+        return FakeUnitOfWork(database)
+
+    return await purge_idempotency_keys(unit_of_work=unit_of_work, clock=clock, batch=batch)
+
+
+async def test_purge_deletes_the_expired_keys_of_every_tenant_and_keeps_live_ones() -> None:
+    clock = FakeClock(NOW)
+    expired_now = key_from(TENANT, NOW - KEY_LIFETIME)
+    expired_before = key_from(OTHER_TENANT, NOW - KEY_LIFETIME - timedelta(hours=3))
+    live = key_from(TENANT, NOW - KEY_LIFETIME + timedelta(seconds=1))
+    database = keys_of(expired_now, expired_before, live)
+
+    purged = await purge(database, clock)
+
+    assert purged == 2
+    assert list(database.idempotency_keys.values()) == [live]
+    assert await purge(database, clock) == 0
+
+
+async def test_purge_works_through_more_keys_than_one_batch() -> None:
+    database = keys_of(*(key_from(TENANT, NOW - timedelta(days=2)) for _ in range(5)))
+
+    purged = await purge(database, FakeClock(NOW), batch=2)
+
+    assert purged == 5
+    assert database.idempotency_keys == {}

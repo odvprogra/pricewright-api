@@ -2,22 +2,35 @@
 events, and two runs at once."""
 
 import asyncio
-from datetime import date, timedelta
+import dataclasses
+import hashlib
+import uuid
+from datetime import date, datetime, timedelta
 from typing import Self
 from uuid import UUID
 
 import pytest
 import structlog
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pricewright.application.housekeeping import expire_offers
+from pricewright.application.housekeeping import expire_offers, purge_idempotency_keys
 from pricewright.application.ports import AuditEventFilter, TenantRecordRef, UnitOfWork
 from pricewright.domain.actors import Actor
-from pricewright.domain.audit import SYSTEM_ACTOR_ID, ActorType, AuditAction, AuditEvent
+from pricewright.domain.audit import (
+    SYSTEM_ACTOR_ID,
+    ActorType,
+    AuditAction,
+    AuditEvent,
+    AuditResourceType,
+)
+from pricewright.domain.idempotency import KEY_LIFETIME, IdempotencyRecord, IdempotentRequest
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import Quote
+from pricewright.domain.tenants import Tenant
 from pricewright.infrastructure.quotes import SqlAlchemyQuoteRepository
+from pricewright.infrastructure.records import IdempotencyKeyRecord
 from pricewright.infrastructure.repositories import TenantScope
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
 from tests.integration.data import Sessions
@@ -153,3 +166,90 @@ async def test_two_expiry_runs_at_once_expire_an_offer_once(session_factory: Ses
 
     assert sorted(results) == [0, 1]
     assert len(await expiry_events(session_factory, northfield, quote.id)) == 1
+
+
+def key_from(tenant: Tenant, actor: Actor, created: datetime) -> IdempotencyRecord:
+    return IdempotencyRecord.first(
+        IdempotentRequest(str(uuid.uuid4()), hashlib.sha256(b"{}").hexdigest()),
+        tenant_id=tenant.id,
+        actor=actor,
+        resource_type=AuditResourceType.QUOTE,
+        resource_id=uuid.uuid7(),
+        now=created,
+    )
+
+
+async def remember(sessions: Sessions, record: IdempotencyRecord) -> None:
+    async with SqlAlchemyUnitOfWork(sessions) as uow:
+        uow.bind_tenant(record.tenant_id)
+        await uow.idempotency_keys.add(record)
+        await uow.commit()
+
+
+async def stored_keys(sessions: Sessions) -> set[str]:
+    async with sessions() as session:
+        return set(await session.scalars(select(IdempotencyKeyRecord.idempotency_key)))
+
+
+async def test_purge_deletes_expired_keys_of_every_tenant_in_batches(
+    session_factory: Sessions,
+) -> None:
+    northfield, larkspur = await stock(session_factory), await stock(session_factory, "Larkspur")
+    rep, theirs = Actor.person(northfield.rep.id), Actor.person(larkspur.rep.id)
+    expired = [key_from(northfield.tenant, rep, NOW - timedelta(days=d)) for d in (1, 2, 3)]
+    expired.append(key_from(larkspur.tenant, theirs, NOW - KEY_LIFETIME))
+    live = key_from(larkspur.tenant, theirs, NOW - timedelta(hours=1))
+    for record in [*expired, live]:
+        await remember(session_factory, record)
+
+    def unit_of_work() -> UnitOfWork:
+        return SqlAlchemyUnitOfWork(session_factory)
+
+    purged = await purge_idempotency_keys(unit_of_work=unit_of_work, clock=lambda: NOW, batch=3)
+
+    assert purged == 4
+    assert await stored_keys(session_factory) == {live.key}
+
+
+async def _purge_is_waiting_for_a_row(sessions: Sessions) -> None:
+    """Until PostgreSQL shows the purge's DELETE waiting on a lock (a condition, not a delay)."""
+    for _ in range(500):
+        async with sessions() as session:
+            waiting = await session.scalar(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
+                    "AND query LIKE 'DELETE FROM idempotency_keys%'"
+                )
+            )
+        if waiting:
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("the purge never waited for the renewed key's row")
+
+
+async def test_purge_keeps_a_key_a_request_renews_while_it_runs(session_factory: Sessions) -> None:
+    northfield = await stock(session_factory)
+    rep = Actor.person(northfield.rep.id)
+    old = key_from(northfield.tenant, rep, NOW - timedelta(days=2))
+    await remember(session_factory, old)
+    renewed = dataclasses.replace(
+        key_from(northfield.tenant, rep, NOW), key=old.key, fingerprint=old.fingerprint
+    )
+
+    def unit_of_work() -> UnitOfWork:
+        return SqlAlchemyUnitOfWork(session_factory)
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.tenant.id)
+        assert await uow.idempotency_keys.claim(rep, old.key, now=NOW) is None  # expired
+        await uow.idempotency_keys.add(renewed)  # the row is locked until commit
+        purging = asyncio.create_task(
+            purge_idempotency_keys(unit_of_work=unit_of_work, clock=lambda: NOW)
+        )
+        await _purge_is_waiting_for_a_row(session_factory)
+        await uow.commit()
+
+    assert await purging == 0
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.tenant.id)
+        assert await uow.idempotency_keys.claim(rep, old.key, now=NOW) == renewed

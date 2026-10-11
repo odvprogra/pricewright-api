@@ -16,6 +16,8 @@ from pricewright.domain.quote_lifecycle import QuoteAction
 
 EXPIRY_BATCH = 100
 """Offers looked up per query; each is then expired in a unit of work of its own."""
+PURGE_BATCH = 1000
+"""Rows deleted per transaction, so a purge never holds many locks for long."""
 
 
 async def expire_offers(
@@ -60,3 +62,19 @@ async def _expire(offer: TenantRecordRef, *, unit_of_work: UnitOfWorkFactory, no
         )
         await uow.commit()
     return 1
+
+
+async def purge_idempotency_keys(
+    *, unit_of_work: UnitOfWorkFactory, clock: Clock, batch: int = PURGE_BATCH
+) -> int:
+    """Delete every idempotency key that has expired (ADR-0022), a batch per transaction.
+    Return how many."""
+    now = clock()
+    purged = 0
+    while True:
+        async with unit_of_work() as uow:
+            deleted = await uow.housekeeping.purge_idempotency_keys(now, limit=batch)
+            await uow.commit()
+        purged += deleted
+        if deleted < batch:
+            return purged

@@ -800,6 +800,13 @@ class FakeHousekeeping:
         )[:limit]
         return [TenantRecordRef(self._database.quotes[i].tenant_id, i) for i in due]
 
+    async def purge_idempotency_keys(self, now: datetime, *, limit: int) -> int:
+        keys = self._database.idempotency_keys
+        expired = [scope for scope, record in keys.items() if record.has_expired(now)][:limit]
+        for scope in expired:
+            del keys[scope]
+        return len(expired)
+
 
 def _tables(database: InMemoryDatabase) -> InMemoryDatabase:
     """A copy of every table that shares the records: stored records are only ever replaced, never
