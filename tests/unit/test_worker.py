@@ -154,6 +154,25 @@ async def test_stop_on_signals_sets_the_stop_event_on_sigint() -> None:
     assert stop.is_set()
 
 
+@pytest.mark.usefixtures("_restore_signal_handlers")
+async def test_stop_on_signals_falls_back_to_process_handlers_without_loop_support(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows event loops have no signal handlers; every platform runs this path here."""
+
+    def unsupported(*_args: object) -> None:
+        raise NotImplementedError
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "add_signal_handler", unsupported)
+    stop = asyncio.Event()
+    stop_on_signals(stop)
+
+    signal.raise_signal(signal.SIGINT)
+    await asyncio.wait_for(stop.wait(), timeout=5)  # a guard against hanging, not a delay
+
+    assert stop.is_set()
+
+
 async def test_run_worker_starts_the_service_tasks_and_stops_when_told() -> None:
     stream = io.StringIO()
     configure_logging("INFO", json=True, stream=stream)
