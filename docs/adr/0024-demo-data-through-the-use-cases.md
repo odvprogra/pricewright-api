@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-07
+- **Amended:** 2026-10-11 — the history ends with the worker's expiry job, at the as-of date's
+  midnight
 
 ## Context
 
@@ -58,6 +60,11 @@ passes, by the real clock (ADR-0005), and ids are UUIDv7 drawn from the real clo
   only `random()`, whose sequence Python keeps across versions
   ([notes on reproducibility](https://docs.python.org/3/library/random.html#notes-on-reproducibility)).
   The same seed and as-of date give the same data; ids and the timestamps the database sets differ.
+- **The worker's job ends the history (amendment, M5).** After the stories, the seed runs the expiry
+  job as it would run at the as-of date's midnight (ADR-0026): offers nobody answered are stored as
+  `expired`, by the system, and their pending requests are withdrawn. A job that expires other
+  offers than the stories left past their date stops the load, like any story the application
+  contradicts.
 - **Fictional on purpose.** Customer names come from word lists of invented places and trades,
   people's emails use `.example` (reserved by [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606)),
   and tax ids start with 00, a prefix the IRS

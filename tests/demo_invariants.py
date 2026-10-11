@@ -3,7 +3,8 @@
 They hold for any seed and as-of date, on the fakes and on PostgreSQL: totals reconcile, four eyes
 decide every approval, nothing that needed approval went out without one, every converted quote has
 exactly one order with its prices, numbers have no gaps, revisions are linked, nothing points to
-another tenant, and nothing happens on or after the as-of date.
+another tenant, people act before the as-of date, and the worker's expiry job, at its midnight, has
+stored every offer nobody answered as expired (ADR-0026).
 """
 
 from collections import defaultdict
@@ -21,12 +22,12 @@ from pricewright.application.ports import (
     QuoteQuery,
     UnitOfWorkFactory,
 )
-from pricewright.domain.audit import AuditEvent
+from pricewright.domain.audit import SYSTEM_ACTOR_ID, ActorType, AuditAction, AuditEvent
 from pricewright.domain.money import Money, round_half_up
 from pricewright.domain.orders import Order
 from pricewright.domain.pricing import PricedLine
 from pricewright.domain.quote_approvals import ApprovalStatus
-from pricewright.domain.quote_lifecycle import QuoteStatus
+from pricewright.domain.quote_lifecycle import EXPIRABLE, QuoteStatus
 from pricewright.domain.quotes import Quote
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
@@ -175,13 +176,32 @@ def check_isolation(data: TenantData) -> None:
         assert order.customer.id in data.customers
         assert {line.product_id for line in order.lines} <= data.products
         assert order.created_by.id in data.users
-    assert {event.actor_id for event in data.events} <= data.users.keys()
+    by_people = [event for event in data.events if event.actor_type is not ActorType.SYSTEM]
+    assert {event.actor_id for event in by_people} <= data.users.keys()
+
+
+def _by_system(data: TenantData) -> list[AuditEvent]:
+    return [event for event in data.events if event.actor_type is ActorType.SYSTEM]
 
 
 def check_before(data: TenantData, as_of: date) -> None:
+    """People act before the as-of date; the worker's expiry job runs at its midnight."""
     midnight = datetime.combine(as_of, time(tzinfo=UTC))
-    assert all(event.occurred_at < midnight for event in data.events)
+    automatic = _by_system(data)
+    assert all(e.occurred_at < midnight for e in data.events if e not in automatic)
+    assert all(event.occurred_at == midnight for event in automatic)
     assert all(quote.created_at < midnight for quote in data.quotes)
+
+
+def check_expiry(data: TenantData, as_of: date) -> None:
+    """Every offer nobody answered is stored as expired by one event of the system."""
+    overdue = [q for q in data.quotes if q.status in EXPIRABLE and q.valid_until < as_of]
+    assert not overdue, f"{len(overdue)} offers past their date are still in flight"
+    expired = sorted(quote.id for quote in data.quotes if quote.status is QuoteStatus.EXPIRED)
+    automatic = _by_system(data)
+    assert sorted(event.resource_id for event in automatic) == expired
+    assert all(event.action is AuditAction.QUOTE_EXPIRED for event in automatic)
+    assert all(event.actor_id == SYSTEM_ACTOR_ID for event in automatic)
 
 
 async def check_demo(
@@ -196,3 +216,4 @@ async def check_demo(
         check_revisions(data)
         check_isolation(data)
         check_before(data, as_of)
+        check_expiry(data, as_of)

@@ -52,7 +52,7 @@ What the data holds (seed 2026; `uv run pricewright-admin seed --help` for anoth
     - 69 converted into orders, 5 of those orders cancelled;
     - rejected and lost;
     - revised (`-R2`);
-    - 12 offers that expired unanswered.
+    - 12 offers nobody answered, stored as expired by the worker's job.
   - Quote numbers `NF-2026-…`, order numbers `NFO-2026-…`.
 - **Larkspur Tool Co.**, a small tool supplier: 19 products and 10 quotes. It is there to show that
   tenants never see each other.

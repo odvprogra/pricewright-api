@@ -21,7 +21,7 @@ from pricewright.application.ports import (
     QuoteQuery,
     UnitOfWorkFactory,
 )
-from pricewright.domain.audit import AuditValue
+from pricewright.domain.audit import SYSTEM_ACTOR_ID, AuditValue
 from pricewright.domain.orders import Order
 from pricewright.domain.pricing import PricedLine
 from pricewright.domain.quotes import Quote
@@ -135,6 +135,7 @@ async def _tenant(unit_of_work: UnitOfWorkFactory, tenant_id: UUID) -> Picture:
             for position, line in enumerate(quote.lines, 1)
         },
         **{order.id: order.number for order in stored_orders},
+        SYSTEM_ACTOR_ID: "the system",
     }
 
     def key(record_id: UUID | None) -> str | None:
