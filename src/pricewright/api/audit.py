@@ -34,8 +34,12 @@ class AuditEventResponse(BaseModel):
 
     id: UUID
     occurred_at: datetime
-    actor_type: ActorType
-    actor_id: UUID = Field(description="The user's or the service account's id.")
+    actor_type: ActorType = Field(
+        description="`system` when a worker job made the change, such as expiring an offer."
+    )
+    actor_id: UUID = Field(
+        description="The user's or the service account's id; the nil UUID for the system."
+    )
     # Open-ended (ADR-0015): new actions and resource types appear as the API grows.
     action: str = Field(
         description="`resource.verb`. New values may appear; handle unknown ones.",
@@ -50,7 +54,8 @@ class AuditEventResponse(BaseModel):
         description="Only the fields that changed. Decimals, ids and times are strings."
     )
     request_id: str | None = Field(
-        description="The `X-Request-ID` of the API call that made the change."
+        description="The `X-Request-ID` of the API call that made the change, or the id of the "
+        "job run that made it."
     )
 
     @classmethod

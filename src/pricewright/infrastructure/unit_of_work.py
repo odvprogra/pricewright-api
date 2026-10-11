@@ -11,6 +11,7 @@ from pricewright.application.ports import (
     ApiKeyRepository,
     AuditEventRepository,
     CustomerRepository,
+    Housekeeping,
     IdempotencyKeyRepository,
     IdentityLookup,
     OrderRepository,
@@ -24,6 +25,7 @@ from pricewright.application.ports import (
     UserRepository,
 )
 from pricewright.domain.errors import ConflictError
+from pricewright.infrastructure.housekeeping import SqlAlchemyHousekeeping
 from pricewright.infrastructure.idempotency import SqlAlchemyIdempotencyKeyRepository
 from pricewright.infrastructure.orders import SqlAlchemyOrderRepository
 from pricewright.infrastructure.quotes import SqlAlchemyQuoteRepository
@@ -62,6 +64,7 @@ class SqlAlchemyUnitOfWork:
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
+    housekeeping: Housekeeping
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
@@ -84,6 +87,7 @@ class SqlAlchemyUnitOfWork:
         self.orders = SqlAlchemyOrderRepository(self._session, self._scope)
         self.idempotency_keys = SqlAlchemyIdempotencyKeyRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
+        self.housekeeping = SqlAlchemyHousekeeping(self._session)
         return self
 
     async def __aexit__(

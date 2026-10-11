@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-03
+- **Amended:** 2026-10-11 — the system is an actor, for what the worker's jobs change
 
 ## Context
 
@@ -32,6 +33,9 @@ user actions in a database; its cost is audit code next to the business logic.
   (`resource.verb` in the past tense, such as `user.updated`); resource type and id; `changes`, the
   fields that changed as `{field: [before, after]}`; and the request ID of the API call, which joins
   the event to its log lines. Never secrets or their digests.
+- **The system (amendment, M5).** What a worker job changes, such as an expired offer, names the
+  system as its actor (`system`, with the nil UUID) and the job run's id as its request ID
+  (ADR-0026).
 - **Scope.** Changes to tenant settings, users, service accounts and API keys (from M1), and to the
   catalog and customers (M2). Sign-ins stay in the structured logs: they are high-volume and are not
   changes to business records.

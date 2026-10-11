@@ -9,7 +9,7 @@
             "type": "string"
           },
           "type": {
-            "$ref": "#/components/schemas/ActorType"
+            "$ref": "#/components/schemas/CallerType"
           }
         },
         "required": [
@@ -22,7 +22,8 @@
       "ActorType": {
         "enum": [
           "user",
-          "service_account"
+          "service_account",
+          "system"
         ],
         "title": "ActorType",
         "type": "string"
@@ -434,6 +435,7 @@
           "quote.accepted",
           "quote.cancelled",
           "quote.revised",
+          "quote.expired",
           "quote.approved",
           "quote.rejected",
           "quote.converted",
@@ -502,6 +504,7 @@
               "quote.accepted",
               "quote.cancelled",
               "quote.revised",
+              "quote.expired",
               "quote.approved",
               "quote.rejected",
               "quote.converted",
@@ -512,13 +515,14 @@
             "type": "string"
           },
           "actor_id": {
-            "description": "The user's or the service account's id.",
+            "description": "The user's or the service account's id; the nil UUID for the system.",
             "format": "uuid",
             "title": "Actor Id",
             "type": "string"
           },
           "actor_type": {
-            "$ref": "#/components/schemas/ActorType"
+            "$ref": "#/components/schemas/ActorType",
+            "description": "`system` when a worker job made the change, such as expiring an offer."
           },
           "changes": {
             "additionalProperties": {
@@ -547,7 +551,7 @@
                 "type": "null"
               }
             ],
-            "description": "The `X-Request-ID` of the API call that made the change.",
+            "description": "The `X-Request-ID` of the API call that made the change, or the id of the job run that made it.",
             "title": "Request Id"
           },
           "resource_id": {
@@ -690,6 +694,15 @@
         ],
         "title": "BracketJson",
         "type": "object"
+      },
+      "CallerType": {
+        "description": "Who builds and changes quotes and orders. The system acts only in the audit trail.",
+        "enum": [
+          "user",
+          "service_account"
+        ],
+        "title": "CallerType",
+        "type": "string"
       },
       "CancelOrderRequest": {
         "additionalProperties": false,

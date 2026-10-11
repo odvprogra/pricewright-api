@@ -26,6 +26,7 @@ from pricewright.application.ports import (
     CustomerQuery,
     CustomerRepository,
     CustomerSort,
+    Housekeeping,
     IdempotencyKeyRepository,
     IdentityLookup,
     IssuedToken,
@@ -45,6 +46,7 @@ from pricewright.application.ports import (
     QuoteSummary,
     RefreshTokenRepository,
     ServiceAccountRepository,
+    TenantRecordRef,
     TenantRepository,
     UnitOfWork,
     UserRepository,
@@ -60,6 +62,7 @@ from pricewright.domain.numbering import NumberSeries
 from pricewright.domain.orders import Order
 from pricewright.domain.pricing_rules import PricingRule
 from pricewright.domain.quote_approvals import ApprovalStatus
+from pricewright.domain.quote_lifecycle import EXPIRABLE
 from pricewright.domain.quotes import Quote
 from pricewright.domain.service_accounts import ApiKey, ServiceAccount
 from pricewright.domain.sessions import RefreshToken
@@ -779,6 +782,25 @@ class FakeIdentityLookup:
         return copy.deepcopy(next((key for key in keys if key.key_digest == key_digest), None))
 
 
+class FakeHousekeeping:
+    """Reads every tenant's rows, ids only, like the adapter."""
+
+    def __init__(self, database: InMemoryDatabase) -> None:
+        self._database = database
+
+    async def offers_past_validity(
+        self, today: date, *, after: UUID | None, limit: int
+    ) -> list[TenantRecordRef]:
+        due = sorted(
+            quote.id
+            for quote in self._database.quotes.values()
+            if quote.status in EXPIRABLE
+            and quote.valid_until < today
+            and (after is None or quote.id > after)
+        )[:limit]
+        return [TenantRecordRef(self._database.quotes[i].tenant_id, i) for i in due]
+
+
 def _tables(database: InMemoryDatabase) -> InMemoryDatabase:
     """A copy of every table that shares the records: stored records are only ever replaced, never
     changed in place, so a copy of each table is enough to stage or commit. The held keys are
@@ -810,6 +832,7 @@ class FakeUnitOfWork:
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
+    housekeeping: Housekeeping
 
     def __init__(self, database: InMemoryDatabase) -> None:
         self._database = database
@@ -835,6 +858,7 @@ class FakeUnitOfWork:
             self._staged.idempotency_keys, self._staged.held_keys, self
         )
         self.identities = FakeIdentityLookup(self._staged)
+        self.housekeeping = FakeHousekeeping(self._staged)
         return self
 
     async def __aexit__(

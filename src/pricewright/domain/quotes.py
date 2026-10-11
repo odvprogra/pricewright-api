@@ -417,6 +417,12 @@ class Quote:
     def accept(self, *, now: datetime) -> None:
         self._move(QuoteAction.ACCEPT, now)
 
+    def expire(self, *, now: datetime) -> None:
+        """Persist what the clock already decided: the offer is past its date (ADR-0005). Its
+        pending approval request, if any, is withdrawn: nobody can decide on it any more."""
+        self._move(QuoteAction.EXPIRE, now)
+        self._withdraw_pending(now)
+
     def cancel(self, *, reason: str, now: datetime) -> None:
         """Close the quote for good; also how a customer's "no" is recorded."""
         text = _reason(reason)

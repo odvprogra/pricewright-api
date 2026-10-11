@@ -483,6 +483,26 @@ class IdempotencyKeyRepository(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class TenantRecordRef:
+    """A record of some tenant that a job found to work on, before a unit of work is bound to it."""
+
+    tenant_id: UUID
+    id: UUID
+
+
+class Housekeeping(Protocol):
+    """What the worker's jobs read across tenants (ADR-0026): only which records are due. Each
+    change then runs in a unit of work bound to the record's tenant (ADR-0006)."""
+
+    async def offers_past_validity(
+        self, today: date, *, after: UUID | None, limit: int
+    ) -> list[TenantRecordRef]:
+        """Up to ``limit`` offers in flight (pending approval, approved or sent) whose
+        ``valid_until`` is before ``today``, of every tenant, by quote id after ``after``."""
+        ...
+
+
 class IdentityLookup(Protocol):
     """The only cross-tenant reads: finding who is signing in before their tenant is known."""
 
@@ -527,8 +547,8 @@ class AccessTokens(Protocol):
 class UnitOfWork(Protocol):
     """One atomic business operation: changes are saved by ``commit`` or discarded on exit.
 
-    Tenant-owned repositories (all but ``tenants`` and ``identities``) work only after
-    ``bind_tenant``, and a unit of work can never be bound to a second tenant (ADR-0006).
+    Tenant-owned repositories (all but ``tenants``, ``identities`` and ``housekeeping``) work only
+    after ``bind_tenant``, and a unit of work can never be bound to a second tenant (ADR-0006).
     """
 
     tenants: TenantRepository
@@ -545,6 +565,7 @@ class UnitOfWork(Protocol):
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     identities: IdentityLookup
+    housekeeping: Housekeeping
 
     async def __aenter__(self) -> Self: ...
 

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import pytest
 
 from pricewright.domain.audit import (
+    SYSTEM_ACTOR_ID,
     ActorType,
     AuditAction,
     AuditEvent,
@@ -40,6 +41,20 @@ def test_audit_event_record_names_the_service_account_that_acted() -> None:
     event = AuditEvent.record(account, AuditAction.TENANT_UPDATED, TENANT_ID, {}, now=NOW)
 
     assert (event.actor_type, event.actor_id) == (ActorType.SERVICE_ACCOUNT, account.subject_id)
+
+
+def test_audit_event_by_system_names_the_system_with_the_nil_uuid() -> None:
+    quote_id = uuid.uuid7()
+
+    event = AuditEvent.by_system(
+        TENANT_ID, AuditAction.QUOTE_EXPIRED, quote_id, {"status": ("sent", "expired")}, now=NOW
+    )
+
+    assert (event.actor_type, event.actor_id) == (ActorType.SYSTEM, SYSTEM_ACTOR_ID)
+    assert SYSTEM_ACTOR_ID.int == 0  # the nil UUID
+    assert (event.tenant_id, event.occurred_at, event.resource_id) == (TENANT_ID, NOW, quote_id)
+    assert event.resource_type == "quote"
+    assert event.changes == {"status": ("sent", "expired")}
 
 
 IRREGULAR_PAST_TENSES = frozenset({"sent"})

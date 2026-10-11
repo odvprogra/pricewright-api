@@ -50,7 +50,7 @@ from pricewright.domain.orders import MAX_CUSTOMER_REFERENCE_LENGTH, OrderStatus
 from pricewright.domain.pricing import MAX_REASON_LENGTH as MAX_OVERRIDE_REASON_LENGTH
 from pricewright.domain.pricing_rules import MAX_RULE_NAME_LENGTH, RuleKind
 from pricewright.domain.quote_approvals import MAX_COMMENT_LENGTH, ApprovalStatus
-from pricewright.domain.quote_lifecycle import QuoteStatus
+from pricewright.domain.quote_lifecycle import EXPIRABLE, QuoteStatus
 from pricewright.domain.quotes import MAX_NOTES_LENGTH
 from pricewright.domain.quotes import MAX_REASON_LENGTH as MAX_CANCEL_REASON_LENGTH
 from pricewright.domain.tenants import (
@@ -67,11 +67,14 @@ _UNICODE = "unicode"
 _RATE = Numeric(5, 4)
 _MONEY = Numeric(18, 4)  # ADR-0003
 _ROLES = ", ".join(f"'{role}'" for role in Role)
-_ACTOR_TYPES = ", ".join(f"'{actor_type}'" for actor_type in ActorType)
+# People and integrations build and change records; the system only appears in the audit trail.
+_ACTOR_TYPES = ", ".join(f"'{actor}'" for actor in ActorType if actor is not ActorType.SYSTEM)
+_AUDIT_ACTOR_TYPES = ", ".join(f"'{actor}'" for actor in ActorType)
 _UNITS = ", ".join(f"'{unit}'" for unit in UnitOfMeasure)
 _TIERS = ", ".join(f"'{tier}'" for tier in CustomerTier)
 _RULE_KINDS = ", ".join(f"'{kind}'" for kind in RuleKind)
 _QUOTE_STATUSES = ", ".join(f"'{status}'" for status in QuoteStatus)
+_EXPIRABLE = ", ".join(f"'{status}'" for status in sorted(EXPIRABLE))
 _APPROVAL_STATUSES = ", ".join(f"'{status}'" for status in ApprovalStatus)
 _OVERRIDE_KINDS = "'rate', 'price'"
 _ORDER_STATUSES = ", ".join(f"'{status}'" for status in OrderStatus)
@@ -239,7 +242,7 @@ class AuditEventRecord(Base):
         UniqueConstraint("tenant_id", "id"),  # also the tenant's timeline, newest first
         Index(None, "tenant_id", "resource_type", "resource_id", "id"),  # a resource's history
         Index(None, "tenant_id", "actor_id", "id"),  # what someone did
-        CheckConstraint(f"actor_type IN ({_ACTOR_TYPES})", name="actor_type_is_known"),
+        CheckConstraint(f"actor_type IN ({_AUDIT_ACTOR_TYPES})", name="actor_type_is_known"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUIDV7)
@@ -467,6 +470,8 @@ class QuoteRecord(Base):
         Index(None, "tenant_id", "status", "id"),
         Index(None, "tenant_id", "customer_id", "id"),
         Index(None, "tenant_id", "created_by_id", "id"),
+        # The expiry job's search across tenants (ADR-0026): only offers in flight.
+        Index(None, "valid_until", postgresql_where=text(f"status IN ({_EXPIRABLE})")),
         CheckConstraint(f"status IN ({_QUOTE_STATUSES})", name="status_is_known"),
         CheckConstraint("revision >= 1", name="revision_positive"),
         CheckConstraint(

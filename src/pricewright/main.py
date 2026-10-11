@@ -3,6 +3,8 @@
 import asyncio
 import json
 import sys
+import uuid
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
@@ -15,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from pricewright import __version__, cli
 from pricewright.api.app import create_app
 from pricewright.api.dependencies import Services
+from pricewright.application.housekeeping import expire_offers
 from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
 from pricewright.infrastructure.clock import utc_now
 from pricewright.infrastructure.database import create_engine, create_session_factory, ping
@@ -27,6 +30,8 @@ from pricewright.settings import Environment, LogFormat, Settings
 
 DEMO_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.TEST})
 """Where ``pricewright-admin seed`` may load demo users with their published passphrase."""
+EXPIRY_INTERVAL = timedelta(minutes=10)
+"""How often the worker persists expired offers; correctness never waits for it (ADR-0005)."""
 
 
 def units_of_work(engine: AsyncEngine) -> UnitOfWorkFactory:
@@ -125,10 +130,23 @@ def admin() -> None:
     sys.exit(asyncio.run(run()))
 
 
+def job(event: str, run: Callable[[], Awaitable[int]]) -> Callable[[], Awaitable[None]]:
+    """One run of a worker job: an id of its own, which everything it logs and audits carries as
+    its request id (ADR-0026), and one line saying how many records it changed."""
+
+    async def run_once() -> None:
+        with structlog.contextvars.bound_contextvars(request_id=str(uuid.uuid7())):
+            count = await run()
+            structlog.get_logger(__name__).info(event, count=count)
+
+    return run_once
+
+
 def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
-    """The worker's periodic tasks: add the service's own here (ADR-0008 of the template)."""
-    # A failed check is logged as task.failed; the worker keeps running and tries again.
-    return [PeriodicTask("database_check", timedelta(minutes=1), partial(ping, engine))]
+    """The worker's jobs (ADR-0026); a failed run is logged and tried again at the next turn."""
+    unit_of_work = units_of_work(engine)
+    expire = partial(expire_offers, unit_of_work=unit_of_work, clock=utc_now)
+    return [PeriodicTask("expire_offers", EXPIRY_INTERVAL, job("offers.expired", expire))]
 
 
 async def run_worker(settings: Settings, stop: asyncio.Event) -> None:

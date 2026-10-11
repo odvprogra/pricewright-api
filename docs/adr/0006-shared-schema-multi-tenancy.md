@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-03
+- **Amended:** 2026-10-11 — the worker's jobs find due records across tenants, ids only
 
 ## Context
 
@@ -31,7 +32,9 @@ on every tenant-owned table. Isolation is layered:
    stamp it on every insert, so use cases never handle a tenant id taken from request input.
 2. **One narrow exception.** Authentication must find an account before it knows the tenant (login
    by email, API key by hash). Those lookups live in their own explicitly named port, separate from
-   every other repository.
+   every other repository. A second one (amendment, M5): the worker's jobs ask a `housekeeping` port
+   which records are due in every tenant, and get ids only; each change then runs in a unit of work
+   bound to the record's tenant (ADR-0026).
 3. **In the database.** Tenant-owned tables have `UNIQUE (tenant_id, id)`, and child tables
    reference their parents with composite foreign keys `(tenant_id, parent_id)`, the layout
    [Citus recommends](https://docs.citusdata.com/en/stable/use_cases/multi_tenant.html). A row can
