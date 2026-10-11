@@ -284,8 +284,8 @@ docs/                # product brief, architecture and ADRs
 - **Isolation lives in the application and in composite keys.** PostgreSQL row-level security would
   add a fourth layer (ADR-0006); it stays a stretch goal.
 - **Idempotency keys are kept for 24 hours** and a replay shows the resource as it is now, not the
-  first response's bytes (ADR-0022); expired keys stay in their table until the M5 worker purges
-  them. Issuing an API key is the one creation without a key: its secret is shown once.
+  first response's bytes (ADR-0022); the worker deletes expired keys every hour. Issuing an API key
+  is the one creation without a key: its secret is shown once.
 - **Orders stop at the commitment.** One order per accepted quote, copied whole, open or cancelled
   (ADR-0023): no partial conversions, deliveries or invoices. Payment terms come from the customer
   at conversion, since quotes do not carry them yet; a cancelled order's quote cannot convert again.

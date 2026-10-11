@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from pricewright import __version__, cli
 from pricewright.api.app import create_app
 from pricewright.api.dependencies import Services
-from pricewright.application.housekeeping import expire_offers
+from pricewright.application.housekeeping import expire_offers, purge_idempotency_keys
 from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
 from pricewright.infrastructure.clock import utc_now
 from pricewright.infrastructure.database import create_engine, create_session_factory, ping
@@ -32,6 +32,8 @@ DEMO_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.TEST})
 """Where ``pricewright-admin seed`` may load demo users with their published passphrase."""
 EXPIRY_INTERVAL = timedelta(minutes=10)
 """How often the worker persists expired offers; correctness never waits for it (ADR-0005)."""
+PURGE_INTERVAL = timedelta(hours=1)
+"""How often the worker deletes expired idempotency keys, which already count as absent."""
 
 
 def units_of_work(engine: AsyncEngine) -> UnitOfWorkFactory:
@@ -146,7 +148,15 @@ def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
     """The worker's jobs (ADR-0026); a failed run is logged and tried again at the next turn."""
     unit_of_work = units_of_work(engine)
     expire = partial(expire_offers, unit_of_work=unit_of_work, clock=utc_now)
-    return [PeriodicTask("expire_offers", EXPIRY_INTERVAL, job("offers.expired", expire))]
+    purge_keys = partial(purge_idempotency_keys, unit_of_work=unit_of_work, clock=utc_now)
+    return [
+        PeriodicTask("expire_offers", EXPIRY_INTERVAL, job("offers.expired", expire)),
+        PeriodicTask(
+            "purge_idempotency_keys",
+            PURGE_INTERVAL,
+            job("idempotency_keys.purged", purge_keys),
+        ),
+    ]
 
 
 async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
