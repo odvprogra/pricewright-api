@@ -15,13 +15,16 @@ from hypothesis import strategies as st
 
 from pricewright.application.ports import UnitOfWork
 from pricewright.application.quotes import list_approval_requests
+from pricewright.demo import seed as seed_module
 from pricewright.demo.catalog import northfield_catalog
+from pricewright.demo.history import HistoryError
 from pricewright.demo.seed import (
     DEMO_PASSWORD,
     GO_LIVE_DAYS,
     SeededTenant,
     SeedReport,
     load_tenant,
+    run_expiry,
     seed_demo,
 )
 from pricewright.demo.tenants import DemoTenant, StoryKind, demo_tenants
@@ -61,7 +64,7 @@ async def _load(
     def unit_of_work() -> UnitOfWork:
         return _units(database)
 
-    return await load_tenant(
+    loaded = await load_tenant(
         spec,
         unit_of_work=unit_of_work,
         hasher=FakePasswordHasher(),
@@ -69,6 +72,8 @@ async def _load(
         seed=seed,
         password=DEMO_PASSWORD,
     )
+    assert await run_expiry(unit_of_work, as_of) == loaded.counts["expired offers"]
+    return loaded
 
 
 async def _picture(database: InMemoryDatabase, *tenants: SeededTenant) -> list[Picture]:
@@ -122,6 +127,7 @@ def test_seed_demo_loads_both_tenants_with_their_prefixes_and_counts(seeded: See
         "quotes": 150,
         "revisions": 11,
         "orders": 69,
+        "expired offers": 12,
     }
     assert (larkspur.name, larkspur.quote_prefix, larkspur.order_prefix) == (
         "Larkspur Tool Co.",
@@ -137,6 +143,7 @@ def test_seed_demo_loads_both_tenants_with_their_prefixes_and_counts(seeded: See
         "quotes": 10,
         "revisions": 0,
         "orders": 4,
+        "expired offers": 1,
     }
 
 
@@ -152,9 +159,10 @@ def test_seed_demo_leaves_quotes_in_every_state_of_their_lifecycle(seeded: Seede
     assert statuses == {
         QuoteStatus.CONVERTED: 69,
         QuoteStatus.SUPERSEDED: 11,  # revised: rejected, changed, expired
-        QuoteStatus.SENT: 25,
-        QuoteStatus.APPROVED: 8,
-        QuoteStatus.PENDING_APPROVAL: 10,
+        QuoteStatus.SENT: 17,
+        QuoteStatus.APPROVED: 6,
+        QuoteStatus.PENDING_APPROVAL: 8,
+        QuoteStatus.EXPIRED: 12,  # sent, approved and pending offers nobody answered
         QuoteStatus.ACCEPTED: 5,
         QuoteStatus.REJECTED: 5,
         QuoteStatus.CANCELLED: 16,
@@ -162,17 +170,31 @@ def test_seed_demo_leaves_quotes_in_every_state_of_their_lifecycle(seeded: Seede
     }
 
 
-def test_seed_demo_leaves_twelve_offers_expired_on_the_as_of_date(seeded: Seeded) -> None:
+def test_seed_demo_stores_the_offers_nobody_answered_as_expired(seeded: Seeded) -> None:
     database, report = seeded
     tenant_id = report.tenants[0].tenant_id
-    in_flight = [
-        q for q in database.quotes.values() if q.tenant_id == tenant_id and q.status in EXPIRABLE
-    ]
+    quotes = [q for q in database.quotes.values() if q.tenant_id == tenant_id]
 
-    expired = [q for q in in_flight if q.valid_until < AS_OF]
+    expired = [q for q in quotes if q.status is QuoteStatus.EXPIRED]
 
     assert len(expired) == 12  # sent, approved and pending offers nobody answered
-    assert all(q.valid_until >= AS_OF for q in in_flight if q not in expired)
+    assert all(q.valid_until < AS_OF for q in expired)
+    assert {q.status_changed_at for q in expired} == {MIDNIGHT}  # the job's run on the as-of date
+    assert all(q.valid_until >= AS_OF for q in quotes if q.status in EXPIRABLE)
+    withdrawn = [a for q in expired for a in q.approvals if a.status is ApprovalStatus.WITHDRAWN]
+    assert len(withdrawn) == 2  # the expired pending offers' requests
+
+
+async def test_seed_demo_stops_when_the_expiry_job_disagrees_with_the_stories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def expire_nothing(**_kwargs: object) -> int:
+        return 0
+
+    monkeypatch.setattr(seed_module, "expire_offers", expire_nothing)
+
+    with pytest.raises(HistoryError, match="expired 0 offers; the stories left 13"):
+        await _seed(InMemoryDatabase())
 
 
 def test_seed_demo_fills_the_approval_inbox_for_the_as_of_date(seeded: Seeded) -> None:
@@ -333,7 +355,8 @@ async def test_seed_demo_moves_with_the_as_of_date() -> None:
 
     events = database.audit_events.values()
     assert min(event.occurred_at for event in events) == datetime(2026, 8, 8, 14, tzinfo=UTC)
-    assert max(event.occurred_at for event in events) < datetime(2027, 2, 14, tzinfo=UTC)
+    # The last one is the expiry job's, at the as-of date's midnight.
+    assert max(event.occurred_at for event in events) == datetime(2027, 2, 14, tzinfo=UTC)
     await _check(database, date(2027, 2, 14), loaded)
 
 

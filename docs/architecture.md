@@ -203,7 +203,8 @@ sequenceDiagram
 
 `just seed` checks that demo data may be loaded here, migrates the local database down and up, and
 runs `pricewright-admin seed` (ADR-0024). The seed is one more driver of the use cases, like the
-HTTP API: it acts as each tenant's people, on a clock it moves from go-live to the as-of date.
+HTTP API: it acts as each tenant's people, on a clock it moves from go-live to the as-of date, and
+ends with the worker's expiry job at the as-of date's midnight (ADR-0026).
 
 ```mermaid
 flowchart LR
@@ -212,8 +213,10 @@ flowchart LR
     loader --> stories[stories: dated steps per quote]
     stories --> player[HistoryPlayer: steps in date order]
     player -->|create, submit, approve, send, accept, convert, revise, cancel| cases
+    seed -->|then, at the as-of date's midnight| job[expire_offers]
     clock[DemoClock] -.now.-> cases
     cases --> uow[unit of work] --> db[(PostgreSQL)]
+    job --> uow
 ```
 
 ## Rules

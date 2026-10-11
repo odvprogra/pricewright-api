@@ -4,6 +4,7 @@ Nothing is written around the application: every record goes through the use cas
 call, with that person's permissions, so validation, prices, approvals, numbers and audit events
 are the real ones. A simulated clock dates everything relative to the as-of date: the tenants go
 live ``GO_LIVE_DAYS`` before it, and their quotes' stories (``stories.py``) fill the months between.
+The worker's expiry job ends the history, at the as-of date's midnight (ADR-0026).
 """
 
 from collections import Counter
@@ -14,15 +15,16 @@ from uuid import UUID
 
 from pricewright.application.catalog import NewProduct, create_category, create_product
 from pricewright.application.customers import create_customer
+from pricewright.application.housekeeping import expire_offers
 from pricewright.application.onboarding import RegisterTenant, register_tenant
 from pricewright.application.ports import PasswordHasher, UnitOfWorkFactory
 from pricewright.application.pricing_rules import NewPricingRule, create_pricing_rule
 from pricewright.application.users import NewUser, create_user
 from pricewright.demo.clock import DemoClock
-from pricewright.demo.history import HistoryPlayer, Roster
+from pricewright.demo.history import HistoryError, HistoryPlayer, Roster
 from pricewright.demo.randomness import generator
 from pricewright.demo.stories import Act, Story, tell_stories
-from pricewright.demo.tenants import DemoTenant, Person, RuleSpec, demo_tenants
+from pricewright.demo.tenants import DemoTenant, Person, RuleSpec, StoryKind, demo_tenants
 from pricewright.domain.auth import Principal
 from pricewright.domain.money import Money
 from pricewright.domain.users import Role
@@ -33,6 +35,12 @@ DEMO_PASSWORD = "pricewright demo"  # noqa: S105 - published on purpose, for loc
 run outside local and test environments (ADR-0024)."""
 GO_LIVE_DAYS = 190
 GO_LIVE_HOUR = time(14, tzinfo=UTC)
+EXPIRY_RUN = time(tzinfo=UTC)
+"""When the worker's expiry job runs on the as-of date: its first run of the day."""
+EXPIRED_KINDS = frozenset(
+    {StoryKind.EXPIRED_SENT, StoryKind.EXPIRED_APPROVED, StoryKind.EXPIRED_PENDING}
+)
+"""Stories of offers nobody answered: the expiry job finds them past their date."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +194,7 @@ class TenantLoader:
                 "quotes": len(self.stories),
                 "revisions": acts[Act.REVISE],
                 "orders": acts[Act.CONVERT],
+                "expired offers": sum(story.kind in EXPIRED_KINDS for story in self.stories),
             },
         )
 
@@ -198,10 +207,12 @@ async def seed_demo(
     seed: int = DEFAULT_SEED,
     password: str = DEMO_PASSWORD,
 ) -> SeedReport:
-    """Load every demo tenant as of ``as_of``.
+    """Load every demo tenant as of ``as_of``, then run the worker's expiry job as it would run
+    at the as-of date's midnight, so offers nobody answered are stored as expired.
 
     Raise ``EmailAlreadyRegisteredError``, having changed nothing, when Northfield is already
     loaded: demo data goes into a database without it (``just seed`` resets the local one).
+    Raise ``HistoryError`` when the job expires other offers than the stories left past their date.
     """
     seeded = [
         await load_tenant(
@@ -214,7 +225,18 @@ async def seed_demo(
         )
         for spec in demo_tenants(seed)
     ]
+    expired = await run_expiry(unit_of_work, as_of)
+    expected = sum(tenant.counts["expired offers"] for tenant in seeded)
+    if expired != expected:
+        raise HistoryError(f"the expiry job expired {expired} offers; the stories left {expected}")
     return SeedReport(as_of=as_of, seed=seed, tenants=tuple(seeded))
+
+
+async def run_expiry(unit_of_work: UnitOfWorkFactory, as_of: date) -> int:
+    """The worker's expiry job as it runs at the as-of date's midnight (ADR-0026): every tenant's
+    offers past their date are stored as expired. Return how many."""
+    clock = DemoClock(datetime.combine(as_of, EXPIRY_RUN))
+    return await expire_offers(unit_of_work=unit_of_work, clock=clock)
 
 
 async def load_tenant(
