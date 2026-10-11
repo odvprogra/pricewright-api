@@ -18,6 +18,12 @@ dev:
     uv run alembic upgrade head
     uv run uvicorn pricewright.main:app_factory --factory --reload
 
+# Run the background worker (starts PostgreSQL in Docker and applies migrations); Ctrl+C stops it
+worker:
+    docker compose up --detach --wait postgres
+    uv run alembic upgrade head
+    uv run pricewright-api-worker
+
 # Check formatting and lint
 lint:
     uv run ruff format --check .

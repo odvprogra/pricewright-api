@@ -37,6 +37,7 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 ```text
 just setup | just dev | just check | just test | just lint | just typecheck | just fmt
 just migrate | just migration "<message>"
+just worker                                     # the background worker (pricewright-api-worker)
 just openapi
 just seed                                       # reset the local database, load the demo
 uv run pricewright-admin create-tenant --help   # operator commands (src/pricewright/cli.py)

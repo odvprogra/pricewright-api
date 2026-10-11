@@ -192,10 +192,12 @@ Requires [uv](https://docs.astral.sh/uv/) and [just](https://just.systems/), plu
 just setup   # dependencies, git hooks, openapi.json
 just seed    # PostgreSQL in Docker, reset to the demo data (see Demo)
 just dev     # PostgreSQL in Docker + migrations, then the API on http://localhost:8000 (docs at /docs)
+just worker  # the background worker, in another terminal; Ctrl+C stops it
 just check   # lint, types and tests: what CI runs
 ```
 
-PostgreSQL listens on port 5432. Configuration comes from environment variables;
+PostgreSQL listens on port 5432; when another PostgreSQL already does, set `POSTGRES_PORT` and the
+port in `DATABASE_URL` in a `.env` file. Configuration comes from environment variables;
 [.env.example](.env.example) documents them.
 
 Tenants are onboarded by an operator. To start from an empty database instead of the demo, create
@@ -259,7 +261,7 @@ request title marks it with `!`.
 src/pricewright/
 ├── domain/          # business rules, pure Python
 ├── application/     # use cases and ports
-├── infrastructure/  # adapters: database records and repositories, tokens, passwords, logging
+├── infrastructure/  # adapters: database records and repositories, tokens, passwords, logging, worker
 ├── api/             # FastAPI routers, Problem Details, money JSON, cursors, middleware
 ├── demo/            # the demo tenants, their catalog file and their history, through the use cases
 ├── cli.py           # pricewright-admin: create-tenant, seed

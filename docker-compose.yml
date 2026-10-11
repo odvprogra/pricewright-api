@@ -1,5 +1,5 @@
-# Local infrastructure for `just dev` (which starts only postgres) and the full stack for the CI smoke
-# test (`docker compose up --wait`). Tests start their own database with testcontainers.
+# Local infrastructure (`just dev` and `just worker` start only postgres) and the full stack for
+# the CI smoke test (`docker compose up --wait`). Tests start their own database with testcontainers.
 services:
   postgres:
     image: postgres:18-alpine
@@ -8,7 +8,8 @@ services:
       POSTGRES_PASSWORD: app
       POSTGRES_DB: pricewright
     ports:
-      - "5432:5432"
+      # Another PostgreSQL on the machine may hold 5432: set POSTGRES_PORT (and DATABASE_URL) in .env.
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       # PostgreSQL 18 images keep data under /var/lib/postgresql/<major>/docker.
       - postgres-data:/var/lib/postgresql
@@ -37,6 +38,16 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+  worker:
+    build: .
+    command: ["pricewright-api-worker"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app:app@postgres:5432/pricewright
+      ENVIRONMENT: local
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres-data:
