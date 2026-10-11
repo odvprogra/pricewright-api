@@ -10,12 +10,14 @@ from decimal import Decimal
 
 from sqlalchemy import (
     CHAR,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Identity,
     Index,
     Integer,
     Numeric,
@@ -101,6 +103,8 @@ _REVISION_NUMBER_LENGTH = 32
 _QUANTITY = Numeric(10, 3)  # domain/quantities.py
 # The API middleware accepts request IDs of up to 128 characters.
 _REQUEST_ID_LENGTH = 128
+_DELIVERY_STATUSES = "'pending', 'delivered', 'dead'"
+_ERROR_LENGTH = 1000
 
 
 class TenantRecord(Base):
@@ -773,3 +777,47 @@ class IdempotencyKeyRecord(Base):
     resource_id: Mapped[uuid.UUID]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class OutboxEventRecord(Base):
+    """An event waiting for the worker's relay, or delivered, or given up on (ADR-0008).
+
+    ``position`` orders events as their changes committed; the aggregate id has no foreign key, like
+    an audit event's resource.
+    """
+
+    __tablename__ = "outbox_events"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),
+        CheckConstraint(f"status IN ({_DELIVERY_STATUSES})", name="status_is_known"),
+        CheckConstraint(
+            "(status = 'delivered') = (delivered_at IS NOT NULL)", name="delivered_when_delivered"
+        ),
+        CheckConstraint("attempts >= 0", name="attempts_not_negative"),
+        # The relay's queue, and the earliest pending event of each aggregate.
+        Index(None, "position", postgresql_where=text("status = 'pending'")),
+        Index(
+            None,
+            "tenant_id",
+            "aggregate_type",
+            "aggregate_id",
+            "position",
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    position: Mapped[int] = mapped_column(BigInteger, Identity(always=True), unique=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    type: Mapped[str] = mapped_column(String(50))
+    aggregate_type: Mapped[str] = mapped_column(String(30))
+    aggregate_id: Mapped[uuid.UUID]
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    data: Mapped[dict[str, str]] = mapped_column(JSONB)
+    request_id: Mapped[str | None] = mapped_column(String(_REQUEST_ID_LENGTH))
+    status: Mapped[str] = mapped_column(String(10), server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    """When the relay may try it: when it occurred, then after each failure, later."""
+    last_error: Mapped[str | None] = mapped_column(String(_ERROR_LENGTH))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

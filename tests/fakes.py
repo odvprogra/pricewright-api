@@ -33,6 +33,7 @@ from pricewright.application.ports import (
     OrderQuery,
     OrderRepository,
     OrderSummary,
+    OutboxRepository,
     PricingRuleQuery,
     PricingRuleRepository,
     PricingRuleSort,
@@ -57,6 +58,7 @@ from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
+from pricewright.domain.events import Event
 from pricewright.domain.idempotency import IdempotencyKeyInUseError, IdempotencyRecord
 from pricewright.domain.numbering import NumberSeries
 from pricewright.domain.orders import Order
@@ -109,6 +111,8 @@ class InMemoryDatabase:
     document_numbers: dict[tuple[UUID, NumberSeries, int], int] = field(default_factory=dict)
     """The last number issued, per tenant, series and year."""
     idempotency_keys: dict[_KeyScope, IdempotencyRecord] = field(default_factory=dict)
+    outbox_events: dict[UUID, Event] = field(default_factory=dict)
+    """In the order their changes committed, as ``position`` orders them in the database."""
     held_keys: HeldKeys = field(default_factory=HeldKeys, compare=False)
     """Locks, not data: two databases with the same rows are equal whoever holds what."""
 
@@ -782,6 +786,21 @@ class FakeIdentityLookup:
         return copy.deepcopy(next((key for key in keys if key.key_digest == key_digest), None))
 
 
+class FakeOutboxRepository:
+    def __init__(self, events: dict[UUID, Event], uow: FakeUnitOfWork) -> None:
+        self._events = events
+        self._uow = uow
+
+    async def add(self, event: Event) -> None:
+        if event.tenant_id != self._uow.tenant_id:
+            raise RuntimeError("an event can only be added to the unit of work's tenant")
+        if event.id in self._events:
+            raise RuntimeError("an event with this id is already stored")
+        self._events[event.id] = dataclasses.replace(
+            event, request_id=event.request_id or current_request_id()
+        )
+
+
 class FakeHousekeeping:
     """Reads every tenant's rows, ids only, like the adapter."""
 
@@ -838,6 +857,7 @@ class FakeUnitOfWork:
     quotes: QuoteRepository
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
+    outbox: OutboxRepository
     identities: IdentityLookup
     housekeeping: Housekeeping
 
@@ -864,6 +884,7 @@ class FakeUnitOfWork:
         self.idempotency_keys = FakeIdempotencyKeyRepository(
             self._staged.idempotency_keys, self._staged.held_keys, self
         )
+        self.outbox = FakeOutboxRepository(self._staged.outbox_events, self)
         self.identities = FakeIdentityLookup(self._staged)
         self.housekeeping = FakeHousekeeping(self._staged)
         return self

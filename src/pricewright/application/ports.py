@@ -17,6 +17,7 @@ from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
+from pricewright.domain.events import Event
 from pricewright.domain.idempotency import IdempotencyRecord
 from pricewright.domain.money import Money
 from pricewright.domain.orders import Order, OrderStatus
@@ -461,6 +462,13 @@ class AuditEventRepository(Protocol):
         ...
 
 
+class OutboxRepository(Protocol):
+    """The unit of work's tenant's outbox (ADR-0008): events wait there, committed with their
+    change, until the worker's relay delivers them."""
+
+    async def add(self, event: Event) -> None: ...
+
+
 class IdempotencyKeyRepository(Protocol):
     """Idempotency keys of the unit of work's tenant, each its caller's own (ADR-0022).
 
@@ -570,6 +578,7 @@ class UnitOfWork(Protocol):
     quotes: QuoteRepository
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
+    outbox: OutboxRepository
     identities: IdentityLookup
     housekeeping: Housekeeping
 
