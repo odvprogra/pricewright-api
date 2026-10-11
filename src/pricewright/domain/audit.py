@@ -21,6 +21,13 @@ type Changes = Mapping[str, tuple[AuditValue, AuditValue]]
 class ActorType(StrEnum):
     USER = "user"
     SERVICE_ACCOUNT = "service_account"
+    SYSTEM = "system"
+    """Pricewright itself: a worker job that persists what the clock decided (ADR-0026). Only audit
+    events name it; people and integrations build and change records."""
+
+
+SYSTEM_ACTOR_ID = uuid.UUID(int=0)
+"""The system's actor id: the nil UUID (RFC 9562 §5.9), since no user or account acted."""
 
 
 class AuditResourceType(StrEnum):
@@ -65,6 +72,7 @@ class AuditAction(StrEnum):
     QUOTE_ACCEPTED = "quote.accepted"
     QUOTE_CANCELLED = "quote.cancelled"
     QUOTE_REVISED = "quote.revised"
+    QUOTE_EXPIRED = "quote.expired"
     QUOTE_APPROVED = "quote.approved"
     QUOTE_REJECTED = "quote.rejected"
     QUOTE_CONVERTED = "quote.converted"
@@ -83,12 +91,12 @@ class AuditEvent:
     occurred_at: datetime
     actor_type: ActorType
     actor_id: uuid.UUID
-    """The user's or the service account's id."""
+    """The user's or the service account's id; ``SYSTEM_ACTOR_ID`` for the system."""
     action: AuditAction
     resource_id: uuid.UUID
     changes: Changes = field(default_factory=dict)
     request_id: str | None = None
-    """The API request behind it, stamped by the persistence adapter; None outside a request."""
+    """The API request or the job run behind it, stamped by the persistence adapter."""
 
     @property
     def resource_type(self) -> AuditResourceType:
@@ -111,6 +119,28 @@ class AuditEvent:
             occurred_at=now,
             actor_type=actor_type,
             actor_id=principal.subject_id,
+            action=action,
+            resource_id=resource_id,
+            changes=dict(changes),
+        )
+
+    @classmethod
+    def by_system(
+        cls,
+        tenant_id: uuid.UUID,
+        action: AuditAction,
+        resource_id: uuid.UUID,
+        changes: Changes,
+        *,
+        now: datetime,
+    ) -> AuditEvent:
+        """A change no one asked for: a job persisted what the clock decided (ADR-0026)."""
+        return cls(
+            id=uuid.uuid7(),
+            tenant_id=tenant_id,
+            occurred_at=now,
+            actor_type=ActorType.SYSTEM,
+            actor_id=SYSTEM_ACTOR_ID,
             action=action,
             resource_id=resource_id,
             changes=dict(changes),

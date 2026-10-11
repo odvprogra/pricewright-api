@@ -68,7 +68,11 @@ Read first: `main.py` (wiring), `application/ports.py` (unit of work and reposit
 Rules the code relies on:
 
 - Use cases call `principal.require(...)` before any lookup, and bind the unit of work to the
-  caller's tenant; only `uow.identities` reads across tenants (ADR-0006, ADR-0009).
+  caller's tenant; only `uow.identities` (sign-in) and `uow.housekeeping` (the worker's jobs, ids
+  only) read across tenants (ADR-0006, ADR-0009, ADR-0026).
+- Worker jobs (`application/housekeeping.py`) change each record in a unit of work bound to its
+  tenant, with compare-and-set, so two runs at once change it once; the audit trail names the system
+  as their actor (ADR-0026).
 - Tenant-owned tables get `UNIQUE (tenant_id, id)` and composite foreign keys.
 - Mutable aggregates carry a `version`: ETag out, `If-Match` in (412/428, ADR-0012).
 - Every route with an id needs a case in `tests/isolation_cases.py` (a guard test fails otherwise).

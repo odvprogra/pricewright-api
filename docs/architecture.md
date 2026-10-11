@@ -158,7 +158,7 @@ stateDiagram-v2
     sent --> superseded: revise
     rejected --> superseded: revise
     expired --> superseded: revise
-    pending_approval --> expired: expire (M5 job)
+    pending_approval --> expired: expire (worker job)
     approved --> expired: expire
     sent --> expired: expire
     draft --> cancelled: cancel
@@ -237,7 +237,9 @@ flowchart LR
   unchanged (ADR-0023).
 - Quotes move only through the transition table (ADR-0005); nobody approves a quote they built, and
   approving, sending and overriding prices stay with people (ADR-0020).
-- Use cases bind the unit of work to the caller's tenant; only authentication reads across tenants
-  (ADR-0006).
+- Use cases bind the unit of work to the caller's tenant; only authentication and the worker's jobs
+  read across tenants, the jobs ids only (ADR-0006, ADR-0026).
+- Worker jobs persist what the clock decided (expired offers), one record per unit of work with
+  compare-and-set, audited as the system (ADR-0026).
 - Demo data goes through the use cases, never around them, and only where `ENVIRONMENT` is local or
   test (ADR-0024).

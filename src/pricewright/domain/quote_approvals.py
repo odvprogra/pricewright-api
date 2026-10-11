@@ -35,7 +35,7 @@ class ApprovalStatus(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     WITHDRAWN = "withdrawn"
-    """Closed undecided: the quote was recalled, cancelled or revised."""
+    """Closed undecided: the quote was recalled, cancelled, revised or expired."""
 
 
 def comment_text(comment: str | None, *, required: bool) -> str | None:

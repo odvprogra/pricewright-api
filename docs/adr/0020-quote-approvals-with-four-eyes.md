@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-05
+- **Amended:** 2026-10-11 — an expired offer's pending request is withdrawn when the worker persists
+  the expiry
 
 ## Context
 
@@ -34,7 +36,8 @@ Practice:
   subtotals, as the quote was priced at submission (ADR-0019). A quote that needs no approval goes
   straight to `approved` and opens none.
 - **One pending request at a time**, closed by a decision or withdrawn when the quote is recalled,
-  cancelled or revised. Requests are never deleted: a revision's history keeps every request.
+  cancelled, revised or, from M5, expired by the worker (ADR-0026). Requests are never deleted: a
+  revision's history keeps every request.
 - **A decision** records the person, the time and a comment: optional to approve, required to reject
   (what to change), up to 1,000 characters.
 - **Four eyes.** The decider is a person (`quotes:approve` is never granted to service accounts) and

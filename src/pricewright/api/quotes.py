@@ -101,15 +101,22 @@ _LINE_ERRORS: dict[int | str, dict[str, object]] = {
 }
 
 
+class CallerType(StrEnum):
+    """Who builds and changes quotes and orders. The system acts only in the audit trail."""
+
+    USER = ActorType.USER.value
+    SERVICE_ACCOUNT = ActorType.SERVICE_ACCOUNT.value
+
+
 class ActorJson(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    type: ActorType
+    type: CallerType
     id: UUID
 
     @classmethod
     def of(cls, actor: Actor) -> ActorJson:
-        return cls(type=actor.type, id=actor.id)
+        return cls(type=CallerType(actor.type.value), id=actor.id)
 
 
 class OverrideJson(BaseModel):

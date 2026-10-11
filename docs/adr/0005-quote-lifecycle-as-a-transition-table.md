@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-05
+- **Amended:** 2026-10-11 — the worker persists `expired` within ten minutes, as the system
+  (ADR-0026)
 
 ## Context
 
@@ -57,6 +59,9 @@ How established systems model the same lifecycle:
   the M5 job uses to persist it. Anything else is `quote_expired`, a 409. So the answer never
   depends on when the job ran. Drafts do not expire, but submitting one needs a `valid_until` that
   has not passed; accepted quotes convert after their date, because the customer accepted in time.
+- **The job (amendment, M5).** The worker persists `expired` for every offer in flight past its
+  date, every ten minutes, withdrawing its pending approval request; the audit trail names the
+  system as the actor (ADR-0026).
 
 ## Alternatives considered
 

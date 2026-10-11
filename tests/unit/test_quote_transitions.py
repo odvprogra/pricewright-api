@@ -283,6 +283,29 @@ def test_a_sent_quote_past_its_date_cannot_be_accepted() -> None:
     assert quote.status is QuoteStatus.SENT
 
 
+def test_expire_persists_an_expired_offer_and_withdraws_its_pending_request() -> None:
+    quote = pending_quote()
+    job_ran = NOW + timedelta(days=45)
+
+    quote.expire(now=job_ran)
+
+    assert (quote.status, quote.status_changed_at) == (QuoteStatus.EXPIRED, job_ran)
+    assert (quote.approvals[0].status, quote.approvals[0].decided_at) == (
+        ApprovalStatus.WITHDRAWN,
+        job_ran,
+    )
+    assert quote.allowed_actions(job_ran) == {QuoteAction.REVISE}
+
+
+def test_expire_before_the_offer_s_date_is_refused() -> None:
+    quote = sent_quote()
+
+    with pytest.raises(InvalidTransitionError, match="valid until"):
+        quote.expire(now=LATER)
+
+    assert quote.status is QuoteStatus.SENT
+
+
 def test_cancel_needs_a_reason_and_withdraws_a_pending_request() -> None:
     quote = pending_quote()
 

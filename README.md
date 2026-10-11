@@ -183,6 +183,7 @@ use cases, like the HTTP API. Details in [docs/architecture.md](docs/architectur
 | [ADR-0023](docs/adr/0023-orders-converted-once-from-accepted-quotes.md) Orders converted once, prices copied                 | An order is exactly what the customer accepted, and keeps the customer as it was                    |
 | [ADR-0024](docs/adr/0024-demo-data-through-the-use-cases.md) Demo data through the use cases, from a seed and a date         | The demo shows the real rules at work; the same seed and day give the same data, never stale        |
 | [ADR-0025](docs/adr/0025-northfield-catalog-from-the-demand-dataset.md) A catalog from the demand dataset's top products     | Forecasts map one to one onto products, and no demand data or download is needed to run the demo    |
+| [ADR-0026](docs/adr/0026-worker-jobs-persist-what-the-clock-decided.md) Worker jobs, audited as the system                   | Expired offers are stored as such within minutes; replicas need no coordination                     |
 
 ## Run it locally
 
@@ -288,9 +289,9 @@ docs/                # product brief, architecture and ADRs
 - **Orders stop at the commitment.** One order per accepted quote, copied whole, open or cancelled
   (ADR-0023): no partial conversions, deliveries or invoices. Payment terms come from the customer
   at conversion, since quotes do not carry them yet; a cancelled order's quote cannot convert again.
-- **Expiry is computed, not yet stored.** An offer past its date acts as expired everywhere, but
-  keeps its last status (`sent`, `approved`) until M5's job persists `expired`; listing by
-  `status=expired` finds nothing before then (ADR-0005).
+- **Expiry is stored within ten minutes.** An offer past its date acts as expired at once; the
+  worker persists `expired` on its next run, every ten minutes, and the audit trail names the system
+  as the actor (ADR-0005, ADR-0026).
 - **Quotes follow UTC.** `valid_until` ends at midnight UTC and quote numbers take the UTC year
   until tenants have time zones (ADR-0005, ADR-0021).
 - **Every change to a draft's lines reprices all of them** (ADR-0019), and a line whose product was

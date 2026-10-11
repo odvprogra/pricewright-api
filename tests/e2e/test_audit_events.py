@@ -2,12 +2,14 @@
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
 import pytest
 
 from pricewright.api.app import create_app
+from pricewright.domain.audit import AuditAction, AuditEvent
 from pricewright.domain.auth import Principal
 from pricewright.domain.tenants import Tenant, TenantSettings
 from pricewright.domain.users import Role
@@ -132,3 +134,26 @@ async def test_another_tenant_sees_none_of_the_events(client: httpx.AsyncClient)
     )
 
     assert response.json() == {"items": [], "next_cursor": None}
+
+
+async def test_audit_trail_shows_what_the_system_did_with_the_nil_uuid() -> None:
+    quote_id = uuid.uuid7()
+    expiry = AuditEvent.by_system(
+        NORTHFIELD.id,
+        AuditAction.QUOTE_EXPIRED,
+        quote_id,
+        {"status": ("sent", "expired")},
+        now=datetime(2026, 11, 15, 0, 5, tzinfo=UTC),
+    )
+    database = InMemoryDatabase(
+        tenants={NORTHFIELD.id: NORTHFIELD}, audit_events={expiry.id: expiry}
+    )
+    app = create_app(title="test", services=fake_services(database))
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await audit(client, action="quote.expired")
+
+    [event] = response.json()["items"]
+    assert (event["actor_type"], event["actor_id"]) == ("system", str(uuid.UUID(int=0)))
+    assert (event["resource_type"], event["resource_id"]) == ("quote", str(quote_id))
+    assert event["changes"] == {"status": {"before": "sent", "after": "expired"}}

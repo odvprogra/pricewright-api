@@ -29,7 +29,7 @@ from pricewright.domain.money import Money
 from pricewright.domain.orders import Order
 from pricewright.domain.pricing import ManualOverride, PriceOverride, RateOverride
 from pricewright.domain.quote_approvals import ApprovalStatus
-from pricewright.domain.quote_lifecycle import TERMINAL, TRANSITIONS, QuoteStatus
+from pricewright.domain.quote_lifecycle import TERMINAL, TRANSITIONS, QuoteStatus, has_passed
 from pricewright.domain.quotes import LineChange, PricingContext, Quote, QuoteLine, QuoteTotals
 from tests.unit.quote_data import (
     ACME,
@@ -182,6 +182,11 @@ class QuoteLifecycleMachine(RuleBasedStateMachine):
         if chance == 0:
             self.attempt(lambda: self.quote.cancel(reason="Customer declined", now=self.now))
 
+    @rule()
+    def expire(self) -> None:
+        """The worker's job (ADR-0026): refused unless the offer is past its date."""
+        self.attempt(lambda: self.quote.expire(now=self.now))
+
     @rule(by=people)
     def revise(self, by: Actor) -> None:
         old = self.quote
@@ -274,6 +279,11 @@ class QuoteLifecycleMachine(RuleBasedStateMachine):
         assert approved, "approved without an approval decision"
         builders = {actor.id for actor in quote.builders()}
         assert approved[-1].decided_by not in builders
+
+    @invariant()
+    def only_an_offer_past_its_date_is_persisted_expired(self) -> None:
+        if self.quote.status is QuoteStatus.EXPIRED:
+            assert has_passed(self.quote.valid_until, self.now)
 
     @invariant()
     def a_request_is_pending_exactly_while_the_quote_is(self) -> None:

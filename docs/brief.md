@@ -96,8 +96,9 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
      the previous revision moves to **`SUPERSEDED`** (terminal, read-only, linked to its successor),
      because the customer may still hold it and it must never be accepted.
    - **Expiration**: every transition checks `valid_until`; acting on an expired quote is a domain
-     error (409). A periodic worker job persists `EXPIRED` for listings and reports (from M5; before
-     that, only the guard). Correctness never depends on the job's timing.
+     error (409). A periodic worker job persists `EXPIRED` for listings and reports, every ten
+     minutes from M5 ([ADR-0026](adr/0026-worker-jobs-persist-what-the-clock-decided.md)).
+     Correctness never depends on the job's timing.
    - Invalid transitions raise a domain error → 409 Problem Details.
    - Also agreed in M4 (ADR-0005): `cancel` from every open status (with a reason; also a customer's
      "no"), `recall` of a pending approval back to `DRAFT`, and `revise` from `APPROVED` and
@@ -230,6 +231,7 @@ Agreed for the presentable checkpoint:
 | 0023 | [Orders: converted once from an accepted quote, prices copied](adr/0023-orders-converted-once-from-accepted-quotes.md)                  | M6        |
 | 0024 | [Demo data through the use cases, from a seed and a date](adr/0024-demo-data-through-the-use-cases.md)                                  | —         |
 | 0025 | [Northfield's catalog from the demand dataset](adr/0025-northfield-catalog-from-the-demand-dataset.md)                                  | —         |
+| 0026 | [Worker jobs: persist what the clock decided, as the system](adr/0026-worker-jobs-persist-what-the-clock-decided.md)                    | M5        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 
