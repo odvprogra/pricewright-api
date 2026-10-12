@@ -17,6 +17,9 @@ from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditResourceType
 from pricewright.domain.quotes import Quote
 
+MAX_ERROR_LENGTH = 1000
+"""How much of a failed delivery's error is kept for an operator."""
+
 
 class EventType(StrEnum):
     """``resource.verb`` in the past tense, like audit actions. New types come with a consumer."""
@@ -28,6 +31,14 @@ class EventType(StrEnum):
     @property
     def aggregate_type(self) -> AuditResourceType:
         return AuditResourceType(self.value.partition(".")[0])
+
+
+class DeliveryStatus(StrEnum):
+    PENDING = "pending"
+    """Waiting for its first delivery, or for its next attempt after a failure."""
+    DELIVERED = "delivered"
+    DEAD = "dead"
+    """Given up on: a permanent failure or too many attempts; kept for an operator."""
 
 
 @dataclass(frozen=True, slots=True)

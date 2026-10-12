@@ -9,7 +9,7 @@ of work stages each table without copying every record in it.
 import copy
 import dataclasses
 import uuid
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Hashable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from types import TracebackType
@@ -26,6 +26,7 @@ from pricewright.application.ports import (
     CustomerQuery,
     CustomerRepository,
     CustomerSort,
+    DeliveryOutcome,
     Housekeeping,
     IdempotencyKeyRepository,
     IdentityLookup,
@@ -33,7 +34,9 @@ from pricewright.application.ports import (
     OrderQuery,
     OrderRepository,
     OrderSummary,
+    OutboxRelay,
     OutboxRepository,
+    PendingEvent,
     PricingRuleQuery,
     PricingRuleRepository,
     PricingRuleSort,
@@ -58,7 +61,7 @@ from pricewright.domain.auth import AuthenticationError, Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer
 from pricewright.domain.errors import ConflictError, StaleVersionError
-from pricewright.domain.events import Event
+from pricewright.domain.events import DeliveryStatus, Event
 from pricewright.domain.idempotency import IdempotencyKeyInUseError, IdempotencyRecord
 from pricewright.domain.numbering import NumberSeries
 from pricewright.domain.orders import Order
@@ -77,21 +80,33 @@ type _KeyScope = tuple[UUID, Actor, str]
 
 
 class HeldKeys:
-    """Idempotency keys held by open units of work, like PostgreSQL's advisory locks: shared by
-    every unit of work on the database and never copied with it."""
+    """Idempotency keys and outbox events held by open units of work, like PostgreSQL's advisory
+    and row locks: shared by every unit of work on the database and never copied with it."""
 
     def __init__(self) -> None:
-        self._holders: dict[_KeyScope, object] = {}
+        self._holders: dict[Hashable, object] = {}
 
     def __deepcopy__(self, memo: dict[int, object]) -> Self:
         return self
 
-    def hold(self, scope: _KeyScope, holder: object) -> bool:
+    def hold(self, scope: Hashable, holder: object) -> bool:
         return self._holders.setdefault(scope, holder) is holder
 
     def release(self, holder: object) -> None:
         for scope in [scope for scope, held_by in self._holders.items() if held_by is holder]:
             del self._holders[scope]
+
+
+@dataclass(frozen=True, slots=True)
+class StoredEvent:
+    """An outbox row: the event and how its delivery went (ADR-0008)."""
+
+    event: Event
+    available_at: datetime
+    status: DeliveryStatus = DeliveryStatus.PENDING
+    attempts: int = 0
+    last_error: str | None = None
+    delivered_at: datetime | None = None
 
 
 @dataclass
@@ -111,7 +126,7 @@ class InMemoryDatabase:
     document_numbers: dict[tuple[UUID, NumberSeries, int], int] = field(default_factory=dict)
     """The last number issued, per tenant, series and year."""
     idempotency_keys: dict[_KeyScope, IdempotencyRecord] = field(default_factory=dict)
-    outbox_events: dict[UUID, Event] = field(default_factory=dict)
+    outbox_events: dict[UUID, StoredEvent] = field(default_factory=dict)
     """In the order their changes committed, as ``position`` orders them in the database."""
     held_keys: HeldKeys = field(default_factory=HeldKeys, compare=False)
     """Locks, not data: two databases with the same rows are equal whoever holds what."""
@@ -787,7 +802,7 @@ class FakeIdentityLookup:
 
 
 class FakeOutboxRepository:
-    def __init__(self, events: dict[UUID, Event], uow: FakeUnitOfWork) -> None:
+    def __init__(self, events: dict[UUID, StoredEvent], uow: FakeUnitOfWork) -> None:
         self._events = events
         self._uow = uow
 
@@ -796,8 +811,47 @@ class FakeOutboxRepository:
             raise RuntimeError("an event can only be added to the unit of work's tenant")
         if event.id in self._events:
             raise RuntimeError("an event with this id is already stored")
-        self._events[event.id] = dataclasses.replace(
-            event, request_id=event.request_id or current_request_id()
+        stamped = dataclasses.replace(event, request_id=event.request_id or current_request_id())
+        self._events[event.id] = StoredEvent(stamped, available_at=event.occurred_at)
+
+
+class FakeOutboxRelay:
+    """Claims like the adapter: oldest first, one aggregate's earliest pending event at a time,
+    skipping events another open unit of work holds."""
+
+    def __init__(
+        self, events: dict[UUID, StoredEvent], held: HeldKeys, uow: FakeUnitOfWork
+    ) -> None:
+        self._events = events
+        self._held = held
+        self._uow = uow
+
+    async def claim(self, now: datetime, *, limit: int) -> list[PendingEvent]:
+        heads: dict[tuple[UUID, str, UUID], StoredEvent] = {}
+        for stored in self._events.values():  # in the order they were added
+            event = stored.event
+            aggregate = (event.tenant_id, event.aggregate_type.value, event.aggregate_id)
+            if stored.status is DeliveryStatus.PENDING:
+                heads.setdefault(aggregate, stored)
+        claimed: list[PendingEvent] = []
+        for stored in heads.values():
+            if len(claimed) == limit:
+                break
+            if stored.available_at <= now and self._held.hold(stored.event.id, self._uow):
+                claimed.append(PendingEvent(stored.event, stored.attempts))
+        return claimed
+
+    async def record(self, event_id: UUID, outcome: DeliveryOutcome) -> None:
+        stored = self._events[event_id]
+        delivered = outcome.status is DeliveryStatus.DELIVERED
+        again = outcome.status is DeliveryStatus.PENDING
+        self._events[event_id] = dataclasses.replace(
+            stored,
+            status=outcome.status,
+            attempts=outcome.attempts,
+            last_error=outcome.error,
+            delivered_at=outcome.at if delivered else stored.delivered_at,
+            available_at=outcome.at if again else stored.available_at,
         )
 
 
@@ -858,6 +912,7 @@ class FakeUnitOfWork:
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     outbox: OutboxRepository
+    outbox_relay: OutboxRelay
     identities: IdentityLookup
     housekeeping: Housekeeping
 
@@ -885,6 +940,9 @@ class FakeUnitOfWork:
             self._staged.idempotency_keys, self._staged.held_keys, self
         )
         self.outbox = FakeOutboxRepository(self._staged.outbox_events, self)
+        self.outbox_relay = FakeOutboxRelay(
+            self._staged.outbox_events, self._staged.held_keys, self
+        )
         self.identities = FakeIdentityLookup(self._staged)
         self.housekeeping = FakeHousekeeping(self._staged)
         return self

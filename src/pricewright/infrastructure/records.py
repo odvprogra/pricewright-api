@@ -45,6 +45,7 @@ from pricewright.domain.customers import (
     MAX_TAX_ID_LENGTH,
     CustomerTier,
 )
+from pricewright.domain.events import MAX_ERROR_LENGTH, DeliveryStatus
 from pricewright.domain.idempotency import MAX_KEY_LENGTH as MAX_IDEMPOTENCY_KEY_LENGTH
 from pricewright.domain.numbering import NumberSeries
 from pricewright.domain.orders import MAX_CANCEL_REASON_LENGTH as MAX_ORDER_CANCEL_REASON_LENGTH
@@ -103,8 +104,7 @@ _REVISION_NUMBER_LENGTH = 32
 _QUANTITY = Numeric(10, 3)  # domain/quantities.py
 # The API middleware accepts request IDs of up to 128 characters.
 _REQUEST_ID_LENGTH = 128
-_DELIVERY_STATUSES = "'pending', 'delivered', 'dead'"
-_ERROR_LENGTH = 1000
+_DELIVERY_STATUSES = ", ".join(f"'{status}'" for status in DeliveryStatus)
 
 
 class TenantRecord(Base):
@@ -819,5 +819,5 @@ class OutboxEventRecord(Base):
     attempts: Mapped[int] = mapped_column(Integer, server_default="0")
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     """When the relay may try it: when it occurred, then after each failure, later."""
-    last_error: Mapped[str | None] = mapped_column(String(_ERROR_LENGTH))
+    last_error: Mapped[str | None] = mapped_column(String(MAX_ERROR_LENGTH))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

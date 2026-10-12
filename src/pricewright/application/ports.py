@@ -17,7 +17,7 @@ from pricewright.domain.audit import AuditAction, AuditEvent, AuditResourceType
 from pricewright.domain.auth import Principal
 from pricewright.domain.catalog import Product, ProductCategory
 from pricewright.domain.customers import Customer, CustomerTier
-from pricewright.domain.events import Event
+from pricewright.domain.events import DeliveryStatus, Event
 from pricewright.domain.idempotency import IdempotencyRecord
 from pricewright.domain.money import Money
 from pricewright.domain.orders import Order, OrderStatus
@@ -469,6 +469,38 @@ class OutboxRepository(Protocol):
     async def add(self, event: Event) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class PendingEvent:
+    event: Event
+    attempts: int
+    """Failed deliveries so far."""
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryOutcome:
+    """What a delivery attempt left: delivered, pending again (a retry later) or dead."""
+
+    status: DeliveryStatus
+    attempts: int
+    at: datetime
+    """When it was delivered, when to try again, or when it was given up on."""
+    error: str | None = None
+
+
+class OutboxRelay(Protocol):
+    """The worker's side of the outbox, across tenants (ADR-0008)."""
+
+    async def claim(self, now: datetime, *, limit: int) -> list[PendingEvent]:
+        """Up to ``limit`` pending events available at ``now``, oldest first, each the earliest
+        pending event of its aggregate. They stay held until the unit of work ends, and every
+        other unit of work skips them meanwhile."""
+        ...
+
+    async def record(self, event_id: UUID, outcome: DeliveryOutcome) -> None:
+        """Store what the delivery of a claimed event left."""
+        ...
+
+
 class IdempotencyKeyRepository(Protocol):
     """Idempotency keys of the unit of work's tenant, each its caller's own (ADR-0022).
 
@@ -561,8 +593,9 @@ class AccessTokens(Protocol):
 class UnitOfWork(Protocol):
     """One atomic business operation: changes are saved by ``commit`` or discarded on exit.
 
-    Tenant-owned repositories (all but ``tenants``, ``identities`` and ``housekeeping``) work only
-    after ``bind_tenant``, and a unit of work can never be bound to a second tenant (ADR-0006).
+    Tenant-owned repositories (all but ``tenants``, ``identities``, ``housekeeping`` and
+    ``outbox_relay``) work only after ``bind_tenant``, and a unit of work can never be bound to a
+    second tenant (ADR-0006).
     """
 
     tenants: TenantRepository
@@ -579,6 +612,7 @@ class UnitOfWork(Protocol):
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
     outbox: OutboxRepository
+    outbox_relay: OutboxRelay
     identities: IdentityLookup
     housekeeping: Housekeeping
 
