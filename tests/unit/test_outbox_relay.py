@@ -15,8 +15,10 @@ from pricewright.application.outbox import (
     SHORTEST_RETRY,
     Consumer,
     PermanentDeliveryError,
+    list_dead_letters,
     relay_events,
     retry_delay,
+    revive_dead_letters,
 )
 from pricewright.application.ports import UnitOfWork
 from pricewright.domain.events import DeliveryStatus, Event, EventType
@@ -221,3 +223,54 @@ async def test_relay_delivers_each_aggregate_in_order_whatever_fails(
     assert all(order == sorted(order) for order in by_aggregate.values())
     for item, s in zip(items, final, strict=True):
         assert (s.status is DeliveryStatus.DELIVERED) == (item.id in consumer.delivered)
+
+
+async def dead_outbox() -> tuple[InMemoryDatabase, list[Event], Event]:
+    """Two dead events and one delivered."""
+    refused = [event(uuid.uuid7()), event(uuid.uuid7(), SENT)]
+    fine = event(uuid.uuid7())
+    database = outbox(*refused, fine)
+    consumer = Recorder({item.id: [PermanentDeliveryError("550")] for item in refused})
+    await relay(database, {APPROVED: consumer, SENT: consumer}, FakeClock(NOW))
+    return database, refused, fine
+
+
+async def test_dead_letters_lists_the_events_given_up_on_oldest_first() -> None:
+    database, refused, _ = await dead_outbox()
+
+    def unit_of_work() -> UnitOfWork:
+        return FakeUnitOfWork(database)
+
+    dead = await list_dead_letters(unit_of_work=unit_of_work, limit=10)
+
+    assert [(letter.event, letter.attempts, letter.error) for letter in dead] == [
+        (refused[0], 1, "PermanentDeliveryError: 550"),
+        (refused[1], 1, "PermanentDeliveryError: 550"),
+    ]
+    assert len(await list_dead_letters(unit_of_work=unit_of_work, limit=1)) == 1
+
+
+async def test_reviving_dead_letters_delivers_them_again_as_if_new() -> None:
+    database, refused, fine = await dead_outbox()
+    later = FakeClock(NOW + timedelta(hours=2))
+
+    def unit_of_work() -> UnitOfWork:
+        return FakeUnitOfWork(database)
+
+    revived = await revive_dead_letters(
+        {refused[0].id, fine.id}, unit_of_work=unit_of_work, clock=later
+    )
+
+    assert revived == 1  # the delivered one is left alone
+    again = stored(database, refused[0])
+    assert (again.status, again.attempts, again.available_at) == (
+        DeliveryStatus.PENDING,
+        0,
+        later.now,
+    )
+    assert again.last_error is None
+    assert stored(database, refused[1]).status is DeliveryStatus.DEAD
+    assert await revive_dead_letters(None, unit_of_work=unit_of_work, clock=later) == 1
+    consumer = Recorder()
+    await relay(database, {APPROVED: consumer, SENT: consumer}, later)
+    assert consumer.delivered == [item.id for item in refused]

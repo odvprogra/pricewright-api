@@ -11,10 +11,14 @@ seeds). It is never an argument, so it cannot end up in the shell history or the
 
 ``pricewright-admin seed`` loads the demo tenants, only in local and test environments
 (ADR-0024); ``just seed`` resets the local database first.
+
+``pricewright-admin dead-letters`` lists the events the outbox relay gave up on, and
+``pricewright-admin retry-dead-letters`` gives them a new round of attempts (ADR-0008).
 """
 
 import argparse
 import getpass
+import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date
@@ -22,6 +26,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TextIO
 
 from pricewright.application.onboarding import RegisterTenant, register_tenant
+from pricewright.application.outbox import list_dead_letters, revive_dead_letters
 from pricewright.application.ports import Clock, PasswordHasher, UnitOfWorkFactory
 from pricewright.demo.seed import DEFAULT_SEED, DEMO_PASSWORD, SeedReport, seed_demo
 from pricewright.domain.errors import DomainError
@@ -35,6 +40,7 @@ from pricewright.domain.users import EmailAlreadyRegisteredError
 
 EXIT_OK = 0
 EXIT_FAILED = 1
+DEAD_LETTERS_SHOWN = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,11 +117,24 @@ def _add_seed(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> 
     )
 
 
+def _add_dead_letters(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    commands.add_parser(
+        "dead-letters", help="list the events the outbox relay gave up on (ADR-0008)"
+    )
+    retry = commands.add_parser(
+        "retry-dead-letters", help="give dead events a new round of attempts"
+    )
+    chosen = retry.add_mutually_exclusive_group(required=True)
+    chosen.add_argument("event_ids", nargs="*", default=[], type=uuid.UUID, metavar="EVENT_ID")
+    chosen.add_argument("--all", action="store_true", help="every dead event")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pricewright-admin", description="Operator commands.")
     commands = parser.add_subparsers(dest="command", required=True)
     _add_create_tenant(commands)
     _add_seed(commands)
+    _add_dead_letters(commands)
     return parser
 
 
@@ -196,6 +215,28 @@ async def _seed(
     return EXIT_OK
 
 
+async def _dead_letters(*, unit_of_work: UnitOfWorkFactory, console: Console) -> int:
+    dead = await list_dead_letters(unit_of_work=unit_of_work, limit=DEAD_LETTERS_SHOWN)
+    shown = f"oldest first, at most {DEAD_LETTERS_SHOWN}"
+    console.stdout.write(f"{len(dead)} dead letters ({shown}):\n")
+    for letter in dead:
+        event = letter.event
+        console.stdout.write(
+            f"  {event.id}  {event.type.value:<15} {event.aggregate_type.value} "
+            f"{event.aggregate_id}  {letter.attempts} attempts  {letter.error}\n"
+        )
+    return EXIT_OK
+
+
+async def _retry_dead_letters(
+    args: argparse.Namespace, *, unit_of_work: UnitOfWorkFactory, console: Console, clock: Clock
+) -> int:
+    event_ids = None if args.all else set(args.event_ids)
+    revived = await revive_dead_letters(event_ids, unit_of_work=unit_of_work, clock=clock)
+    console.stdout.write(f"{revived} dead letters will be delivered again.\n")
+    return EXIT_OK
+
+
 async def run(
     argv: Sequence[str],
     *,
@@ -213,6 +254,12 @@ async def run(
     args = _parser().parse_args(argv)
     if args.command == "create-tenant":
         return await _create_tenant(args, unit_of_work=unit_of_work, hasher=hasher, console=console)
+    if args.command == "dead-letters":
+        return await _dead_letters(unit_of_work=unit_of_work, console=console)
+    if args.command == "retry-dead-letters":
+        return await _retry_dead_letters(
+            args, unit_of_work=unit_of_work, console=console, clock=clock
+        )
     if not demo_data_allowed:
         console.stderr.write("error: demo data is loaded only where ENVIRONMENT is local or test\n")
         return EXIT_FAILED

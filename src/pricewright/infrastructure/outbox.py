@@ -1,6 +1,7 @@
 """The SQLAlchemy outbox (ADR-0008): events stored in the same transaction as their change, and the
 relay's claims with ``FOR UPDATE SKIP LOCKED``."""
 
+from collections.abc import Collection
 from datetime import datetime
 from uuid import UUID
 
@@ -8,7 +9,7 @@ from sqlalchemy import exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from pricewright.application.ports import DeliveryOutcome, PendingEvent
+from pricewright.application.ports import DeadLetter, DeliveryOutcome, PendingEvent
 from pricewright.domain.events import DeliveryStatus, Event, EventType
 from pricewright.infrastructure.logging import current_request_id
 from pricewright.infrastructure.records import OutboxEventRecord
@@ -38,8 +39,8 @@ class SqlAlchemyOutboxRepository:
         )
 
 
-def _pending(record: OutboxEventRecord) -> PendingEvent:
-    event = Event(
+def _event(record: OutboxEventRecord) -> Event:
+    return Event(
         id=record.id,
         tenant_id=record.tenant_id,
         type=EventType(record.type),
@@ -48,7 +49,6 @@ def _pending(record: OutboxEventRecord) -> PendingEvent:
         data=dict(record.data),
         request_id=record.request_id,
     )
-    return PendingEvent(event, record.attempts)
 
 
 class SqlAlchemyOutboxRelay:
@@ -76,7 +76,7 @@ class SqlAlchemyOutboxRelay:
             .limit(limit)
             .with_for_update(skip_locked=True, of=table)
         )
-        return [_pending(record) for record in records]
+        return [PendingEvent(_event(record), record.attempts) for record in records]
 
     async def record(self, event_id: UUID, outcome: DeliveryOutcome) -> None:
         values: dict[str, object] = {
@@ -90,3 +90,25 @@ class SqlAlchemyOutboxRelay:
             values["available_at"] = outcome.at
         table = OutboxEventRecord
         await self._session.execute(update(table).where(table.id == event_id).values(values))
+
+    async def dead_letters(self, *, limit: int) -> list[DeadLetter]:
+        table = OutboxEventRecord
+        records = await self._session.scalars(
+            select(table)
+            .where(table.status == DeliveryStatus.DEAD.value)
+            .order_by(table.position)
+            .limit(limit)
+        )
+        return [DeadLetter(_event(r), r.attempts, r.last_error) for r in records]
+
+    async def revive(self, event_ids: Collection[UUID] | None, *, now: datetime) -> int:
+        table = OutboxEventRecord
+        query = update(table).where(table.status == DeliveryStatus.DEAD.value)
+        if event_ids is not None:
+            query = query.where(table.id.in_(event_ids))
+        revived = await self._session.scalars(
+            query.values(
+                status=DeliveryStatus.PENDING.value, attempts=0, available_at=now, last_error=None
+            ).returning(table.id)
+        )
+        return len(revived.all())

@@ -6,7 +6,7 @@ while the worker was down is done by the next one, and two runs at once change e
 since saves compare versions (ADR-0012). Changes no one asked for are audited as the system's.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from pricewright.application.audit import quote_fields
 from pricewright.application.ports import Clock, TenantRecordRef, UnitOfWorkFactory
@@ -18,6 +18,8 @@ EXPIRY_BATCH = 100
 """Offers looked up per query; each is then expired in a unit of work of its own."""
 PURGE_BATCH = 1000
 """Rows deleted per transaction, so a purge never holds many locks for long."""
+DELIVERED_KEPT = timedelta(days=7)
+"""How long delivered events stay in the outbox, to look into a delivery (ADR-0008)."""
 
 
 async def expire_offers(
@@ -74,6 +76,26 @@ async def purge_idempotency_keys(
     while True:
         async with unit_of_work() as uow:
             deleted = await uow.housekeeping.purge_idempotency_keys(now, limit=batch)
+            await uow.commit()
+        purged += deleted
+        if deleted < batch:
+            return purged
+
+
+async def purge_delivered_events(
+    *,
+    unit_of_work: UnitOfWorkFactory,
+    clock: Clock,
+    keep: timedelta = DELIVERED_KEPT,
+    batch: int = PURGE_BATCH,
+) -> int:
+    """Delete events delivered more than ``keep`` ago (ADR-0008), a batch per transaction. Dead
+    events stay for an operator. Return how many."""
+    before = clock() - keep
+    purged = 0
+    while True:
+        async with unit_of_work() as uow:
+            deleted = await uow.housekeeping.purge_delivered_events(before, limit=batch)
             await uow.commit()
         purged += deleted
         if deleted < batch:

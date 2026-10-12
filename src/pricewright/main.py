@@ -17,7 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from pricewright import __version__, cli
 from pricewright.api.app import create_app
 from pricewright.api.dependencies import Services
-from pricewright.application.housekeeping import expire_offers, purge_idempotency_keys
+from pricewright.application.housekeeping import (
+    expire_offers,
+    purge_delivered_events,
+    purge_idempotency_keys,
+)
 from pricewright.application.outbox import Consumer, relay_events
 from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.events import Event, EventType
@@ -38,6 +42,8 @@ PURGE_INTERVAL = timedelta(hours=1)
 """How often the worker deletes expired idempotency keys, which already count as absent."""
 RELAY_INTERVAL = timedelta(seconds=1)
 """How often the worker relays the outbox's due events (ADR-0008)."""
+DELIVERED_PURGE_INTERVAL = timedelta(days=1)
+"""How often the worker deletes events delivered a week ago."""
 
 
 def units_of_work(engine: AsyncEngine) -> UnitOfWorkFactory:
@@ -179,6 +185,7 @@ def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
     purge_keys = partial(purge_idempotency_keys, unit_of_work=unit_of_work, clock=utc_now)
     consumers = {kind: traced(consumer) for kind, consumer in event_consumers().items()}
     relay = partial(relay_events, unit_of_work=unit_of_work, consumers=consumers, clock=utc_now)
+    purge_events = partial(purge_delivered_events, unit_of_work=unit_of_work, clock=utc_now)
     return [
         PeriodicTask("relay_events", RELAY_INTERVAL, job("events.relayed", relay)),
         PeriodicTask("expire_offers", EXPIRY_INTERVAL, job("offers.expired", expire)),
@@ -186,6 +193,11 @@ def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
             "purge_idempotency_keys",
             PURGE_INTERVAL,
             job("idempotency_keys.purged", purge_keys),
+        ),
+        PeriodicTask(
+            "purge_delivered_events",
+            DELIVERED_PURGE_INTERVAL,
+            job("events.purged", purge_events),
         ),
     ]
 

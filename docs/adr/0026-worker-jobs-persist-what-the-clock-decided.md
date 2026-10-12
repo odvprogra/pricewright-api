@@ -40,7 +40,8 @@ Practice:
   through that tenant's repositories. `housekeeping` is the second port that crosses tenants, after
   authentication's lookups (ADR-0006).
 - **Purges across tenants.** Expired technical records that no tenant reads any more are deleted
-  across tenants, in batches of a thousand per transaction: idempotency keys every hour (ADR-0022).
+  across tenants, in batches of a thousand per transaction: idempotency keys every hour (ADR-0022),
+  events delivered a week ago every day (ADR-0008).
 - **Expiry.** Every offer in flight (pending approval, approved or sent) whose `valid_until` has
   passed becomes `expired` (`Quote.expire`), and its pending approval request is withdrawn. The
   status changes at the run's time. Each offer has its own unit of work and saves with

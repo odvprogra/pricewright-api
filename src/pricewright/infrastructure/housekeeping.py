@@ -12,8 +12,9 @@ from sqlalchemy import delete, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricewright.application.ports import TenantRecordRef
+from pricewright.domain.events import DeliveryStatus
 from pricewright.domain.quote_lifecycle import EXPIRABLE
-from pricewright.infrastructure.records import IdempotencyKeyRecord, QuoteRecord
+from pricewright.infrastructure.records import IdempotencyKeyRecord, OutboxEventRecord, QuoteRecord
 
 
 class SqlAlchemyHousekeeping:
@@ -47,5 +48,15 @@ class SqlAlchemyHousekeeping:
             # gave it a new expiry, and PostgreSQL re-reads a row a committed update changed.
             .where(table.expires_at <= now)
             .returning(table.tenant_id)
+        )
+        return len(purged.all())
+
+    async def purge_delivered_events(self, before: datetime, *, limit: int) -> int:
+        table = OutboxEventRecord
+        delivered = (table.status == DeliveryStatus.DELIVERED.value) & (table.delivered_at < before)
+        purged = await self._session.scalars(
+            delete(table)
+            .where(table.id.in_(select(table.id).where(delivered).limit(limit)))
+            .returning(table.id)
         )
         return len(purged.all())

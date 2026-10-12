@@ -3,16 +3,23 @@ aggregate's events go in order, and a crash before the commit delivers again (at
 
 import asyncio
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Self
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pricewright.application.outbox import FIRST_RETRY, PermanentDeliveryError, relay_events
-from pricewright.application.ports import PendingEvent, UnitOfWork
-from pricewright.domain.events import Event, EventType
+from pricewright.application.housekeeping import purge_delivered_events
+from pricewright.application.outbox import (
+    FIRST_RETRY,
+    PermanentDeliveryError,
+    list_dead_letters,
+    relay_events,
+    revive_dead_letters,
+)
+from pricewright.application.ports import DeliveryOutcome, PendingEvent, UnitOfWork
+from pricewright.domain.events import DeliveryStatus, Event, EventType
 from pricewright.infrastructure.outbox import SqlAlchemyOutboxRelay
 from pricewright.infrastructure.records import OutboxEventRecord
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
@@ -172,3 +179,68 @@ async def test_relay_stores_retries_and_dead_letters(session_factory: Sessions) 
     assert (dead.status, dead.attempts, dead.delivered_at) == ("dead", 1, None)
     assert dead.last_error == "PermanentDeliveryError: 550 no such mailbox"
     assert dead.available_at == NOW  # kept as it was; an operator decides
+
+
+async def test_dead_letters_are_listed_revived_and_delivered_again(
+    session_factory: Sessions,
+) -> None:
+    first, second, fine = await written(
+        session_factory, (APPROVED, uuid.uuid7()), (SENT, uuid.uuid7()), (APPROVED, uuid.uuid7())
+    )
+    refused: set[uuid.UUID] = {first.id, second.id}
+
+    async def picky(event: Event) -> None:
+        if event.id in refused:
+            raise PermanentDeliveryError("550 no such mailbox")
+
+    def unit_of_work() -> UnitOfWork:
+        return SqlAlchemyUnitOfWork(session_factory)
+
+    await relay_events(
+        unit_of_work=unit_of_work, consumers={APPROVED: picky, SENT: picky}, clock=lambda: NOW
+    )
+
+    dead = await list_dead_letters(unit_of_work=unit_of_work, limit=10)
+    assert [(letter.event.id, letter.attempts) for letter in dead] == [
+        (first.id, 1),
+        (second.id, 1),
+    ]
+    assert dead[0].event.type is APPROVED
+    later = NOW + timedelta(hours=1)
+    revived = await revive_dead_letters(
+        {first.id, fine.id}, unit_of_work=unit_of_work, clock=lambda: later
+    )
+    assert revived == 1
+    row = (await rows(session_factory))[first.id]
+    assert (row.status, row.attempts, row.available_at, row.last_error) == (
+        "pending",
+        0,
+        later,
+        None,
+    )
+    refused.clear()
+    assert await revive_dead_letters(None, unit_of_work=unit_of_work, clock=lambda: later) == 1
+    await relay_events(
+        unit_of_work=unit_of_work, consumers={APPROVED: picky, SENT: picky}, clock=lambda: later
+    )
+    assert {row.status for row in (await rows(session_factory)).values()} == {"delivered"}
+
+
+async def test_purge_deletes_events_delivered_before_the_cutoff(session_factory: Sessions) -> None:
+    old, recent = await written(session_factory, (APPROVED, uuid.uuid7()), (SENT, uuid.uuid7()))
+
+    def unit_of_work() -> UnitOfWork:
+        return SqlAlchemyUnitOfWork(session_factory)
+
+    for item, delivered in ((old, NOW - timedelta(days=8)), (recent, NOW - timedelta(days=6))):
+        async with unit_of_work() as uow:
+            await uow.outbox_relay.claim(delivered, limit=1)
+            await uow.outbox_relay.record(
+                item.id, DeliveryOutcome(DeliveryStatus.DELIVERED, 1, delivered)
+            )
+            await uow.commit()
+
+    purged = await purge_delivered_events(unit_of_work=unit_of_work, clock=lambda: NOW, batch=1)
+
+    assert purged == 1
+    assert set(await rows(session_factory)) == {recent.id}

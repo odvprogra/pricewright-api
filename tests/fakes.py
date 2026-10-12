@@ -26,6 +26,7 @@ from pricewright.application.ports import (
     CustomerQuery,
     CustomerRepository,
     CustomerSort,
+    DeadLetter,
     DeliveryOutcome,
     Housekeeping,
     IdempotencyKeyRepository,
@@ -854,6 +855,21 @@ class FakeOutboxRelay:
             available_at=outcome.at if again else stored.available_at,
         )
 
+    async def dead_letters(self, *, limit: int) -> list[DeadLetter]:
+        dead = [s for s in self._events.values() if s.status is DeliveryStatus.DEAD][:limit]
+        return [DeadLetter(s.event, s.attempts, s.last_error) for s in dead]
+
+    async def revive(self, event_ids: Collection[UUID] | None, *, now: datetime) -> int:
+        chosen = [
+            stored
+            for stored in self._events.values()
+            if stored.status is DeliveryStatus.DEAD
+            and (event_ids is None or stored.event.id in event_ids)
+        ]
+        for stored in chosen:
+            self._events[stored.event.id] = StoredEvent(stored.event, available_at=now)
+        return len(chosen)
+
 
 class FakeHousekeeping:
     """Reads every tenant's rows, ids only, like the adapter."""
@@ -872,6 +888,17 @@ class FakeHousekeeping:
             and (after is None or quote.id > after)
         )[:limit]
         return [TenantRecordRef(self._database.quotes[i].tenant_id, i) for i in due]
+
+    async def purge_delivered_events(self, before: datetime, *, limit: int) -> int:
+        events = self._database.outbox_events
+        old = [
+            event_id
+            for event_id, stored in events.items()
+            if stored.delivered_at is not None and stored.delivered_at < before
+        ][:limit]
+        for event_id in old:
+            del events[event_id]
+        return len(old)
 
     async def purge_idempotency_keys(self, now: datetime, *, limit: int) -> int:
         keys = self._database.idempotency_keys

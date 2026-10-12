@@ -69,8 +69,10 @@ Practice:
   delivered at once: emails are not sent for events written before their consumer existed.
 - **The request id travels with the event**, stamped from the request like an audit event's, and the
   worker binds it while a consumer runs: its log lines join the API call's.
-- **Delivered events are deleted after seven days** by the worker; dead ones stay until an operator
-  retries them.
+- **Delivered events are deleted after seven days** by the worker, once a day; dead ones stay until
+  an operator fixes the cause and revives them: `pricewright-admin dead-letters` lists them,
+  `pricewright-admin retry-dead-letters` (some ids, or `--all`) makes them pending again, with no
+  attempts.
 
 ## Alternatives considered
 
