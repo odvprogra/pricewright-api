@@ -21,7 +21,7 @@ def f() -> Fixture:
 
 
 def events(f: Fixture) -> list[Event]:
-    return list(f.database.outbox_events.values())
+    return [stored.event for stored in f.database.outbox_events.values()]
 
 
 async def test_approving_a_quote_leaves_an_event_for_whoever_submitted_it(f: Fixture) -> None:

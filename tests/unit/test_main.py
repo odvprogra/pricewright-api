@@ -1,5 +1,7 @@
 import io
 import json
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +9,7 @@ import pytest
 import uvicorn
 
 from pricewright import main as composition
+from pricewright.domain.events import Event, EventType
 from pricewright.infrastructure.logging import configure_logging, current_request_id
 from pricewright.settings import Settings
 
@@ -64,3 +67,59 @@ async def test_a_job_run_carries_a_request_id_of_its_own_and_logs_its_count() ->
     assert seen[0] is not None
     assert seen[0] != seen[1]
     assert current_request_id() is None
+
+
+async def test_a_job_run_that_changed_nothing_logs_nothing() -> None:
+    stream = io.StringIO()
+    configure_logging("INFO", json=True, stream=stream)
+
+    async def relay() -> int:
+        return 0
+
+    await composition.job("events.relayed", relay)()
+
+    assert stream.getvalue() == ""
+
+
+def _approved(request_id: str | None) -> Event:
+    return Event(
+        id=uuid.uuid7(),
+        tenant_id=uuid.uuid7(),
+        type=EventType.QUOTE_APPROVED,
+        aggregate_id=uuid.uuid7(),
+        occurred_at=datetime(2026, 10, 15, 12, tzinfo=UTC),
+        request_id=request_id,
+    )
+
+
+async def test_a_traced_consumer_logs_with_the_event_s_request_id() -> None:
+    stream = io.StringIO()
+    configure_logging("INFO", json=True, stream=stream)
+    event = _approved("req-approve")
+    seen: list[str | None] = []
+
+    async def notify(_: Event) -> None:
+        seen.append(current_request_id())
+
+    await composition.traced(notify)(event)
+
+    [line] = (json.loads(line) for line in stream.getvalue().splitlines())
+    assert seen == ["req-approve"]
+    assert (line["event"], line["request_id"]) == ("event.delivered", "req-approve")
+    assert (line["event_id"], line["event_type"]) == (str(event.id), "quote.approved")
+    assert current_request_id() is None
+
+
+async def test_a_traced_consumer_logs_a_failure_and_lets_it_through() -> None:
+    stream = io.StringIO()
+    configure_logging("INFO", json=True, stream=stream)
+
+    async def refuse(_: Event) -> None:
+        raise ConnectionError("the mail server is down")
+
+    with pytest.raises(ConnectionError):
+        await composition.traced(refuse)(_approved(None))
+
+    [line] = (json.loads(line) for line in stream.getvalue().splitlines())
+    assert (line["event"], line["level"]) == ("event.failed", "error")
+    assert line["exception"][0]["exc_type"] == "ConnectionError"

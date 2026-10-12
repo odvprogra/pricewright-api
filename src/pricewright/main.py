@@ -18,7 +18,9 @@ from pricewright import __version__, cli
 from pricewright.api.app import create_app
 from pricewright.api.dependencies import Services
 from pricewright.application.housekeeping import expire_offers, purge_idempotency_keys
+from pricewright.application.outbox import Consumer, relay_events
 from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
+from pricewright.domain.events import Event, EventType
 from pricewright.infrastructure.clock import utc_now
 from pricewright.infrastructure.database import create_engine, create_session_factory, ping
 from pricewright.infrastructure.logging import configure_logging
@@ -34,6 +36,8 @@ EXPIRY_INTERVAL = timedelta(minutes=10)
 """How often the worker persists expired offers; correctness never waits for it (ADR-0005)."""
 PURGE_INTERVAL = timedelta(hours=1)
 """How often the worker deletes expired idempotency keys, which already count as absent."""
+RELAY_INTERVAL = timedelta(seconds=1)
+"""How often the worker relays the outbox's due events (ADR-0008)."""
 
 
 def units_of_work(engine: AsyncEngine) -> UnitOfWorkFactory:
@@ -134,14 +138,38 @@ def admin() -> None:
 
 def job(event: str, run: Callable[[], Awaitable[int]]) -> Callable[[], Awaitable[None]]:
     """One run of a worker job: an id of its own, which everything it logs and audits carries as
-    its request id (ADR-0026), and one line saying how many records it changed."""
+    its request id (ADR-0026), and one line saying how many records it changed, if any."""
 
     async def run_once() -> None:
         with structlog.contextvars.bound_contextvars(request_id=str(uuid.uuid7())):
             count = await run()
-            structlog.get_logger(__name__).info(event, count=count)
+            if count:
+                structlog.get_logger(__name__).info(event, count=count)
 
     return run_once
+
+
+def traced(consumer: Consumer) -> Consumer:
+    """A consumer whose log lines carry the event's id, type and request id, so they join the
+    API call that caused it (ADR-0008); it logs the delivery, or the failure it lets through."""
+
+    async def consume(event: Event) -> None:
+        with structlog.contextvars.bound_contextvars(
+            request_id=event.request_id, event_id=str(event.id), event_type=event.type.value
+        ):
+            try:
+                await consumer(event)
+            except Exception:
+                structlog.get_logger(__name__).exception("event.failed")
+                raise
+            structlog.get_logger(__name__).info("event.delivered")
+
+    return consume
+
+
+def event_consumers() -> dict[EventType, Consumer]:
+    """What reacts to each event type; a type without one is delivered at once (ADR-0008)."""
+    return {}
 
 
 def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
@@ -149,7 +177,10 @@ def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
     unit_of_work = units_of_work(engine)
     expire = partial(expire_offers, unit_of_work=unit_of_work, clock=utc_now)
     purge_keys = partial(purge_idempotency_keys, unit_of_work=unit_of_work, clock=utc_now)
+    consumers = {kind: traced(consumer) for kind, consumer in event_consumers().items()}
+    relay = partial(relay_events, unit_of_work=unit_of_work, consumers=consumers, clock=utc_now)
     return [
+        PeriodicTask("relay_events", RELAY_INTERVAL, job("events.relayed", relay)),
         PeriodicTask("expire_offers", EXPIRY_INTERVAL, job("offers.expired", expire)),
         PeriodicTask(
             "purge_idempotency_keys",

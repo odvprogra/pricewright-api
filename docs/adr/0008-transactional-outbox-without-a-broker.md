@@ -57,12 +57,13 @@ Practice:
   `FOR UPDATE SKIP LOCKED`, each the earliest pending event of its aggregate, so two relays never
   hold the same event and an aggregate's events are delivered in order. It hands each to its
   consumer and records the outcome in the same transaction: a crash before the commit releases the
-  events, which are delivered again (at least once).
+  events, which are delivered again (at least once). It claims again until nothing is due, so an
+  aggregate's next event follows in the same run.
 - **Failures.** A transient failure is retried after a random wait up to `5 s × 2^(attempts − 1)`,
-  capped at an hour (full jitter), for up to twelve attempts (about two and a half hours at most). A
-  permanent failure (no consumer can ever succeed, such as an address the mail server refuses) and
-  the last attempt make the event `dead`: kept with its last error for an operator, and no longer
-  holding back its aggregate's later events.
+  capped at an hour and never under a second (full jitter), for up to twelve attempts (about two and
+  a half hours at most). A permanent failure (no consumer can ever succeed, such as an address the
+  mail server refuses) and the last attempt make the event `dead`: kept with its last error for an
+  operator, and no longer holding back its aggregate's later events.
 - **Consumers are idempotent**; an email cannot be, so it is sent at least once, with a `Message-ID`
   derived from the event's id, which marks a duplicate as one. An event type without a consumer is
   delivered at once: emails are not sent for events written before their consumer existed.
