@@ -77,7 +77,8 @@ Rules the code relies on:
 - Mutable aggregates carry a `version`: ETag out, `If-Match` in (412/428, ADR-0012).
 - Every route with an id needs a case in `tests/isolation_cases.py` (a guard test fails otherwise).
 - Use cases that change a record append its audit event in the same unit of work
-  (`application/audit.py`, ADR-0013).
+  (`application/audit.py`, ADR-0013); changes something reacts to (approve, reject, send) also add
+  an event to `uow.outbox` there (`domain/events.py`, ADR-0008).
 - Lists take whitelisted filters and `sort`; cursors are bound to the query (`api/pagination.py`,
   ADR-0014). Response values from a growing set are strings with `examples` (ADR-0015).
 - Prices come only from the pricing engine (`domain/pricing.py`, ADR-0004); responses leave out

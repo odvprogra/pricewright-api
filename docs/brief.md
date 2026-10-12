@@ -129,8 +129,9 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
   with scoped API keys. Kept minimal; an ADR documents why there is no external IdP.
 - **Transactional outbox**: domain events written in the same transaction as the state change; a
   worker relays them using `SELECT ... FOR UPDATE SKIP LOCKED`. Consumers: PDF generation, email
-  (Mailpit in dev). No Redis or broker — justified in an ADR. Audit events do not wait for it: they
-  are written in the same transaction as the change
+  (Mailpit in dev). No Redis or broker
+  ([ADR-0008](adr/0008-transactional-outbox-without-a-broker.md)). Audit events do not wait for it:
+  they are written in the same transaction as the change
   ([ADR-0013](adr/0013-append-only-audit-events-in-the-same-transaction.md)).
 - PDF generation of quotes (WeasyPrint or similar) in the worker.
 - `pricewright-web` (separate repo, from M7): Next.js; its API client is generated from a pinned
@@ -213,7 +214,7 @@ Agreed for the presentable checkpoint:
 | 0005 | [Quote lifecycle: a transition table, revisions, expiry by the clock](adr/0005-quote-lifecycle-as-a-transition-table.md)                | M4        |
 | 0006 | [Shared-schema multi-tenancy, isolated by construction](adr/0006-shared-schema-multi-tenancy.md)                                        | M1        |
 | 0007 | [Authentication for users and service accounts](adr/0007-authentication-for-users-and-service-accounts.md)                              | M1        |
-| 0008 | Transactional outbox without a broker                                                                                                   | M5        |
+| 0008 | [Transactional outbox without a broker](adr/0008-transactional-outbox-without-a-broker.md)                                              | M5        |
 | 0009 | [404 for another tenant's resources, 403 for missing permissions](adr/0009-not-found-for-other-tenants-resources.md)                    | M1        |
 | 0010 | Supplier price change proposals                                                                                                         | M11       |
 | 0011 | [Repository and Unit of Work ports](adr/0011-repository-and-unit-of-work-ports.md) (handbook §5: every pattern gets an ADR)             | M1        |

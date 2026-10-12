@@ -231,7 +231,8 @@ flowchart LR
   cancelling those) (ADR-0007, ADR-0017, ADR-0023).
 - Creations take an optional `Idempotency-Key`, checked first and remembered in the same unit of
   work as what it created; a retry gets that resource back (ADR-0022).
-- Every change appends its audit event in the same unit of work (ADR-0013).
+- Every change appends its audit event in the same unit of work (ADR-0013); a change something
+  reacts to adds an event to the outbox there too, for the worker to deliver (ADR-0008).
 - Lists filter and sort through whitelisted parameters and page with keyset cursors bound to the
   query (ADR-0014).
 - Money is a `Decimal` with its currency, never a float, and travels as a decimal string (ADR-0003).

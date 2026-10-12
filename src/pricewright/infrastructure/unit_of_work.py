@@ -15,6 +15,7 @@ from pricewright.application.ports import (
     IdempotencyKeyRepository,
     IdentityLookup,
     OrderRepository,
+    OutboxRepository,
     PricingRuleRepository,
     ProductCategoryRepository,
     ProductRepository,
@@ -28,6 +29,7 @@ from pricewright.domain.errors import ConflictError
 from pricewright.infrastructure.housekeeping import SqlAlchemyHousekeeping
 from pricewright.infrastructure.idempotency import SqlAlchemyIdempotencyKeyRepository
 from pricewright.infrastructure.orders import SqlAlchemyOrderRepository
+from pricewright.infrastructure.outbox import SqlAlchemyOutboxRepository
 from pricewright.infrastructure.quotes import SqlAlchemyQuoteRepository
 from pricewright.infrastructure.repositories import (
     SqlAlchemyApiKeyRepository,
@@ -63,6 +65,7 @@ class SqlAlchemyUnitOfWork:
     quotes: QuoteRepository
     orders: OrderRepository
     idempotency_keys: IdempotencyKeyRepository
+    outbox: OutboxRepository
     identities: IdentityLookup
     housekeeping: Housekeeping
 
@@ -86,6 +89,7 @@ class SqlAlchemyUnitOfWork:
         self.quotes = SqlAlchemyQuoteRepository(self._session, self._scope)
         self.orders = SqlAlchemyOrderRepository(self._session, self._scope)
         self.idempotency_keys = SqlAlchemyIdempotencyKeyRepository(self._session, self._scope)
+        self.outbox = SqlAlchemyOutboxRepository(self._session, self._scope)
         self.identities = SqlAlchemyIdentityLookup(self._session)
         self.housekeeping = SqlAlchemyHousekeeping(self._session)
         return self

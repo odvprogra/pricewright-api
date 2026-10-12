@@ -1,7 +1,8 @@
 """Quotes: reps, managers and integrations build them; the pricing engine prices them (ADR-0019).
 
 Every use case binds the unit of work to the caller's tenant (ADR-0006), saves with the version the
-caller read (ADR-0012) and records its audit event in the same unit of work (ADR-0013).
+caller read (ADR-0012) and records its audit event in the same unit of work (ADR-0013); approving,
+rejecting and sending also add an event for the worker to deliver (ADR-0008).
 """
 
 from collections.abc import Callable, Iterable, Sequence
@@ -33,6 +34,7 @@ from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditAction, AuditResourceType, changed, created, removed
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.errors import NotFoundError, StaleVersionError
+from pricewright.domain.events import EventType, quote_event
 from pricewright.domain.idempotency import IdempotentRequest
 from pricewright.domain.numbering import document_number
 from pricewright.domain.orders import Order
@@ -296,8 +298,10 @@ async def _transition(
     expected_version: int,
     unit_of_work: UnitOfWorkFactory,
     clock: Clock,
+    event: EventType | None = None,
 ) -> Quote:
-    """Load the quote at the caller's version, move it, save it and record the move."""
+    """Load the quote at the caller's version, move it, save it and record the move, with the
+    event other parts react to, if the move has one."""
     principal.require(permission)
     now = clock()
     async with unit_of_work() as uow:
@@ -309,6 +313,8 @@ async def _transition(
         await record(
             uow, principal, action, quote.id, changed(before, quote_fields(quote)), now=now
         )
+        if event is not None:
+            await uow.outbox.add(quote_event(event, quote, Actor.of(principal), now=now))
         await uow.commit()
     return quote
 
@@ -379,6 +385,7 @@ async def send_quote(
         expected_version=expected_version,
         unit_of_work=unit_of_work,
         clock=clock,
+        event=EventType.QUOTE_SENT,
     )
 
 
@@ -522,11 +529,13 @@ async def _decide(
     action: AuditAction,
     decide: Callable[[Quote, Actor, datetime], None],
     *,
+    event: EventType,
     expected_version: int,
     unit_of_work: UnitOfWorkFactory,
     clock: Clock,
 ) -> Quote:
-    """A person with ``quotes:approve`` who did not build the quote decides (ADR-0020)."""
+    """A person with ``quotes:approve`` who did not build the quote decides (ADR-0020); the
+    event tells whoever submitted it (ADR-0008)."""
     principal.require(Permission.QUOTES_APPROVE)
     now = clock()
     async with unit_of_work() as uow:
@@ -539,6 +548,7 @@ async def _decide(
         if (comment := quote.approvals[-1].comment) is not None:
             changes["approval_comment"] = (None, comment)
         await record(uow, principal, action, quote.id, changes, now=now)
+        await uow.outbox.add(quote_event(event, quote, Actor.of(principal), now=now))
         await uow.commit()
     return quote
 
@@ -557,6 +567,7 @@ async def approve_quote(
         quote_id,
         AuditAction.QUOTE_APPROVED,
         lambda quote, by, now: quote.approve(by=by, comment=comment, now=now),
+        event=EventType.QUOTE_APPROVED,
         expected_version=expected_version,
         unit_of_work=unit_of_work,
         clock=clock,
@@ -578,6 +589,7 @@ async def reject_quote(
         quote_id,
         AuditAction.QUOTE_REJECTED,
         lambda quote, by, now: quote.reject(by=by, comment=comment, now=now),
+        event=EventType.QUOTE_REJECTED,
         expected_version=expected_version,
         unit_of_work=unit_of_work,
         clock=clock,
