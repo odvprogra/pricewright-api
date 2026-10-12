@@ -10,7 +10,11 @@ from decimal import Decimal
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from pricewright.application.housekeeping import expire_offers, purge_idempotency_keys
+from pricewright.application.housekeeping import (
+    expire_offers,
+    purge_delivered_events,
+    purge_idempotency_keys,
+)
 from pricewright.application.ports import UnitOfWork
 from pricewright.domain.audit import (
     SYSTEM_ACTOR_ID,
@@ -19,12 +23,13 @@ from pricewright.domain.audit import (
     AuditEvent,
     AuditResourceType,
 )
+from pricewright.domain.events import DeliveryStatus, Event, EventType
 from pricewright.domain.idempotency import KEY_LIFETIME, IdempotencyRecord, IdempotentRequest
 from pricewright.domain.pricing import RateOverride
 from pricewright.domain.quote_approvals import ApprovalStatus
 from pricewright.domain.quote_lifecycle import EXPIRABLE, QuoteStatus
 from pricewright.domain.quotes import LineChange, Quote
-from tests.fakes import FakeClock, FakeUnitOfWork, InMemoryDatabase
+from tests.fakes import FakeClock, FakeUnitOfWork, InMemoryDatabase, StoredEvent
 from tests.unit.quote_data import (
     BOLTS,
     MANAGER,
@@ -247,3 +252,27 @@ async def test_purge_works_through_more_keys_than_one_batch() -> None:
 
     assert purged == 5
     assert database.idempotency_keys == {}
+
+
+async def test_purge_deletes_events_delivered_a_week_ago_and_keeps_the_rest() -> None:
+    clock = FakeClock(NOW)
+
+    def stored_event(
+        status: DeliveryStatus = DeliveryStatus.PENDING, delivered_at: datetime | None = None
+    ) -> StoredEvent:
+        item = Event(uuid.uuid7(), TENANT, EventType.QUOTE_SENT, uuid.uuid7(), occurred_at=NOW)
+        return StoredEvent(item, available_at=NOW, status=status, delivered_at=delivered_at)
+
+    old = stored_event(status=DeliveryStatus.DELIVERED, delivered_at=NOW - timedelta(days=8))
+    recent = stored_event(status=DeliveryStatus.DELIVERED, delivered_at=NOW - timedelta(days=6))
+    dead = stored_event(status=DeliveryStatus.DEAD)
+    waiting = stored_event()
+    database = InMemoryDatabase(outbox_events={s.event.id: s for s in (old, recent, dead, waiting)})
+
+    def unit_of_work() -> UnitOfWork:
+        return FakeUnitOfWork(database)
+
+    purged = await purge_delivered_events(unit_of_work=unit_of_work, clock=clock, batch=1)
+
+    assert purged == 1
+    assert set(database.outbox_events) == {recent.event.id, dead.event.id, waiting.event.id}

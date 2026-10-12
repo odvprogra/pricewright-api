@@ -804,6 +804,8 @@ class OutboxEventRecord(Base):
             "position",
             postgresql_where=text("status = 'pending'"),
         ),
+        # The worker's purge of delivered events (ADR-0008).
+        Index(None, "delivered_at", postgresql_where=text("status = 'delivered'")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)

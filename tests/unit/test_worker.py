@@ -183,7 +183,12 @@ async def test_run_worker_starts_the_service_tasks_and_stops_when_told() -> None
 
     started, stopped = _json_lines(stream)
     assert started["event"] == "worker.started"
-    assert started["tasks"] == ["relay_events", "expire_offers", "purge_idempotency_keys"]
+    assert started["tasks"] == [
+        "relay_events",
+        "expire_offers",
+        "purge_idempotency_keys",
+        "purge_delivered_events",
+    ]
     assert stopped["event"] == "worker.stopped"
 
 

@@ -1,4 +1,5 @@
 import io
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
@@ -6,8 +7,15 @@ import pytest
 
 from pricewright import cli
 from pricewright.application.ports import UnitOfWork
+from pricewright.domain.events import DeliveryStatus, Event, EventType
 from pricewright.domain.users import Role
-from tests.fakes import FakeClock, FakePasswordHasher, FakeUnitOfWork, InMemoryDatabase
+from tests.fakes import (
+    FakeClock,
+    FakePasswordHasher,
+    FakeUnitOfWork,
+    InMemoryDatabase,
+    StoredEvent,
+)
 
 PASSWORD = "northfield admin passphrase"
 CREATE_NORTHFIELD = [
@@ -204,3 +212,59 @@ async def test_seed_check_only_says_that_demo_data_may_be_loaded() -> None:
     assert exit_code == cli.EXIT_OK
     assert terminal.stdout.getvalue() == "Demo data may be loaded here.\n"
     assert database == InMemoryDatabase()
+
+
+def _dead_outbox() -> tuple[InMemoryDatabase, list[Event]]:
+    now = FakeClock().now
+    tenant = uuid.uuid7()
+    dead = [
+        Event(uuid.uuid7(), tenant, EventType.QUOTE_SENT, uuid.uuid7(), occurred_at=now)
+        for _ in range(2)
+    ]
+    database = InMemoryDatabase(
+        outbox_events={
+            item.id: StoredEvent(
+                item,
+                available_at=now,
+                status=DeliveryStatus.DEAD,
+                attempts=12,
+                last_error="TimeoutError: slow",
+            )
+            for item in dead
+        }
+    )
+    return database, dead
+
+
+async def test_dead_letters_lists_the_events_the_relay_gave_up_on() -> None:
+    (database, dead), terminal = _dead_outbox(), Terminal()
+
+    exit_code = await run(["dead-letters"], terminal, database)
+
+    assert exit_code == cli.EXIT_OK
+    header, *rows = terminal.stdout.getvalue().splitlines()
+    assert header == "2 dead letters (oldest first, at most 100):"
+    assert rows == [
+        f"  {item.id}  quote.sent      quote {item.aggregate_id}  12 attempts  TimeoutError: slow"
+        for item in dead
+    ]
+
+
+async def test_retry_dead_letters_revives_the_events_named_or_all() -> None:
+    (database, dead), terminal = _dead_outbox(), Terminal()
+
+    first = await run(["retry-dead-letters", str(dead[0].id)], terminal, database)
+    rest = await run(["retry-dead-letters", "--all"], terminal, database)
+
+    assert (first, rest) == (cli.EXIT_OK, cli.EXIT_OK)
+    assert terminal.stdout.getvalue().splitlines() == [
+        "1 dead letters will be delivered again.",
+        "1 dead letters will be delivered again.",
+    ]
+    statuses = {stored.status for stored in database.outbox_events.values()}
+    assert statuses == {DeliveryStatus.PENDING}
+
+
+async def test_retry_dead_letters_needs_event_ids_or_all() -> None:
+    with pytest.raises(SystemExit):
+        await run(["retry-dead-letters"], Terminal(), InMemoryDatabase())

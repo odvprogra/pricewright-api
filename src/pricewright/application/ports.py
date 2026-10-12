@@ -487,8 +487,17 @@ class DeliveryOutcome:
     error: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class DeadLetter:
+    """An event the relay gave up on (ADR-0008), with what its last failure said."""
+
+    event: Event
+    attempts: int
+    error: str | None
+
+
 class OutboxRelay(Protocol):
-    """The worker's side of the outbox, across tenants (ADR-0008)."""
+    """The worker's and the operator's side of the outbox, across tenants (ADR-0008)."""
 
     async def claim(self, now: datetime, *, limit: int) -> list[PendingEvent]:
         """Up to ``limit`` pending events available at ``now``, oldest first, each the earliest
@@ -498,6 +507,15 @@ class OutboxRelay(Protocol):
 
     async def record(self, event_id: UUID, outcome: DeliveryOutcome) -> None:
         """Store what the delivery of a claimed event left."""
+        ...
+
+    async def dead_letters(self, *, limit: int) -> list[DeadLetter]:
+        """Up to ``limit`` dead events of every tenant, oldest first."""
+        ...
+
+    async def revive(self, event_ids: Collection[UUID] | None, *, now: datetime) -> int:
+        """Make these dead events (every one, for ``None``) pending again, as if new: no
+        attempts, due at ``now``. Ids that are not dead are left alone. Return how many."""
         ...
 
 
@@ -541,6 +559,11 @@ class Housekeeping(Protocol):
     ) -> list[TenantRecordRef]:
         """Up to ``limit`` offers in flight (pending approval, approved or sent) whose
         ``valid_until`` is before ``today``, of every tenant, by quote id after ``after``."""
+        ...
+
+    async def purge_delivered_events(self, before: datetime, *, limit: int) -> int:
+        """Delete up to ``limit`` events of any tenant delivered before ``before`` (ADR-0008).
+        Return how many."""
         ...
 
     async def purge_idempotency_keys(self, now: datetime, *, limit: int) -> int:

@@ -7,11 +7,13 @@ permanent one, or the last attempt, leaves the event dead for an operator.
 """
 
 import random
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
 from datetime import datetime, timedelta
+from uuid import UUID
 
 from pricewright.application.ports import (
     Clock,
+    DeadLetter,
     DeliveryOutcome,
     PendingEvent,
     UnitOfWorkFactory,
@@ -92,3 +94,20 @@ async def relay_events(
         if not due:
             return claimed
         claimed += len(due)
+
+
+async def list_dead_letters(*, unit_of_work: UnitOfWorkFactory, limit: int) -> list[DeadLetter]:
+    """The events the relay gave up on, oldest first, for an operator to look into."""
+    async with unit_of_work() as uow:
+        return await uow.outbox_relay.dead_letters(limit=limit)
+
+
+async def revive_dead_letters(
+    event_ids: Collection[UUID] | None, *, unit_of_work: UnitOfWorkFactory, clock: Clock
+) -> int:
+    """Give dead events (every one, for ``None``) a new round of attempts, once an operator has
+    fixed what made them fail. Return how many."""
+    async with unit_of_work() as uow:
+        revived = await uow.outbox_relay.revive(event_ids, now=clock())
+        await uow.commit()
+    return revived

@@ -42,6 +42,8 @@ just openapi
 just seed                                       # reset the local database, load the demo
 uv run pricewright-admin create-tenant --help   # operator commands (src/pricewright/cli.py)
 uv run pricewright-admin seed --help            # demo data: --as-of, --seed, --check
+uv run pricewright-admin dead-letters           # events the outbox relay gave up on (ADR-0008)
+uv run pricewright-admin retry-dead-letters --all
 ```
 
 `just check` must pass before a task is considered done.
