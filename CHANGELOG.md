@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/odvprogra/pricewright-api/compare/v0.7.0...v0.8.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* persist expired offers from the worker, audited as the system ([#82](https://github.com/odvprogra/pricewright-api/issues/82))
+
+### Features
+
+* end the demo history with the worker's expiry job ([#83](https://github.com/odvprogra/pricewright-api/issues/83)) ([de1c224](https://github.com/odvprogra/pricewright-api/commit/de1c224d3dd8fbb91de1e194213e60d324e9110e))
+* list and revive dead letters, and purge delivered events ([#88](https://github.com/odvprogra/pricewright-api/issues/88)) ([a8509fc](https://github.com/odvprogra/pricewright-api/commit/a8509fcf45b32669658467063229db4dccd24741))
+* persist expired offers from the worker, audited as the system ([#82](https://github.com/odvprogra/pricewright-api/issues/82)) ([77f5a6f](https://github.com/odvprogra/pricewright-api/commit/77f5a6fb5b9983c3f5a8ae8abe11306a8d0ab71a))
+* purge expired idempotency keys from the worker ([#85](https://github.com/odvprogra/pricewright-api/issues/85)) ([72a877b](https://github.com/odvprogra/pricewright-api/commit/72a877bd021221ea496d774898bc40ba573100a4))
+* relay outbox events from the worker, in order per aggregate, with retries ([#87](https://github.com/odvprogra/pricewright-api/issues/87)) ([6e8e4e2](https://github.com/odvprogra/pricewright-api/commit/6e8e4e25bc5fd14c14bc4b61e6781c9a757b58f4))
+* store events in a transactional outbox with the changes they follow ([#86](https://github.com/odvprogra/pricewright-api/issues/86)) ([a85ec21](https://github.com/odvprogra/pricewright-api/commit/a85ec21bab7b4f221cfe68d3f40d1f817bbf0350))
+
 ## [0.7.0](https://github.com/odvprogra/pricewright-api/compare/v0.6.0...v0.7.0) (2026-10-07)
 
 
