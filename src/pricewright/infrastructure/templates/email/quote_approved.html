@@ -1,0 +1,16 @@
+{% extends "email/base.html" %}
+{% block title %}Quote {{ number }} approved{% endblock %}
+{% block body %}
+<p>Hi {{ rep }},</p>
+<p>
+  {{ decider }} approved quote <strong>{{ number }}</strong> for {{ customer }}:
+  <strong>{{ total | amount }} {{ total.currency }}</strong>.
+</p>
+{% if comment %}
+<p style="padding: 8px 12px; background: #f3f4f6;">{{ comment }}</p>
+{% endif %}
+<p>
+  The quote's PDF is attached. Send it to the customer from Pricewright when you are ready: the offer
+  is valid until {{ valid_until | long_date }}.
+</p>
+{% endblock %}

@@ -24,11 +24,13 @@ from pricewright.application.housekeeping import (
 )
 from pricewright.application.outbox import Consumer, relay_events
 from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
+from pricewright.application.quote_emails import QuoteEmails
 from pricewright.domain.events import Event, EventType
 from pricewright.infrastructure.clock import utc_now
 from pricewright.infrastructure.database import create_engine, create_session_factory, ping
 from pricewright.infrastructure.documents import WeasyPrintQuoteDocuments
 from pricewright.infrastructure.logging import configure_logging
+from pricewright.infrastructure.mailer import SmtpMailer, SmtpSettings
 from pricewright.infrastructure.passwords import Argon2PasswordHasher
 from pricewright.infrastructure.tokens import JwtAccessTokens
 from pricewright.infrastructure.unit_of_work import SqlAlchemyUnitOfWork
@@ -175,17 +177,40 @@ def traced(consumer: Consumer) -> Consumer:
     return consume
 
 
-def event_consumers() -> dict[EventType, Consumer]:
+def mailer(settings: Settings) -> SmtpMailer:
+    password = settings.smtp_password
+    return SmtpMailer(
+        SmtpSettings(
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            sender=settings.email_sender,
+            username=settings.smtp_username,
+            password=None if password is None else password.get_secret_value(),
+            starttls=settings.smtp_starttls,
+            timeout=settings.smtp_timeout_seconds,
+        )
+    )
+
+
+def event_consumers(
+    unit_of_work: UnitOfWorkFactory, settings: Settings
+) -> dict[EventType, Consumer]:
     """What reacts to each event type; a type without one is delivered at once (ADR-0008)."""
-    return {}
+    emails = QuoteEmails(
+        unit_of_work=unit_of_work,
+        documents=WeasyPrintQuoteDocuments(),
+        mailer=mailer(settings),
+        clock=utc_now,
+    )
+    return {kind: traced(consumer) for kind, consumer in emails.consumers().items()}
 
 
-def worker_tasks(engine: AsyncEngine) -> list[PeriodicTask]:
+def worker_tasks(engine: AsyncEngine, settings: Settings) -> list[PeriodicTask]:
     """The worker's jobs (ADR-0026); a failed run is logged and tried again at the next turn."""
     unit_of_work = units_of_work(engine)
     expire = partial(expire_offers, unit_of_work=unit_of_work, clock=utc_now)
     purge_keys = partial(purge_idempotency_keys, unit_of_work=unit_of_work, clock=utc_now)
-    consumers = {kind: traced(consumer) for kind, consumer in event_consumers().items()}
+    consumers = event_consumers(unit_of_work, settings)
     relay = partial(relay_events, unit_of_work=unit_of_work, consumers=consumers, clock=utc_now)
     purge_events = partial(purge_delivered_events, unit_of_work=unit_of_work, clock=utc_now)
     return [
@@ -208,7 +233,7 @@ async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
     """Run the worker's tasks until ``stop`` is set."""
     engine = create_engine(settings.database_url.get_secret_value())
     try:
-        await Worker(worker_tasks(engine)).run(stop)
+        await Worker(worker_tasks(engine, settings)).run(stop)
     finally:
         await engine.dispose()
 

@@ -23,6 +23,7 @@ from pricewright.demo.seed import (
     GO_LIVE_DAYS,
     SeededTenant,
     SeedReport,
+    deliver_history,
     load_tenant,
     run_expiry,
     seed_demo,
@@ -73,6 +74,7 @@ async def _load(
         password=DEMO_PASSWORD,
     )
     assert await run_expiry(unit_of_work, as_of) == loaded.counts["expired offers"]
+    await deliver_history(unit_of_work, as_of)
     return loaded
 
 
@@ -151,6 +153,23 @@ def test_seed_demo_keeps_every_business_rule_in_its_data(seeded: Seeded) -> None
     database, report = seeded
 
     asyncio.run(_check(database, AS_OF, *report.tenants))  # assertions in tests/demo_invariants
+
+
+def test_seed_demo_delivers_its_history_s_events_at_midnight_without_emails(
+    seeded: Seeded,
+) -> None:
+    database, _ = seeded
+
+    stored = list(database.outbox_events.values())
+
+    assert Counter(s.event.type.value for s in stored) == {
+        "quote.approved": 23,
+        "quote.rejected": 9,
+        "quote.sent": 124,
+    }
+    assert {(s.status.value, s.attempts, s.delivered_at) for s in stored} == {
+        ("delivered", 0, MIDNIGHT)
+    }
 
 
 def test_seed_demo_leaves_quotes_in_every_state_of_their_lifecycle(seeded: Seeded) -> None:

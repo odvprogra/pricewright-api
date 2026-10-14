@@ -3,8 +3,9 @@
 They hold for any seed and as-of date, on the fakes and on PostgreSQL: totals reconcile, four eyes
 decide every approval, nothing that needed approval went out without one, every converted quote has
 exactly one order with its prices, numbers have no gaps, revisions are linked, nothing points to
-another tenant, people act before the as-of date, and the worker's expiry job, at its midnight, has
-stored every offer nobody answered as expired (ADR-0026).
+another tenant, people act before the as-of date, the worker's expiry job, at its midnight, has
+stored every offer nobody answered as expired (ADR-0026), and no event of the history is left for
+the worker to deliver (ADR-0028).
 """
 
 from collections import defaultdict
@@ -33,6 +34,7 @@ from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
 
 LIMIT = 100_000
+END_OF_TIME = datetime(9999, 1, 1, tzinfo=UTC)
 OUT_WITH_APPROVAL = {
     QuoteStatus.APPROVED,
     QuoteStatus.SENT,
@@ -204,9 +206,17 @@ def check_expiry(data: TenantData, as_of: date) -> None:
     assert all(event.actor_id == SYSTEM_ACTOR_ID for event in automatic)
 
 
+async def check_delivered(unit_of_work: UnitOfWorkFactory) -> None:
+    """No event waits for the worker, now or ever, and none is dead: no old emails go out."""
+    async with unit_of_work() as uow:
+        assert await uow.outbox_relay.claim(END_OF_TIME, limit=1) == []
+        assert await uow.outbox_relay.dead_letters(limit=1) == []
+
+
 async def check_demo(
     unit_of_work: UnitOfWorkFactory, tenant_ids: Iterable[UUID], as_of: date
 ) -> None:
+    await check_delivered(unit_of_work)
     for tenant_id in tenant_ids:
         data = await load(unit_of_work, tenant_id)
         check_totals(data)
