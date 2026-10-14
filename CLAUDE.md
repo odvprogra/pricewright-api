@@ -22,8 +22,9 @@ its universe (Pricewright, Northfield Supply, Larkspur Tool Co.) are fictional.
 - Engineering standards are mandatory:
   [HANDBOOK.md](https://github.com/odvprogra/engineering-standards/blob/v1/HANDBOOK.md)
 - Project brief: [docs/brief.md](docs/brief.md). Business rules live in its §4.
-- Work one milestone at a time. Current milestone: **M5** (transactional outbox, worker, PDF, email,
-  expiry job, idempotency-key purge).
+- Work one milestone at a time. M5 (transactional outbox, worker, PDF, email) is done; next come
+  **M12** (UX and brand) and M7 (`pricewright-web`), outside this repository, then M8 (ops and
+  deploy).
 - Propose a short plan before coding; ask before deviating from the brief.
 - Domain and design decisions follow researched industry practice, with sources in the ADR.
 - Write tests with the code. Domain tests use no mocks; use fakes for ports.

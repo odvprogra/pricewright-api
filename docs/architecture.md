@@ -15,6 +15,8 @@ flowchart LR
     mcp[erp-mcp-server<br/>MCP tools for LLMs] -->|HTTPS / JSON, API key| service
     copilot[ops-copilot<br/>document intake] -->|HTTPS / JSON, API key| service
     service -->|SQL| db[(PostgreSQL)]
+    service -->|SMTP| mail[Mail server<br/>Mailpit locally]
+    mail --> inboxes([Reps and customers])
 ```
 
 ## Containers
@@ -23,15 +25,21 @@ flowchart LR
 flowchart LR
     subgraph service[Pricewright API]
         api[api<br/>FastAPI, Problem Details, request IDs]
+        worker[worker<br/>outbox relay, periodic jobs]
         app[application<br/>use cases, ports]
         domain[domain<br/>business rules]
         infra[infrastructure<br/>adapters]
         api --> app
+        worker --> app
         app --> domain
         infra -.implements ports.-> app
     end
     infra --> db[(PostgreSQL 18)]
+    infra -->|SMTP| mail[Mail server]
 ```
+
+The API and the worker are two processes from one image (`pricewright-api` and
+`pricewright-api-worker`); they share nothing but the database.
 
 ## Who is calling, and which tenant
 
@@ -198,6 +206,40 @@ sequenceDiagram
     W->>DB: COMMIT: all of it or nothing; the lock ends
     U-->>C: 201, Location /orders/{id}, ETag "1"
 ```
+
+## After the commit: the outbox and the worker
+
+A change that something reacts to, such as an approval, writes an event to the outbox in the same
+transaction as the change and its audit event (ADR-0008). The worker's relay delivers it after the
+commit: an email goes out if and only if the change happened, at least once.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant U as Use case
+    participant DB as PostgreSQL
+    participant R as Relay (worker, every second)
+    participant E as Quote emails
+    participant M as Mail server
+    C->>U: POST /quotes/{id}/approve
+    U->>DB: the quote, its audit event and a quote.approved event: one COMMIT
+    U-->>C: 200
+    R->>DB: claim pending events FOR UPDATE SKIP LOCKED, the oldest of each quote first
+    R->>E: quote.approved, logged with the request's request_id
+    E->>DB: read the quote, the rep and the decision as they are now
+    E->>M: the email with the PDF, Message-ID from the event
+    R->>DB: delivered; or retried later, with backoff; or dead; then COMMIT
+```
+
+Replicas of the worker can run side by side: each claim skips the events another holds. The worker's
+jobs (ADR-0026):
+
+| Job                      | Every      | What it does                                                    |
+| ------------------------ | ---------- | --------------------------------------------------------------- |
+| `relay_events`           | second     | Delivers pending outbox events to their consumers (ADR-0008)    |
+| `expire_offers`          | 10 minutes | Stores offers past their date as expired, audited as the system |
+| `purge_idempotency_keys` | hour       | Deletes idempotency keys past their 24 hours (ADR-0022)         |
+| `purge_delivered_events` | day        | Deletes events delivered more than seven days ago (ADR-0008)    |
 
 ## Loading the demo
 
