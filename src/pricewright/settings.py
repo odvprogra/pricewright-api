@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     # Unset locally, a random secret per process: nothing to configure, and no secret in the repo.
     jwt_secret: SecretStr = Field(default_factory=lambda: SecretStr(secrets.token_urlsafe(32)))
     access_token_ttl_seconds: int = Field(default=15 * 60, ge=60, le=60 * 60)
+    # The worker's emails (ADR-0028). The defaults reach Mailpit from `just worker`.
+    smtp_host: str = "localhost"
+    smtp_port: int = Field(default=1025, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_starttls: bool = False
+    smtp_timeout_seconds: float = Field(default=10, gt=0, le=120)
+    email_sender: str = "quotes@pricewright.example"
 
     @field_validator("database_url")
     @classmethod

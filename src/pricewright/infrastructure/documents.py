@@ -16,6 +16,7 @@ from pricewright.domain.catalog import UnitOfMeasure
 from pricewright.domain.money import Money
 
 TEMPLATES = Path(__file__).parent / "templates"
+"""Quote documents and emails, one family (handbook §14)."""
 UNIT_PRICE_PLACES = 4  # unit prices keep four places through the waterfall (ADR-0004)
 
 
@@ -55,10 +56,12 @@ def discount(line_list: Money, line_net: Money) -> Decimal:
 
 
 def environment() -> Environment:
+    """Templates with the documents' filters; HTML is escaped, plain text is not."""
     env = Environment(
         loader=FileSystemLoader(TEMPLATES),
         autoescape=select_autoescape(["html"]),
         undefined=StrictUndefined,
+        keep_trailing_newline=True,
     )
     env.filters.update(
         amount=amount,

@@ -18,9 +18,9 @@ dev:
     uv run alembic upgrade head
     uv run uvicorn pricewright.main:app_factory --factory --reload
 
-# Run the background worker (starts PostgreSQL in Docker and applies migrations); Ctrl+C stops it
+# Run the background worker (PostgreSQL and Mailpit in Docker, migrations applied); Ctrl+C stops it
 worker:
-    docker compose up --detach --wait postgres
+    docker compose up --detach --wait postgres mailpit
     uv run alembic upgrade head
     uv run pricewright-api-worker
 
