@@ -3,15 +3,20 @@
 Names combine an invented place with a trade, drawn from these lists rather than a fake-data
 library, so they read as the businesses a distributor serves and the set never changes with a
 library's release. Tax ids are shaped like a US EIN but start with 00, a prefix the IRS never
-assigns, so none can belong to a real company.
+assigns, so none can belong to a real company; emails use the reserved ``.example`` domain.
 """
 
 import random
+import re
 from collections.abc import Mapping
 
 from pricewright.application.customers import NewCustomer
 from pricewright.demo.randomness import between, chance, pick, shuffled
 from pricewright.domain.customers import CustomerTier
+
+WITHOUT_EMAIL = 8
+"""Every eighth customer has no email: its rep delivers its quotes by hand."""
+_NOT_ALPHANUMERIC = re.compile(r"[^a-z0-9]+")
 
 PLACES = (
     "Alderbrook",
@@ -97,6 +102,11 @@ def _names(rng: random.Random, count: int) -> list[str]:
     return names
 
 
+def purchasing_email(name: str) -> str:
+    """``purchasing@kestrel-bay-fabrication.example``: ``.example`` is reserved (RFC 2606)."""
+    return f"purchasing@{_NOT_ALPHANUMERIC.sub('-', name.lower()).strip('-')}.example"
+
+
 def demo_customers(
     rng: random.Random, *, account_prefix: str, tiers: Mapping[CustomerTier, int]
 ) -> tuple[NewCustomer, ...]:
@@ -112,6 +122,7 @@ def demo_customers(
                 tier=tier,
                 payment_terms_days=pick(rng, PAYMENT_TERMS[tier]),
                 tax_id=tax_id,
+                email=None if number % WITHOUT_EMAIL == 0 else purchasing_email(name),
             )
         )
     return tuple(customers)

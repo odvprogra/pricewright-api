@@ -130,6 +130,7 @@ def customer_fields(customer: Customer) -> dict[str, AuditValue]:
         "account_number": customer.account_number,
         "name": customer.name,
         "tax_id": customer.tax_id,
+        "email": customer.email,
         "tier": customer.tier.value,
         "payment_terms_days": customer.payment_terms_days,
         "is_active": customer.is_active,

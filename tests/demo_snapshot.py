@@ -150,7 +150,7 @@ async def _tenant(unit_of_work: UnitOfWorkFactory, tenant_id: UUID) -> Picture:
             for p in products
         ],
         "customers": [
-            (c.account_number, c.name, c.tier, c.payment_terms_days, c.tax_id, c.is_active)
+            (c.account_number, c.name, c.tier, c.payment_terms_days, c.tax_id, c.email, c.is_active)
             for c in customers
         ],
         "rules": [

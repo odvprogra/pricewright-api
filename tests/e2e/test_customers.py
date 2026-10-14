@@ -35,6 +35,24 @@ def bearer(role: Role = Role.SALES_REP) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+async def test_a_customer_s_email_is_added_changed_and_removed(client: httpx.AsyncClient) -> None:
+    created = await client.post(PATH, json=acme(email="Purchasing@Acme.Example"), headers=bearer())
+    location = created.headers["Location"]
+
+    changed = await client.patch(
+        location, json={"email": "orders@acme.example"}, headers=bearer() | {"If-Match": '"1"'}
+    )
+    removed = await client.patch(
+        location, json={"email": None}, headers=bearer() | {"If-Match": '"2"'}
+    )
+    invalid = await client.post(PATH, json=acme(account_number="C-2", email="x"), headers=bearer())
+
+    assert created.json()["email"] == "purchasing@acme.example"
+    assert changed.json()["email"] == "orders@acme.example"
+    assert removed.json()["email"] is None
+    assert (invalid.status_code, invalid.json()["code"]) == (422, "invalid_customer")
+
+
 async def test_a_rep_adds_a_customer_with_default_terms(client: httpx.AsyncClient) -> None:
     response = await client.post(PATH, json=acme(tax_id="de 123.456-789"), headers=bearer())
 

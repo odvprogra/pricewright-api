@@ -351,6 +351,7 @@ class CustomerRecord(Base):
     )
     name: Mapped[str] = mapped_column(String(MAX_CUSTOMER_NAME_LENGTH, collation=_UNICODE))
     tax_id: Mapped[str | None] = mapped_column(String(MAX_TAX_ID_LENGTH))
+    email: Mapped[str | None] = mapped_column(String(MAX_EMAIL_LENGTH))
     tier: Mapped[str] = mapped_column(String(10))
     payment_terms_days: Mapped[int] = mapped_column(SmallInteger)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())

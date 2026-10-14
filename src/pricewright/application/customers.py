@@ -37,6 +37,7 @@ class NewCustomer:
     tier: CustomerTier = CustomerTier.STANDARD
     payment_terms_days: int = DEFAULT_PAYMENT_TERMS_DAYS
     tax_id: str | None = None
+    email: str | None = None
 
 
 async def create_customer(
@@ -57,6 +58,7 @@ async def create_customer(
         tier=new.tier,
         payment_terms_days=new.payment_terms_days,
         tax_id=new.tax_id,
+        email=new.email,
     )
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
@@ -119,6 +121,7 @@ class CustomerChanges:
     tier: CustomerTier | None = None
     payment_terms_days: int | None = None
     tax_id: str | Keep | None = KEEP
+    email: str | Keep | None = KEEP
     is_active: bool | None = None
 
 
@@ -147,6 +150,7 @@ async def change_customer(
             tier=changes.tier,
             payment_terms_days=changes.payment_terms_days,
             tax_id=changes.tax_id,
+            email=changes.email,
             is_active=changes.is_active,
         )
         await uow.customers.save(customer)
