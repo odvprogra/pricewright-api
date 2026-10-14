@@ -133,7 +133,9 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
   ([ADR-0008](adr/0008-transactional-outbox-without-a-broker.md)). Audit events do not wait for it:
   they are written in the same transaction as the change
   ([ADR-0013](adr/0013-append-only-audit-events-in-the-same-transaction.md)).
-- PDF generation of quotes (WeasyPrint or similar) in the worker.
+- PDF generation of quotes (WeasyPrint or similar): rendered on request from the quote, by the API
+  and by the worker's email consumers, never stored
+  ([ADR-0027](adr/0027-quote-pdfs-rendered-on-request.md)).
 - `pricewright-web` (separate repo, from M7): Next.js; its API client is generated from a pinned
   `openapi.json` release asset of `pricewright-api`, the same way `erp-mcp-server` and `ops-copilot`
   consume the API.
@@ -233,6 +235,7 @@ Agreed for the presentable checkpoint:
 | 0024 | [Demo data through the use cases, from a seed and a date](adr/0024-demo-data-through-the-use-cases.md)                                  | —         |
 | 0025 | [Northfield's catalog from the demand dataset](adr/0025-northfield-catalog-from-the-demand-dataset.md)                                  | —         |
 | 0026 | [Worker jobs: persist what the clock decided, as the system](adr/0026-worker-jobs-persist-what-the-clock-decided.md)                    | M5        |
+| 0027 | [Quote PDFs: an HTML template printed with WeasyPrint, on request](adr/0027-quote-pdfs-rendered-on-request.md)                          | M5        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 

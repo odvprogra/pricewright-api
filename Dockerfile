@@ -27,6 +27,16 @@ FROM python:3.14-slim AS runtime
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 
+# WeasyPrint lays text out with Pango and HarfBuzz; DejaVu is the quote PDFs' font (ADR-0027).
+# fontconfig builds the system font cache here, at build time.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fontconfig fonts-dejavu-core \
+    && fc-cache --force \
+    && rm -rf /var/lib/apt/lists/*
+# The unprivileged user has no home; fontconfig still wants a cache directory it may write.
+ENV XDG_CACHE_HOME=/tmp/.cache
+
 WORKDIR /app
 COPY --from=build --chown=app:app /app/.venv /app/.venv
 # Migrations ship with the image and run as a release step: docker run <image> alembic upgrade head

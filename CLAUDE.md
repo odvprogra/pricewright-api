@@ -64,8 +64,9 @@ Read first: `main.py` (wiring), `application/ports.py` (unit of work and reposit
 `api/concurrency.py` (ETag / If-Match), `application/audit.py` (the audit trail),
 `api/pagination.py` (cursors), `domain/money.py`, `domain/pricing.py` (the engine),
 `domain/quote_lifecycle.py` (the transition table), `domain/quotes.py` (the quote aggregate),
-`domain/orders.py`, `application/idempotency.py` (`Idempotency-Key`), `tests/fakes.py`,
-`demo/seed.py` and `demo/stories.py` (the demo data).
+`domain/orders.py`, `application/idempotency.py` (`Idempotency-Key`), `domain/events.py` and
+`application/outbox.py` (the outbox and its relay), `application/documents.py` (quote PDFs),
+`tests/fakes.py`, `demo/seed.py` and `demo/stories.py` (the demo data).
 
 Rules the code relies on:
 

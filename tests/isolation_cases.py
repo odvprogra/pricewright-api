@@ -60,6 +60,7 @@ CASES = (
         headers={"If-Match": '"1"'},
     ),
     IsolationCase("GET", "/api/v1/quotes/{quote_id}"),
+    IsolationCase("GET", "/api/v1/quotes/{quote_id}/pdf"),
     IsolationCase(
         "PATCH",
         "/api/v1/quotes/{quote_id}",

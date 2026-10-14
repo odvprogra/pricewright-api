@@ -185,10 +185,14 @@ use cases, like the HTTP API. Details in [docs/architecture.md](docs/architectur
 | [ADR-0024](docs/adr/0024-demo-data-through-the-use-cases.md) Demo data through the use cases, from a seed and a date         | The demo shows the real rules at work; the same seed and day give the same data, never stale        |
 | [ADR-0025](docs/adr/0025-northfield-catalog-from-the-demand-dataset.md) A catalog from the demand dataset's top products     | Forecasts map one to one onto products, and no demand data or download is needed to run the demo    |
 | [ADR-0026](docs/adr/0026-worker-jobs-persist-what-the-clock-decided.md) Worker jobs, audited as the system                   | Expired offers are stored as such within minutes; replicas need no coordination                     |
+| [ADR-0027](docs/adr/0027-quote-pdfs-rendered-on-request.md) Quote PDFs rendered on request                                   | A PDF always matches its quote, shares the emails' template family and never shows costs            |
 
 ## Run it locally
 
-Requires [uv](https://docs.astral.sh/uv/) and [just](https://just.systems/), plus Docker.
+Requires [uv](https://docs.astral.sh/uv/) and [just](https://just.systems/), plus Docker. Quote PDFs
+need [Pango](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) (WeasyPrint's text
+layout): `libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0` on Debian or Ubuntu; on Windows,
+MSYS2's Pango with `WEASYPRINT_DLL_DIRECTORIES` set to its `bin` folder. The Docker image has them.
 
 ```sh
 just setup   # dependencies, git hooks, openapi.json

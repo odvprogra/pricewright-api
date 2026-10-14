@@ -23,6 +23,7 @@ from pricewright.api.idempotency import (
 from pricewright.api.money import MoneyJson
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.pricing import MarginFloorJson, MarginJson, StepJson, ratio
+from pricewright.application.documents import render_quote
 from pricewright.application.ports import QuoteQuery, QuoteSort, QuoteSummary
 from pricewright.application.quotes import (
     LineEdit,
@@ -81,6 +82,7 @@ _QUANTITY_PLACES = Decimal(1).scaleb(-QUANTITY_DECIMAL_PLACES)
 # What a client can ask for; the job that persists expiry (M5) is not a client action.
 _CLIENT_ACTIONS = [action for action in QuoteAction if action is not QuoteAction.EXPIRE]
 
+PDF = "application/pdf"
 _ERRORS: dict[int | str, dict[str, object]] = {
     401: {"description": "Missing or invalid credentials"},
     403: {"description": "Needs `quotes:read`, or `quotes:manage` for changes"},
@@ -432,6 +434,38 @@ async def add_quote(
     response.headers["Location"] = f"{router.prefix}/{quote.id}"
     mark_replayed(response, created.replayed)
     return _respond(response, quote, principal, services.clock())
+
+
+@router.get(
+    "/{quote_id}/pdf",
+    summary="The quote as a PDF for the customer",
+    description=(
+        "Rendered from the quote as it stands: a submitted quote never changes, and a draft, an "
+        "expired or a cancelled quote says so on the page. Never shows costs or margins "
+        "(ADR-0027)."
+    ),
+    response_class=Response,
+    responses=_ERRORS
+    | _NOT_FOUND
+    | {
+        200: {
+            "description": "The PDF, as an attachment named after the quote's number",
+            "content": {PDF: {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
+async def read_quote_pdf(
+    quote_id: UUID, principal: PrincipalDep, services: ServicesDep
+) -> Response:
+    rendered = await render_quote(
+        principal,
+        quote_id,
+        unit_of_work=services.unit_of_work,
+        documents=services.documents,
+        clock=services.clock,
+    )
+    disposition = f'attachment; filename="{rendered.filename}"'
+    return Response(rendered.content, media_type=PDF, headers={"Content-Disposition": disposition})
 
 
 @router.get("/{quote_id}", summary="One quote, line by line", responses=_ERRORS | _NOT_FOUND)
