@@ -36,6 +36,7 @@ from pricewright.domain.customers import (
     compact_tax_id,
 )
 from pricewright.domain.updates import KEEP
+from pricewright.domain.users import MAX_EMAIL_LENGTH
 
 router = APIRouter(prefix="/api/v1/customers", tags=["customers"])
 MAX_SEARCH_LENGTH = 100
@@ -50,6 +51,8 @@ _NOT_FOUND: dict[int | str, dict[str, object]] = {
 }
 _TAX_ID = "Spaces, dots, slashes and hyphens are ignored: `de 123.456-789` is `DE123456789`."
 _TERMS = "Net days to pay: 0 is due on receipt."
+_EMAIL = "Where quotes sent to the customer go, with their PDF; without one, the rep delivers them."
+_EMAIL_EXAMPLE = "purchasing@acme.example"
 
 
 class CustomerResponse(BaseModel):
@@ -59,6 +62,7 @@ class CustomerResponse(BaseModel):
     account_number: str
     name: str
     tax_id: str | None = Field(description="Compact: upper case, no separators.")
+    email: str | None = Field(description=_EMAIL)
     tier: CustomerTier
     payment_terms_days: int = Field(description=_TERMS)
     is_active: bool = Field(description="False once archived: kept for history.")
@@ -71,6 +75,7 @@ class CustomerResponse(BaseModel):
             account_number=customer.account_number,
             name=customer.name,
             tax_id=customer.tax_id,
+            email=customer.email,
             tier=customer.tier,
             payment_terms_days=customer.payment_terms_days,
             is_active=customer.is_active,
@@ -93,10 +98,14 @@ class CreateCustomerRequest(BaseModel):
     tier: CustomerTier = CustomerTier.STANDARD
     payment_terms_days: PaymentTerms = DEFAULT_PAYMENT_TERMS_DAYS
     tax_id: str | None = Field(default=None, max_length=_TAX_ID_INPUT_LENGTH, description=_TAX_ID)
+    email: str | None = Field(
+        default=None, max_length=MAX_EMAIL_LENGTH, description=_EMAIL, examples=[_EMAIL_EXAMPLE]
+    )
 
 
 class CustomerPatch(BaseModel):
-    """Only the fields sent change; `tax_id: null` removes it. The account number cannot."""
+    """Only the fields sent change; `tax_id: null` and `email: null` remove them. The account
+    number cannot change."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -104,6 +113,7 @@ class CustomerPatch(BaseModel):
     tier: CustomerTier | None = None
     payment_terms_days: PaymentTerms | None = None
     tax_id: str | None = Field(default=None, max_length=_TAX_ID_INPUT_LENGTH, description=_TAX_ID)
+    email: str | None = Field(default=None, max_length=MAX_EMAIL_LENGTH, description=_EMAIL)
     is_active: bool | None = Field(default=None, description="False archives the customer.")
 
     @model_validator(mode="after")
@@ -118,6 +128,7 @@ class CustomerPatch(BaseModel):
             tier=self.tier,
             payment_terms_days=self.payment_terms_days,
             tax_id=self.tax_id if "tax_id" in self.model_fields_set else KEEP,
+            email=self.email if "email" in self.model_fields_set else KEEP,
             is_active=self.is_active,
         )
 
@@ -220,6 +231,7 @@ async def add_customer(
             tier=body.tier,
             payment_terms_days=body.payment_terms_days,
             tax_id=body.tax_id,
+            email=body.email,
         ),
         unit_of_work=services.unit_of_work,
         clock=services.clock,

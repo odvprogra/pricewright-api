@@ -122,3 +122,28 @@ def test_customer_change_is_all_or_nothing() -> None:
         customer.change(name="Renamed", payment_terms_days=400)
 
     assert (customer.name, customer.payment_terms_days) == ("Acme Industrial", 60)
+
+
+def test_a_customer_email_is_trimmed_lower_cased_and_checked() -> None:
+    customer = Customer.create(
+        tenant_id=TENANT_ID,
+        account_number="C-1",
+        name="Acme",
+        email=" Purchasing@Acme.Example ",
+    )
+
+    assert customer.email == "purchasing@acme.example"
+    with pytest.raises(InvalidCustomerError, match="email"):
+        Customer.create(tenant_id=TENANT_ID, account_number="C-2", name="Acme", email="nobody")
+
+
+def test_customer_change_sets_keeps_or_clears_the_email() -> None:
+    customer = acme()
+
+    customer.change(email="Orders@Acme.Example")
+    set_to = customer.email
+    customer.change(name="Acme", email=KEEP)
+    kept = customer.email
+    customer.change(email=None)
+
+    assert (set_to, kept, customer.email) == ("orders@acme.example", "orders@acme.example", None)

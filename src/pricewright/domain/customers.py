@@ -11,6 +11,7 @@ from enum import StrEnum
 
 from pricewright.domain.errors import ConflictError, RuleViolationError
 from pricewright.domain.updates import KEEP, Keep
+from pricewright.domain.users import InvalidUserError, normalize_email
 
 MAX_ACCOUNT_NUMBER_LENGTH = 20  # Dynamics 365's customer account has 20 characters
 MAX_CUSTOMER_NAME_LENGTH = 200
@@ -75,6 +76,15 @@ def _name(name: str) -> str:
     return name
 
 
+def _email(email: str | None) -> str | None:
+    if email is None:
+        return None
+    try:
+        return normalize_email(email)
+    except InvalidUserError:
+        raise InvalidCustomerError("email must be a valid address") from None
+
+
 def _payment_terms(days: int) -> int:
     if not 0 <= days <= MAX_PAYMENT_TERMS_DAYS:
         raise InvalidCustomerError(
@@ -94,6 +104,8 @@ class Customer:
     """Net days to pay; 0 is due on receipt."""
     tax_id: str | None = None
     """Compact; not unique: branches of one legal entity share it."""
+    email: str | None = None
+    """Where the quotes sent to this customer go (ADR-0028); without one, the rep delivers them."""
     is_active: bool = True
     version: int = 1
     """Counts saved changes; the repository bumps it (ADR-0012)."""
@@ -108,6 +120,7 @@ class Customer:
         tier: CustomerTier = CustomerTier.STANDARD,
         payment_terms_days: int = DEFAULT_PAYMENT_TERMS_DAYS,
         tax_id: str | None = None,
+        email: str | None = None,
     ) -> Customer:
         return cls(
             id=uuid.uuid7(),
@@ -117,6 +130,7 @@ class Customer:
             tier=tier,
             payment_terms_days=_payment_terms(payment_terms_days),
             tax_id=None if tax_id is None else compact_tax_id(tax_id),
+            email=_email(email),
         )
 
     def change(
@@ -126,10 +140,11 @@ class Customer:
         tier: CustomerTier | None = None,
         payment_terms_days: int | None = None,
         tax_id: str | Keep | None = KEEP,
+        email: str | Keep | None = KEEP,
         is_active: bool | None = None,
     ) -> None:
-        """Fields left as ``None`` (``KEEP`` for the tax id) keep their value. The account number
-        is the customer's identity for other systems and does not change."""
+        """Fields left as ``None`` (``KEEP`` for the tax id and the email) keep their value. The
+        account number is the customer's identity for other systems and does not change."""
         new_name = self.name if name is None else _name(name)  # validate before changing
         new_terms = (
             self.payment_terms_days
@@ -139,6 +154,8 @@ class Customer:
         new_tax_id = (
             self.tax_id if tax_id is KEEP else None if tax_id is None else compact_tax_id(tax_id)
         )
+        new_email = self.email if email is KEEP else _email(email)
         self.name, self.payment_terms_days, self.tax_id = new_name, new_terms, new_tax_id
+        self.email = new_email
         self.tier = self.tier if tier is None else tier
         self.is_active = self.is_active if is_active is None else is_active

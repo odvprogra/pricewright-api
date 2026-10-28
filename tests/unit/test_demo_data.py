@@ -76,6 +76,7 @@ def test_demo_customers_are_valid_unique_and_split_by_tier(seed: int) -> None:
             tier=new.tier,
             payment_terms_days=new.payment_terms_days,
             tax_id=new.tax_id,
+            email=new.email,
         )
         for new in customers
     ]
@@ -83,6 +84,10 @@ def test_demo_customers_are_valid_unique_and_split_by_tier(seed: int) -> None:
     assert [c.account_number for c in stored] == [f"C-{n:04d}" for n in range(1, 31)]
     assert len({c.name for c in stored}) == len(stored)
     assert Counter(c.tier for c in stored) == TIERS
+    # Every eighth has no email; the others write to the reserved .example domain (RFC 2606).
+    emails = [c.email for c in stored]
+    assert [n for n, email in enumerate(emails, 1) if email is None] == [8, 16, 24]
+    assert all(e.startswith("purchasing@") and e.endswith(".example") for e in emails if e)
     assert all(c.tax_id is None or c.tax_id.startswith("00") for c in stored)  # never assigned
     gold_terms = {c.payment_terms_days for c in stored if c.tier is CustomerTier.GOLD}
     assert gold_terms <= {45, 60}

@@ -864,6 +864,22 @@
             "title": "Account Number",
             "type": "string"
           },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 254,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where quotes sent to the customer go, with their PDF; without one, the rep delivers them.",
+            "examples": [
+              "purchasing@acme.example"
+            ],
+            "title": "Email"
+          },
           "name": {
             "examples": [
               "Acme Industrial"
@@ -1195,8 +1211,21 @@
       },
       "CustomerPatch": {
         "additionalProperties": false,
-        "description": "Only the fields sent change; `tax_id: null` removes it. The account number cannot.",
+        "description": "Only the fields sent change; `tax_id: null` and `email: null` remove them. The account\nnumber cannot change.",
         "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 254,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where quotes sent to the customer go, with their PDF; without one, the rep delivers them.",
+            "title": "Email"
+          },
           "is_active": {
             "anyOf": [
               {
@@ -1268,6 +1297,18 @@
             "title": "Account Number",
             "type": "string"
           },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where quotes sent to the customer go, with their PDF; without one, the rep delivers them.",
+            "title": "Email"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1313,6 +1354,7 @@
           "account_number",
           "name",
           "tax_id",
+          "email",
           "tier",
           "payment_terms_days",
           "is_active",

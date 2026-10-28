@@ -697,6 +697,7 @@ def _to_customer(record: CustomerRecord) -> Customer:
         tier=CustomerTier(record.tier),
         payment_terms_days=record.payment_terms_days,
         tax_id=record.tax_id,
+        email=record.email,
         is_active=record.is_active,
         version=record.version,
     )
@@ -720,6 +721,7 @@ class SqlAlchemyCustomerRepository:
                 account_number=customer.account_number,
                 name=customer.name,
                 tax_id=customer.tax_id,
+                email=customer.email,
                 tier=customer.tier.value,
                 payment_terms_days=customer.payment_terms_days,
                 is_active=customer.is_active,
@@ -783,6 +785,7 @@ class SqlAlchemyCustomerRepository:
             .values(
                 name=customer.name,
                 tax_id=customer.tax_id,
+                email=customer.email,
                 tier=customer.tier.value,
                 payment_terms_days=customer.payment_terms_days,
                 is_active=customer.is_active,

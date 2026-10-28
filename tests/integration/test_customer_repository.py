@@ -50,6 +50,7 @@ async def test_customers_round_trip(session_factory: Sessions) -> None:
     acme = dataclasses.replace(
         customer(northfield, "C-1001", "Acme", tier=CustomerTier.GOLD, tax_id="DE 123"),
         payment_terms_days=0,
+        email="purchasing@acme.example",
     )
     await store(session_factory, northfield, acme)
 

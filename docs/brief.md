@@ -33,7 +33,8 @@ tenant. **Larkspur Tool Co.** is a second, small tenant that exists to prove ten
   `erp-mcp-server` and `ops-copilot`). The authenticated principal covers users and service accounts
   from M1.
 - **Customer** — account number, name, tax id, segment/tier (`standard`, `silver`, `gold`), payment
-  terms (net days).
+  terms (net days), and an optional email where sent quotes go
+  ([ADR-0028](adr/0028-email-notifications-from-the-worker.md)).
 - **Product** — SKU, name, category, unit, list price, unit cost, active flag.
 - **PricingRule** — typed rule with a scope (a product, a category or every product) and a validity
   window ([ADR-0018](adr/0018-pricing-rules-typed-scoped-and-effective-dated.md)). Types:
@@ -236,6 +237,7 @@ Agreed for the presentable checkpoint:
 | 0025 | [Northfield's catalog from the demand dataset](adr/0025-northfield-catalog-from-the-demand-dataset.md)                                  | —         |
 | 0026 | [Worker jobs: persist what the clock decided, as the system](adr/0026-worker-jobs-persist-what-the-clock-decided.md)                    | M5        |
 | 0027 | [Quote PDFs: an HTML template printed with WeasyPrint, on request](adr/0027-quote-pdfs-rendered-on-request.md)                          | M5        |
+| 0028 | [Emails: decisions to the rep, sent quotes to the customer](adr/0028-email-notifications-from-the-worker.md)                            | M5        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 
