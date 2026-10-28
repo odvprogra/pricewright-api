@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.8.0](https://github.com/odvprogra/pricewright-api/compare/v0.7.0...v0.8.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* persist expired offers from the worker, audited as the system ([#82](https://github.com/odvprogra/pricewright-api/issues/82))
+
+### Features
+
+* email the rep and the customer about their quotes from the outbox ([#94](https://github.com/odvprogra/pricewright-api/issues/94)) ([c330332](https://github.com/odvprogra/pricewright-api/commit/c3303329e9bb2072fba785a05998caa17e2dc455))
+* end the demo history with the worker's expiry job ([#83](https://github.com/odvprogra/pricewright-api/issues/83)) ([de1c224](https://github.com/odvprogra/pricewright-api/commit/de1c224d3dd8fbb91de1e194213e60d324e9110e))
+* give customers an optional email where sent quotes go ([#92](https://github.com/odvprogra/pricewright-api/issues/92)) ([7670614](https://github.com/odvprogra/pricewright-api/commit/767061409be09a0f20dcd6807a00d1a020e59f4f))
+* list and revive dead letters, and purge delivered events ([#88](https://github.com/odvprogra/pricewright-api/issues/88)) ([a8509fc](https://github.com/odvprogra/pricewright-api/commit/a8509fcf45b32669658467063229db4dccd24741))
+* persist expired offers from the worker, audited as the system ([#82](https://github.com/odvprogra/pricewright-api/issues/82)) ([77f5a6f](https://github.com/odvprogra/pricewright-api/commit/77f5a6fb5b9983c3f5a8ae8abe11306a8d0ab71a))
+* purge expired idempotency keys from the worker ([#85](https://github.com/odvprogra/pricewright-api/issues/85)) ([72a877b](https://github.com/odvprogra/pricewright-api/commit/72a877bd021221ea496d774898bc40ba573100a4))
+* relay outbox events from the worker, in order per aggregate, with retries ([#87](https://github.com/odvprogra/pricewright-api/issues/87)) ([6e8e4e2](https://github.com/odvprogra/pricewright-api/commit/6e8e4e25bc5fd14c14bc4b61e6781c9a757b58f4))
+* render quotes as PDFs for the customer, on request ([#89](https://github.com/odvprogra/pricewright-api/issues/89)) ([9e0f3b5](https://github.com/odvprogra/pricewright-api/commit/9e0f3b522b3da21286f2b74c19819996fcf7e5ce))
+* send email over SMTP, with Mailpit catching it locally ([#93](https://github.com/odvprogra/pricewright-api/issues/93)) ([ac5fe54](https://github.com/odvprogra/pricewright-api/commit/ac5fe54b2b2f0da046dfe793abef904fa4684303))
+* store events in a transactional outbox with the changes they follow ([#86](https://github.com/odvprogra/pricewright-api/issues/86)) ([a85ec21](https://github.com/odvprogra/pricewright-api/commit/a85ec21bab7b4f221cfe68d3f40d1f817bbf0350))
+
+
+### Bug Fixes
+
+* take the patched certifi, filelock, opentelemetry-api and virtualenv ([#91](https://github.com/odvprogra/pricewright-api/issues/91)) ([8073a54](https://github.com/odvprogra/pricewright-api/commit/8073a54379d8f629420b72e1f767c796a11a32a4))
+
+
+### Documentation
+
+* close M5 in the README, the architecture and CLAUDE.md ([#95](https://github.com/odvprogra/pricewright-api/issues/95)) ([3eea847](https://github.com/odvprogra/pricewright-api/commit/3eea847d4f92684661147d4ff5dd476cf8cd6f9c))
+
 ## [0.7.0](https://github.com/odvprogra/pricewright-api/compare/v0.6.0...v0.7.0) (2026-10-07)
 
 
