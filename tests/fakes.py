@@ -17,6 +17,7 @@ from typing import Self
 from uuid import UUID
 
 from pricewright.api.dependencies import Services
+from pricewright.application.documents import QuoteDocument
 from pricewright.application.pagination import Keyset
 from pricewright.application.ports import (
     ApiKeyRepository,
@@ -1097,6 +1098,18 @@ class FakeAccessTokens:
             raise AuthenticationError("invalid access token") from error
 
 
+class FakeQuoteDocuments:
+    """Renders a line of text instead of a PDF, and remembers what it rendered."""
+
+    def __init__(self) -> None:
+        self.rendered: list[QuoteDocument] = []
+
+    async def render(self, document: QuoteDocument) -> bytes:
+        self.rendered.append(document)
+        quote = document.quote
+        return f"%PDF-fake {quote.display_number} {document.status.value}".encode()
+
+
 def fake_services(
     database: InMemoryDatabase | None = None, clock: FakeClock | None = None
 ) -> Services:
@@ -1111,4 +1124,5 @@ def fake_services(
         hasher=FakePasswordHasher(),
         access_tokens=FakeAccessTokens(),
         clock=clock if clock is not None else FakeClock(),
+        documents=FakeQuoteDocuments(),
     )

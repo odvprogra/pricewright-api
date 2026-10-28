@@ -27,6 +27,7 @@ from pricewright.application.ports import UnitOfWork, UnitOfWorkFactory
 from pricewright.domain.events import Event, EventType
 from pricewright.infrastructure.clock import utc_now
 from pricewright.infrastructure.database import create_engine, create_session_factory, ping
+from pricewright.infrastructure.documents import WeasyPrintQuoteDocuments
 from pricewright.infrastructure.logging import configure_logging
 from pricewright.infrastructure.passwords import Argon2PasswordHasher
 from pricewright.infrastructure.tokens import JwtAccessTokens
@@ -66,6 +67,7 @@ def build_app(settings: Settings) -> FastAPI:
             settings.jwt_secret.get_secret_value(), settings.access_token_ttl
         ),
         clock=utc_now,
+        documents=WeasyPrintQuoteDocuments(),
     )
     return create_app(
         title=settings.service_name,

@@ -8193,6 +8193,86 @@
         ]
       }
     },
+    "/api/v1/quotes/{quote_id}/pdf": {
+      "get": {
+        "description": "Rendered from the quote as it stands: a submitted quote never changes, and a draft, an expired or a cancelled quote says so on the page. Never shows costs or margins (ADR-0027).",
+        "operationId": "read_quote_pdf_api_v1_quotes__quote_id__pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The PDF, as an attachment named after the quote's number"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Needs `quotes:read`, or `quotes:manage` for changes"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such quote in this tenant (ADR-0009)"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The quote as a PDF for the customer",
+        "tags": [
+          "quotes"
+        ]
+      }
+    },
     "/api/v1/quotes/{quote_id}/recall": {
       "post": {
         "operationId": "recall_api_v1_quotes__quote_id__recall_post",

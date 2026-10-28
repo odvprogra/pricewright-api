@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ tenant.name }} quotation {{ quote.display_number }}</title>
+  <style>
+    /* Semantic tokens (handbook §14.1); the brand (M12) sets their values. */
+    :root {
+      --color-text: #1f2937;
+      --color-text-muted: #4b5563;
+      --color-border: #d1d5db;
+      --color-surface-muted: #f3f4f6;
+      --color-accent: #1e40af;
+      --color-notice: #92400e;
+      --color-notice-surface: #fef3c7;
+    }
+    @page {
+      size: A4;
+      margin: 18mm 16mm 20mm;
+      @bottom-left {
+        content: "{{ quote.display_number }}";
+        font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif;
+        font-size: 8pt;
+        color: #4b5563;
+      }
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif;
+        font-size: 8pt;
+        color: #4b5563;
+      }
+    }
+    body {
+      font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif;
+      font-size: 9pt;
+      color: var(--color-text);
+      line-height: 1.4;
+    }
+    header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .tenant { font-size: 16pt; font-weight: bold; color: var(--color-accent); margin: 0; }
+    h1 { font-size: 13pt; margin: 0 0 2mm; }
+    dl.facts {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 1mm 4mm;
+      margin: 0;
+      min-width: 70mm;
+    }
+    dl.facts dt { color: var(--color-text-muted); white-space: nowrap; }
+    dl.facts dd { margin: 0; text-align: right; white-space: nowrap; }
+    .notice {
+      margin: 6mm 0 0;
+      padding: 2mm 3mm;
+      color: var(--color-notice);
+      background: var(--color-notice-surface);
+      font-weight: bold;
+    }
+    .customer { margin: 8mm 0 6mm; }
+    .customer h2, .notes h2 {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-text-muted);
+      margin: 0 0 1mm;
+    }
+    .customer .name { font-size: 11pt; font-weight: bold; }
+    table { width: 100%; border-collapse: collapse; }
+    table.lines th {
+      text-align: left;
+      font-weight: bold;
+      background: var(--color-surface-muted);
+      border-bottom: 1px solid var(--color-border);
+      padding: 1.5mm 2mm;
+    }
+    table.lines td { border-bottom: 1px solid var(--color-border); padding: 1.5mm 2mm; }
+    .number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    table.lines th.number { text-align: right; }
+    .sku { color: var(--color-text-muted); white-space: nowrap; }
+    table.totals { width: 45%; margin: 4mm 0 0 auto; }
+    table.totals td { padding: 1mm 2mm; }
+    table.totals tr.total td {
+      font-size: 11pt;
+      font-weight: bold;
+      border-top: 1px solid var(--color-text);
+    }
+    .notes { margin-top: 8mm; }
+    .notes p { white-space: pre-line; margin: 0; }
+    footer { margin-top: 10mm; color: var(--color-text-muted); font-size: 8pt; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="tenant">{{ tenant.name }}</p>
+      <h1>Quotation {{ quote.display_number }}</h1>
+    </div>
+    <dl class="facts">
+      <dt>Date</dt><dd>{{ (quote.submitted_at or quote.created_at) | long_date }}</dd>
+      <dt>Valid until</dt><dd>{{ quote.valid_until | long_date }}</dd>
+      {% if document.prepared_by %}<dt>Prepared by</dt><dd>{{ document.prepared_by }}</dd>{% endif %}
+    </dl>
+  </header>
+
+  {% set status = document.status.value %}
+  {% if status in ("draft", "pending_approval", "rejected") %}
+  <p class="notice">Draft, not an offer: prices may change until the quote is approved.</p>
+  {% elif status == "expired" %}
+  <p class="notice">This offer has expired: it was valid until {{ quote.valid_until | long_date }}.</p>
+  {% elif status == "cancelled" %}
+  <p class="notice">Cancelled: this quote is no longer an offer.</p>
+  {% elif status == "superseded" %}
+  <p class="notice">Replaced by a later revision: this quote is no longer an offer.</p>
+  {% endif %}
+
+  <section class="customer">
+    <h2>Prepared for</h2>
+    <div class="name">{{ customer.name }}</div>
+    <div>Account {{ customer.account_number }}{% if customer.tax_id %}, tax ID {{ customer.tax_id }}{% endif %}</div>
+  </section>
+
+  <table class="lines">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Description</th>
+        <th class="number">Quantity</th>
+        <th class="number">List price</th>
+        <th class="number">Discount</th>
+        <th class="number">Net price</th>
+        <th class="number">Amount ({{ quote.currency }})</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in quote.lines %}
+      {% set off = discount(line.pricing.list_total, line.pricing.net_total) %}
+      <tr>
+        <td class="sku">{{ line.sku }}</td>
+        <td>{{ line.product_name }}</td>
+        <td class="number">{{ line.quantity | quantity(line.unit) }}</td>
+        <td class="number">{{ line.pricing.breakdown.list_unit_price | unit_price }}</td>
+        <td class="number">{% if off %}{{ off | percent }}{% endif %}</td>
+        <td class="number">{{ line.pricing.breakdown.net_unit_price | unit_price }}</td>
+        <td class="number">{{ line.pricing.net_total | amount }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <table class="totals">
+    <tr><td>Subtotal</td><td class="number">{{ quote.totals.net_subtotal | amount }}</td></tr>
+    <tr>
+      <td>Tax ({{ quote.totals.tax_rate | percent }})</td>
+      <td class="number">{{ quote.totals.tax | amount }}</td>
+    </tr>
+    <tr class="total">
+      <td>Total {{ quote.currency }}</td>
+      <td class="number">{{ quote.totals.total | amount }}</td>
+    </tr>
+  </table>
+
+  {% if quote.notes %}
+  <section class="notes">
+    <h2>Notes</h2>
+    <p>{{ quote.notes }}</p>
+  </section>
+  {% endif %}
+
+  <footer>
+    Prices in {{ quote.currency }}, before tax unless stated. {{ tenant.name }}, quotation
+    {{ quote.display_number }}, issued with Pricewright.
+  </footer>
+</body>
+</html>
