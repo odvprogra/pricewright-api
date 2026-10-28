@@ -20,6 +20,7 @@ months of history dated up to today, and the interactive API docs to explore the
 ```sh
 just seed   # reset the local database and load the demo data (local and test environments only)
 just dev    # the API on http://localhost:8000, interactive docs at http://localhost:8000/docs
+just worker # optional, in another terminal: the emails, caught by Mailpit on http://localhost:8025
 ```
 
 Every demo user signs in with the passphrase **`pricewright demo`**. It is published on purpose: it
@@ -56,6 +57,10 @@ What the data holds (seed 2026; `uv run pricewright-admin seed --help` for anoth
   - Quote numbers `NF-2026-…`, order numbers `NFO-2026-…`.
 - **Larkspur Tool Co.**, a small tool supplier: 19 products and 10 quotes. It is there to show that
   tenants never see each other.
+
+With the worker running, approving a request in Morgan's inbox emails the rep who submitted it, with
+the quote's PDF, and sending a quote emails it to the customer (`GET /api/v1/quotes/{id}/pdf` gives
+the same PDF). The history's own emails count as sent long ago: the worker sends none of them.
 
 Everything was entered through the use cases, as the tenants' people would have: prices, approvals,
 numbers and the audit trail are the application's own. The same seed and date always give the same
@@ -127,9 +132,9 @@ Pricewright is built in milestones; this table shows what works today. The full 
 | Audit trail: every change with its actor, before/after values and request ID              | M2        | Done   |
 | Pricing engine: rules kept by managers; previews that explain every price, step by step   | M3        | Done   |
 | Quotes priced line by line, with revisions, expiration, four-eyes approvals and an inbox  | M4        | Done   |
+| Transactional outbox, worker, quote PDFs and email notifications                          | M5        | Done   |
 | Orders converted once from accepted quotes; `Idempotency-Key` on every creation           | M6        | Done   |
 | Demo data: two tenants and six months of history, loaded through the use cases            | —         | Done   |
-| Transactional outbox, worker, quote PDFs and email notifications                          | M5        |        |
 
 The web app lives in a separate repository, `pricewright-web` (from M7). It consumes this API the
 same way every other client does: through a released `openapi.json`.
@@ -145,16 +150,19 @@ flowchart LR
     subgraph service[pricewright-api]
         api[HTTP API] --> app[Application<br/>use cases]
         cli[CLI and demo seed] --> app
+        worker[Worker<br/>outbox relay, jobs] --> app
         app --> domain[Domain<br/>business rules]
         app --> infra[Infrastructure<br/>adapters]
     end
     infra --> db[(PostgreSQL)]
+    infra -->|SMTP| mail[Mail server]
 ```
 
 Hexagonal-lite: dependencies point inward, the domain is pure Python, and an architecture test
 enforces both. Clients never read the code or the database: each one pins a release of this API and
 generates its client from the `openapi.json` attached to it. The demo seed is one more driver of the
-use cases, like the HTTP API. Details in [docs/architecture.md](docs/architecture.md).
+use cases, like the HTTP API. A worker, from the same image, relays the transactional outbox to the
+emails and runs the periodic jobs. Details in [docs/architecture.md](docs/architecture.md).
 
 ## Key decisions
 
@@ -287,7 +295,18 @@ docs/                # product brief, architecture and ADRs
   800-63B-4 and the OAuth security RFCs (ADR-0007), but there is no MFA, no SSO and no rate limiting
   by IP yet; a breached-password blocklist would be the next cheap win. An external identity
   provider (OIDC) can replace sign-in without touching authorization.
-- **Admins set initial passwords.** Email invitations arrive with the worker and email in M5.
+- **Admins set initial passwords.** The worker sends email now (ADR-0028); an invitation with a
+  one-time link to set one's own password is the next use for it.
+- **Emails go out at least once.** A worker that stops between sending and recording sends that
+  email again on its next try; the `Message-ID` comes from the event, so mail clients can tell it is
+  the same message (ADR-0008). An event that keeps failing is dead after 12 attempts, within about
+  two and a half hours, and waits for an operator (`pricewright-admin dead-letters`,
+  `retry-dead-letters`).
+- **One email address per customer.** Sent quotes go to it, from the platform's address with the rep
+  in `Reply-To`; contacts per customer, as ERPs keep them, would be the next step (ADR-0028).
+- **PDFs are rendered on request, not archived.** A submitted quote's numbers never change, so
+  neither do its PDF's; a template change does alter the look of past quotes' PDFs. Documents with
+  legal weight, such as invoices, would be rendered once and stored (ADR-0027).
 - **Isolation lives in the application and in composite keys.** PostgreSQL row-level security would
   add a fourth layer (ADR-0006); it stays a stretch goal.
 - **Idempotency keys are kept for 24 hours** and a replay shows the resource as it is now, not the
