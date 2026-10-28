@@ -1,0 +1,8 @@
+{% extends "email/base.html" %}
+{% block title %}Quote {{ number }} needs changes{% endblock %}
+{% block body %}
+<p>Hi {{ rep }},</p>
+<p>{{ decider }} did not approve quote <strong>{{ number }}</strong> for {{ customer }}, and asks:</p>
+<p style="padding: 8px 12px; background: #f3f4f6;">{{ comment }}</p>
+<p>Revise the quote, or cancel it, in Pricewright.</p>
+{% endblock %}

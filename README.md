@@ -186,6 +186,7 @@ use cases, like the HTTP API. Details in [docs/architecture.md](docs/architectur
 | [ADR-0025](docs/adr/0025-northfield-catalog-from-the-demand-dataset.md) A catalog from the demand dataset's top products     | Forecasts map one to one onto products, and no demand data or download is needed to run the demo    |
 | [ADR-0026](docs/adr/0026-worker-jobs-persist-what-the-clock-decided.md) Worker jobs, audited as the system                   | Expired offers are stored as such within minutes; replicas need no coordination                     |
 | [ADR-0027](docs/adr/0027-quote-pdfs-rendered-on-request.md) Quote PDFs rendered on request                                   | A PDF always matches its quote, shares the emails' template family and never shows costs            |
+| [ADR-0028](docs/adr/0028-email-notifications-from-the-worker.md) Emails sent by the worker                                   | Reps hear about decisions and customers receive sent quotes, only once the change is committed      |
 
 ## Run it locally
 
@@ -202,9 +203,10 @@ just worker  # the background worker, in another terminal; Ctrl+C stops it
 just check   # lint, types and tests: what CI runs
 ```
 
-PostgreSQL listens on port 5432; when another PostgreSQL already does, set `POSTGRES_PORT` and the
-port in `DATABASE_URL` in a `.env` file. Configuration comes from environment variables;
-[.env.example](.env.example) documents them.
+The worker's emails go to [Mailpit](https://mailpit.axllent.org/), which `just worker` starts in
+Docker: read them on <http://localhost:8025>. PostgreSQL listens on port 5432; when another
+PostgreSQL already does, set `POSTGRES_PORT` and the port in `DATABASE_URL` in a `.env` file.
+Configuration comes from environment variables; [.env.example](.env.example) documents them.
 
 Tenants are onboarded by an operator. To start from an empty database instead of the demo, create
 one and its first admin (the password is prompted for, or read from standard input with

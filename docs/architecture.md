@@ -204,7 +204,8 @@ sequenceDiagram
 `just seed` checks that demo data may be loaded here, migrates the local database down and up, and
 runs `pricewright-admin seed` (ADR-0024). The seed is one more driver of the use cases, like the
 HTTP API: it acts as each tenant's people, on a clock it moves from go-live to the as-of date, and
-ends with the worker's expiry job at the as-of date's midnight (ADR-0026).
+ends with the worker's expiry job at the as-of date's midnight (ADR-0026). Then it relays the
+history's events with no consumer: their emails would have gone out back then (ADR-0028).
 
 ```mermaid
 flowchart LR
@@ -214,9 +215,11 @@ flowchart LR
     stories --> player[HistoryPlayer: steps in date order]
     player -->|create, submit, approve, send, accept, convert, revise, cancel| cases
     seed -->|then, at the as-of date's midnight| job[expire_offers]
+    seed -->|last, no consumers| relay[relay_events]
     clock[DemoClock] -.now.-> cases
     cases --> uow[unit of work] --> db[(PostgreSQL)]
     job --> uow
+    relay --> uow
 ```
 
 ## Rules
@@ -245,5 +248,7 @@ flowchart LR
   read across tenants, the jobs ids only (ADR-0006, ADR-0026).
 - Worker jobs persist what the clock decided (expired offers), one record per unit of work with
   compare-and-set, audited as the system (ADR-0026).
+- Emails go out only from the worker, as consumers of outbox events: from the platform's sender on
+  the tenant's behalf, with a `Message-ID` derived from the event (ADR-0028).
 - Demo data goes through the use cases, never around them, and only where `ENVIRONMENT` is local or
   test (ADR-0024).

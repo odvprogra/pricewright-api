@@ -1,0 +1,9 @@
+Hi {{ rep }},
+
+{{ decider }} did not approve quote {{ number }} for {{ customer }}, and asks:
+
+"{{ comment }}"
+
+Revise the quote, or cancel it, in Pricewright.
+
+{{ tenant }}, sent with Pricewright

@@ -1,0 +1,10 @@
+Hi {{ rep }},
+
+{{ decider }} approved quote {{ number }} for {{ customer }}: {{ total | amount }} {{ total.currency }}.
+{% if comment %}
+"{{ comment }}"
+{% endif %}
+The quote's PDF is attached. Send it to the customer from Pricewright when you are ready: the offer
+is valid until {{ valid_until | long_date }}.
+
+{{ tenant }}, sent with Pricewright

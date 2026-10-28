@@ -18,6 +18,7 @@ from uuid import UUID
 
 from pricewright.api.dependencies import Services
 from pricewright.application.documents import QuoteDocument
+from pricewright.application.notifications import Email
 from pricewright.application.pagination import Keyset
 from pricewright.application.ports import (
     ApiKeyRepository,
@@ -1096,6 +1097,16 @@ class FakeAccessTokens:
             return Principal(uuid.UUID(tenant_id), uuid.UUID(user_id), Role(role))
         except ValueError as error:
             raise AuthenticationError("invalid access token") from error
+
+
+class FakeMailer:
+    """Keeps the emails instead of sending them."""
+
+    def __init__(self) -> None:
+        self.sent: list[Email] = []
+
+    async def send(self, email: Email) -> None:
+        self.sent.append(email)
 
 
 class FakeQuoteDocuments:

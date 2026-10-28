@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-07
 - **Amended:** 2026-10-11 — the history ends with the worker's expiry job, at the as-of date's
-  midnight
+  midnight; 2026-10-14 — the history's events are delivered without emails
 
 ## Context
 
@@ -65,6 +65,10 @@ passes, by the real clock (ADR-0005), and ids are UUIDv7 drawn from the real clo
   `expired`, by the system, and their pending requests are withdrawn. A job that expires other
   offers than the stories left past their date stops the load, like any story the application
   contradicts.
+- **The history's events are delivered (amendment, M5).** Approvals, rejections and sends leave
+  events in the outbox (ADR-0008); their emails (ADR-0028) would have gone out when they happened.
+  The seed ends by relaying them, at the same midnight, with no consumer, so a worker started on the
+  demo data does not email reps and customers about decisions made months ago.
 - **Fictional on purpose.** Customer names come from word lists of invented places and trades,
   people's emails use `.example` (reserved by [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606)),
   and tax ids start with 00, a prefix the IRS

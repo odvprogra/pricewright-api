@@ -4,7 +4,8 @@ Nothing is written around the application: every record goes through the use cas
 call, with that person's permissions, so validation, prices, approvals, numbers and audit events
 are the real ones. A simulated clock dates everything relative to the as-of date: the tenants go
 live ``GO_LIVE_DAYS`` before it, and their quotes' stories (``stories.py``) fill the months between.
-The worker's expiry job ends the history, at the as-of date's midnight (ADR-0026).
+The worker's expiry job ends the history, at the as-of date's midnight (ADR-0026), and the history's
+events count as delivered: their emails went out when they happened (ADR-0028).
 """
 
 from collections import Counter
@@ -17,6 +18,7 @@ from pricewright.application.catalog import NewProduct, create_category, create_
 from pricewright.application.customers import create_customer
 from pricewright.application.housekeeping import expire_offers
 from pricewright.application.onboarding import RegisterTenant, register_tenant
+from pricewright.application.outbox import relay_events
 from pricewright.application.ports import PasswordHasher, UnitOfWorkFactory
 from pricewright.application.pricing_rules import NewPricingRule, create_pricing_rule
 from pricewright.application.users import NewUser, create_user
@@ -229,6 +231,7 @@ async def seed_demo(
     expected = sum(tenant.counts["expired offers"] for tenant in seeded)
     if expired != expected:
         raise HistoryError(f"the expiry job expired {expired} offers; the stories left {expected}")
+    await deliver_history(unit_of_work, as_of)
     return SeedReport(as_of=as_of, seed=seed, tenants=tuple(seeded))
 
 
@@ -237,6 +240,13 @@ async def run_expiry(unit_of_work: UnitOfWorkFactory, as_of: date) -> int:
     offers past their date are stored as expired. Return how many."""
     clock = DemoClock(datetime.combine(as_of, EXPIRY_RUN))
     return await expire_offers(unit_of_work=unit_of_work, clock=clock)
+
+
+async def deliver_history(unit_of_work: UnitOfWorkFactory, as_of: date) -> int:
+    """Mark the history's events delivered, with no consumer: a worker started on the demo data
+    must not email about decisions made months ago (ADR-0028). Return how many."""
+    clock = DemoClock(datetime.combine(as_of, EXPIRY_RUN))
+    return await relay_events(unit_of_work=unit_of_work, consumers={}, clock=clock)
 
 
 async def load_tenant(

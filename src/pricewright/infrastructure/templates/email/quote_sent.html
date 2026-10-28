@@ -1,0 +1,12 @@
+{% extends "email/base.html" %}
+{% block title %}Quotation {{ number }}{% endblock %}
+{% block body %}
+<p>Hello,</p>
+<p>
+  {% if rep %}{{ rep }} at {{ tenant }}{% else %}{{ tenant }}{% endif %} sends you quotation
+  <strong>{{ number }}</strong> for {{ customer }}:
+  <strong>{{ total | amount }} {{ total.currency }}</strong>, valid until
+  {{ valid_until | long_date }}.
+</p>
+<p>The quotation is attached as a PDF.{% if rep %} Reply to this email to reach {{ rep }}.{% endif %}</p>
+{% endblock %}
