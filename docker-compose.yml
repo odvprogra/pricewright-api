@@ -45,9 +45,24 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://app:app@postgres:5432/pricewright
       ENVIRONMENT: local
+      SMTP_HOST: mailpit
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_healthy
+
+  # Catches the worker's emails locally (ADR-0028): http://localhost:8025 shows them.
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
 
 volumes:
   postgres-data:
