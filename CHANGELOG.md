@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/odvprogra/pricewright-api/compare/v0.8.0...v0.9.0) (2026-10-29)
+
+
+### Features
+
+* style the quote PDF and the emails with pricewright-design 0.1.0 ([#96](https://github.com/odvprogra/pricewright-api/issues/96)) ([0b0f428](https://github.com/odvprogra/pricewright-api/commit/0b0f428d8520d7507f98fbf99d3b7892e50d3042))
+
 ## [0.8.0](https://github.com/odvprogra/pricewright-api/compare/v0.7.0...v0.8.0) (2026-10-28)
 
 
