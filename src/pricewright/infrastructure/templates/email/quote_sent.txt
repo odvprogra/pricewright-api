@@ -1,7 +1,11 @@
 Hello,
 
-{% if rep %}{{ rep }} at {{ tenant }}{% else %}{{ tenant }}{% endif %} sends you quotation {{ number }} for {{ customer }}: {{ total | amount }} {{ total.currency }}, valid until {{ valid_until | long_date }}.
+{% if rep %}{{ rep }} at {{ tenant }}{% else %}{{ tenant }}{% endif %} sends you a quotation for {{ customer | sentence_end }}
+
+Quotation: {{ number }}
+Total: {{ total | money }}
+Valid until: {{ valid_until | long_date }}
 
 The quotation is attached as a PDF.{% if rep %} Reply to this email to reach {{ rep }}.{% endif %}
 
-{{ tenant }}, sent with Pricewright
+{{ tenant }}, sent with Pricewright.

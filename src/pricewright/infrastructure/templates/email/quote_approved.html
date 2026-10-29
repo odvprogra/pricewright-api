@@ -1,16 +1,14 @@
 {% extends "email/base.html" %}
+{% import "email/blocks.html" as blocks %}
+{#- To the rep, in the app's voice: who decided, then the comment. #}
 {% block title %}Quote {{ number }} approved{% endblock %}
+{% block preheader %}{{ decider }} approved it. It's ready to send.{% if comment %} “{{ comment }}”{% endif %}{% endblock %}
+{% block heading %}Your quote is approved{% endblock %}
 {% block body %}
-<p>Hi {{ rep }},</p>
-<p>
-  {{ decider }} approved quote <strong>{{ number }}</strong> for {{ customer }}:
-  <strong>{{ total | amount }} {{ total.currency }}</strong>.
-</p>
-{% if comment %}
-<p style="padding: 8px 12px; background: #f3f4f6;">{{ comment }}</p>
-{% endif %}
-<p>
-  The quote's PDF is attached. Send it to the customer from Pricewright when you are ready: the offer
-  is valid until {{ valid_until | long_date }}.
-</p>
+{{ blocks.paragraph("Hi " ~ rep | first_name ~ ",") }}
+{{ blocks.paragraph(decider ~ " approved your quote for " ~ customer | sentence_end) }}
+{% if comment %}{{ blocks.comment(comment) }}{% endif %}
+{{ blocks.facts([("Quote", number), ("Customer", customer), ("Total", total | money)]) }}
+{{ blocks.paragraph("The quote's PDF is attached. It's ready to send to the customer from Pricewright; the offer is valid until " ~ valid_until | long_date ~ ".") }}
 {% endblock %}
+{% block footer %}{{ tenant }}, sent with Pricewright. You get this email because you submitted the quote.{% endblock %}

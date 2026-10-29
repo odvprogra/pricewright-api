@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-12
+- **Amended:** 2026-10-29 — the brand's quotation, on a pinned pricewright-design release's tokens,
+  with its fonts embedded (D-61)
 
 ## Context
 
@@ -47,6 +49,24 @@ Practice:
   to render: the service starts where Pango is missing, and only rendering fails.
 - **The image installs** Pango, HarfBuzz, fontconfig and the DejaVu fonts, and builds the font cache
   at build time. Developers need Pango too (README).
+- **The brand (amendment, M12).** The template is the quotation of pricewright-design's
+  [`docs/brand/documents.md`](https://github.com/odvprogra/pricewright-design/blob/v0.1.0/docs/brand/documents.md),
+  whose reference is code in that repository (`src/documents/quotation.ts`). Its styles are the
+  `tokens.css` of a release pinned in `infrastructure/templates/brand/` (0.1.0), linked from the
+  template; `just brand <version>` replaces it after checking it against the release's attestation
+  (`gh release verify-asset`), and a test fails if the template uses a property the tokens do not
+  define, a color of its own, or a release other than `DESIGN_RELEASE`. Source Serif 4 Semibold (its
+  Text optical size, 18–26 pt, for the 18.75 pt "Quotation") and Public Sans Regular and SemiBold are
+  committed as the OFL TrueType files their projects publish (Adobe's 4.005R, USWDS's v2.001) and
+  loaded with `@font-face`; WeasyPrint subsets and embeds them. `@font-face` rules need a
+  `FontConfiguration` passed to `write_pdf`
+  ([WeasyPrint's first steps](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html));
+  each render makes its own, so renders in their own threads never share one (about 0.3 s a page on
+  a laptop). The facts beside
+  the title are a CSS table, not the design's grid: WeasyPrint sized a grid inside a flex box too
+  narrow and it ran past the margin. DejaVu stays in the image as the fallback for any glyph the
+  brand fonts lack. The tenant's accent is the tokens' default until tenants have their own (M7,
+  D-61).
 
 ## Alternatives considered
 

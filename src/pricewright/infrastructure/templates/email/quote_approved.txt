@@ -1,10 +1,13 @@
-Hi {{ rep }},
+Hi {{ rep | first_name }},
 
-{{ decider }} approved quote {{ number }} for {{ customer }}: {{ total | amount }} {{ total.currency }}.
+{{ decider }} approved your quote for {{ customer | sentence_end }}
 {% if comment %}
-"{{ comment }}"
+> {{ comment }}
 {% endif %}
-The quote's PDF is attached. Send it to the customer from Pricewright when you are ready: the offer
-is valid until {{ valid_until | long_date }}.
+Quote: {{ number }}
+Customer: {{ customer }}
+Total: {{ total | money }}
 
-{{ tenant }}, sent with Pricewright
+The quote's PDF is attached. It's ready to send to the customer from Pricewright; the offer is valid until {{ valid_until | long_date }}.
+
+{{ tenant }}, sent with Pricewright. You get this email because you submitted the quote.

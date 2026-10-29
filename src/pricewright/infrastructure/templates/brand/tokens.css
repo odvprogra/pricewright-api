@@ -1,0 +1,141 @@
+/**
+ * pricewright-design 0.1.0: generated from tokens/; do not edit.
+ */
+
+:root {
+  --color-text-default: #1b2233; /** Body text, headings, amounts. */
+  --color-text-muted: #5a6275; /** Secondary text: labels, metadata, help. */
+  --color-text-inverse: #ffffff; /** Text on inverse surfaces and solid actions. */
+  --color-text-inverse-muted: #c9ced8; /** Secondary text on inverse surfaces. */
+  --color-text-link: #0c5f59; /** Links in running text. */
+  --color-surface-default: #ffffff; /** The page and cards: white paper. */
+  --color-surface-muted: #f5f6f8; /** Table headers, side panels, the app canvas. */
+  --color-surface-sunken: #eceef2; /** Wells and inputs' read-only state. */
+  --color-surface-hover: #eceef2; /** A row, menu item or ghost button under the pointer. */
+  --color-surface-selected: #e6f4f2; /** The selected row or item. */
+  --color-surface-inverse: #1d2d50; /** The app bar and other inverse areas. */
+  --color-border-default: #e1e4ea; /** Dividers and card edges (decorative). */
+  --color-border-strong: #c9ced8; /** Table rules and emphasized dividers (decorative). */
+  --color-border-input: #7a8293; /** Form fields' boundary: 3:1 on every surface. */
+  --color-action-primary-background: #1d2d50; /** The one primary action of a view. */
+  --color-action-primary-background-hover: #15213c; /** Primary action under the pointer. */
+  --color-action-primary-foreground: #ffffff; /** Label of a primary action. */
+  --color-action-secondary-background: #ffffff; /** Secondary actions. */
+  --color-action-secondary-background-hover: #eceef2; /** Secondary action under the pointer. */
+  --color-action-secondary-foreground: #1d2d50; /** Label of a secondary action. */
+  --color-action-secondary-border: #7a8293; /** Boundary of a secondary action. */
+  --color-action-danger-background: #c62828; /** Destructive actions, after a confirmation. */
+  --color-action-danger-background-hover: #a61b1b; /** Destructive action under the pointer. */
+  --color-action-danger-foreground: #ffffff; /** Label of a destructive action. */
+  --color-accent-default: #0f766e; /** Brand accent: selection marks, the logo's double rule. */
+  --color-accent-text: #0c5f59; /** Accent used as text. */
+  --color-accent-surface: #e6f4f2; /** Accent background behind text. */
+  --color-accent-foreground: #ffffff; /** Text on the solid accent. */
+  --color-status-success-text: #1e6b33; /** Approved, accepted, saved. */
+  --color-status-success-surface: #e8f3ec; /** Background of a success badge or banner. */
+  --color-status-warning-text: #8a4b06; /** Pending approval, needs attention. */
+  --color-status-warning-surface: #fdf1dc; /** Background of a warning badge or banner. */
+  --color-status-danger-text: #a61b1b; /** Errors, rejected, expired. */
+  --color-status-danger-surface: #fbe9e9; /** Background of a danger badge or banner. */
+  --color-status-info-text: #2448ae; /** Neutral information: sent, draft notes. */
+  --color-status-info-surface: #e8eefb; /** Background of an information badge or banner. */
+  --color-focus-ring: #2f5bd3; /** Keyboard focus indicator on light surfaces. */
+  --color-focus-ring-inverse: #8fb0ff; /** Keyboard focus indicator on inverse surfaces. */
+  --color-tenant-accent: #0f766e; /** A tenant's one accent color (header, PDF, emails); consumers override it, nothing else. */
+  --color-logo-ink: #1d2d50; /** The logo's sheet, rules and wordmark on light backgrounds. */
+  --color-logo-rule: #0f766e; /** The logo's double rule on light backgrounds. */
+  --color-logo-fold: #5f729e; /** The small mark's folded corner on light backgrounds. */
+  --color-logo-ink-inverse: #ffffff; /** The logo on inverse backgrounds. */
+  --color-logo-rule-inverse: #5fb8ad; /** The double rule on inverse backgrounds. */
+  --color-logo-fold-inverse: #b9c4db; /** The small mark's folded corner on inverse backgrounds. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-unit: 0.25rem;
+  --radius-none: 0px;
+  --radius-sm: 2px; /** Buttons, inputs, badges. */
+  --radius-md: 4px; /** Cards, menus, dialogs. */
+  --radius-full: 9999px; /** Avatars only. */
+  --border-width-default: 1px;
+  --border-width-focus: 2px; /** The focus ring, with a 2 px offset: sized after WCAG 2.2's focus appearance (2.4.13, AAA). */
+  --shadow-sm: 0px 1px 2px 0px rgba(27, 34, 51, 0.08); /** Cards that sit on the canvas. */
+  --shadow-md: 0px 4px 12px 0px rgba(27, 34, 51, 0.14); /** Menus, popovers and dialogs above the page. */
+  --motion-duration-fast: 100ms; /** Hover and press feedback. */
+  --motion-duration-normal: 200ms; /** Menus and panels opening. */
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1); /** Things entering or changing. */
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1); /** Things leaving. */
+  --palette-navy-50: #eef1f7;
+  --palette-navy-100: #dce2ee;
+  --palette-navy-200: #b9c4db;
+  --palette-navy-300: #8d9dc0;
+  --palette-navy-400: #5f729e;
+  --palette-navy-500: #3e5180;
+  --palette-navy-600: #2c3d68;
+  --palette-navy-700: #1d2d50;
+  --palette-navy-800: #15213c;
+  --palette-navy-900: #0e1628;
+  --palette-verdigris-50: #e6f4f2;
+  --palette-verdigris-100: #c9e8e4;
+  --palette-verdigris-200: #96d2ca;
+  --palette-verdigris-300: #5fb8ad;
+  --palette-verdigris-400: #2e9a8f;
+  --palette-verdigris-500: #148579;
+  --palette-verdigris-600: #0f766e;
+  --palette-verdigris-700: #0c5f59;
+  --palette-verdigris-800: #0a4a45;
+  --palette-verdigris-900: #073532;
+  --palette-neutral-0: #ffffff;
+  --palette-neutral-50: #f5f6f8;
+  --palette-neutral-100: #eceef2;
+  --palette-neutral-200: #e1e4ea;
+  --palette-neutral-300: #c9ced8;
+  --palette-neutral-400: #7a8293;
+  --palette-neutral-500: #6b7385;
+  --palette-neutral-600: #5a6275;
+  --palette-neutral-700: #434a5a;
+  --palette-neutral-800: #2b3140;
+  --palette-neutral-900: #1b2233;
+  --palette-red-50: #fbe9e9;
+  --palette-red-100: #f6d0d0;
+  --palette-red-600: #c62828;
+  --palette-red-700: #a61b1b;
+  --palette-red-800: #861414;
+  --palette-amber-50: #fdf1dc;
+  --palette-amber-100: #fae1b5;
+  --palette-amber-600: #b45309;
+  --palette-amber-700: #8a4b06;
+  --palette-amber-800: #6e3a04;
+  --palette-green-50: #e8f3ec;
+  --palette-green-100: #cfe7d7;
+  --palette-green-600: #15803d;
+  --palette-green-700: #1e6b33;
+  --palette-green-800: #17542a;
+  --palette-blue-50: #e8eefb;
+  --palette-blue-300: #8fb0ff;
+  --palette-blue-600: #2f5bd3;
+  --palette-blue-700: #2448ae;
+  --font-family-serif: 'Source Serif 4', Georgia, Cambria, 'Times New Roman', serif; /** Ledger's headings and customer-facing documents; never in tables or forms. */
+  --font-family-sans: 'Public Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; /** The interface, tables and every amount (with tabular figures). */
+  --font-family-heading: 'Source Serif 4', Georgia, Cambria, 'Times New Roman', serif; /** Headings from the xl size up, and document titles. */
+  --font-family-body: 'Public Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; /** Everything else. */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-size-xs: 0.75rem; /** 12 px: badges, footnotes. */
+  --font-size-sm: 0.875rem; /** 14 px: tables, labels. */
+  --font-size-md: 1rem; /** 16 px: body text. */
+  --font-size-lg: 1.125rem; /** 18 px: lead text. */
+  --font-size-xl: 1.25rem; /** 20 px: section headings. */
+  --font-size-2xl: 1.5rem; /** 24 px: page titles. */
+  --font-size-3xl: 1.875rem; /** 30 px: document titles. */
+  --font-size-4xl: 2.25rem; /** 36 px: the brand guide. */
+  --font-leading-tight: 1.2; /** Headings. */
+  --font-leading-snug: 1.35; /** Table rows and dense lists. */
+  --font-leading-normal: 1.5; /** Running text. */
+}

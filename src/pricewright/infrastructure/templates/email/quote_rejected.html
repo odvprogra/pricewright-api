@@ -1,8 +1,14 @@
 {% extends "email/base.html" %}
+{% import "email/blocks.html" as blocks %}
+{#- To the rep, in the app's voice: who asked for changes, then what to change. #}
 {% block title %}Quote {{ number }} needs changes{% endblock %}
+{% block preheader %}{{ decider }} asked for changes:{% if comment %} “{{ comment }}”{% endif %}{% endblock %}
+{% block heading %}Your quote needs changes{% endblock %}
 {% block body %}
-<p>Hi {{ rep }},</p>
-<p>{{ decider }} did not approve quote <strong>{{ number }}</strong> for {{ customer }}, and asks:</p>
-<p style="padding: 8px 12px; background: #f3f4f6;">{{ comment }}</p>
-<p>Revise the quote, or cancel it, in Pricewright.</p>
+{{ blocks.paragraph("Hi " ~ rep | first_name ~ ",") }}
+{{ blocks.paragraph(decider ~ " asked for changes to your quote for " ~ customer ~ ":") }}
+{% if comment %}{{ blocks.comment(comment) }}{% endif %}
+{{ blocks.facts([("Quote", number), ("Customer", customer), ("Total", total | money)]) }}
+{{ blocks.paragraph("Revise the quote and submit it again, or cancel it, in Pricewright.") }}
 {% endblock %}
+{% block footer %}{{ tenant }}, sent with Pricewright. You get this email because you submitted the quote.{% endblock %}

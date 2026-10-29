@@ -1,12 +1,13 @@
 {% extends "email/base.html" %}
-{% block title %}Quotation {{ number }}{% endblock %}
+{% import "email/blocks.html" as blocks %}
+{#- To the customer: formal, no contractions, the PDF attached. The heading carries no number:
+    Georgia, the serif stack's fallback, sets old-style figures, so numbers go in the facts. #}
+{% block title %}Quotation {{ number }} from {{ tenant }}{% endblock %}
+{% block preheader %}{{ total | money }}, valid until {{ valid_until | long_date }}. The quotation is attached as a PDF.{% endblock %}
+{% block heading %}Your quotation from {{ tenant }}{% endblock %}
 {% block body %}
-<p>Hello,</p>
-<p>
-  {% if rep %}{{ rep }} at {{ tenant }}{% else %}{{ tenant }}{% endif %} sends you quotation
-  <strong>{{ number }}</strong> for {{ customer }}:
-  <strong>{{ total | amount }} {{ total.currency }}</strong>, valid until
-  {{ valid_until | long_date }}.
-</p>
-<p>The quotation is attached as a PDF.{% if rep %} Reply to this email to reach {{ rep }}.{% endif %}</p>
+{{ blocks.paragraph("Hello,") }}
+{{ blocks.paragraph((rep ~ " at " ~ tenant if rep else tenant) ~ " sends you a quotation for " ~ customer | sentence_end) }}
+{{ blocks.facts([("Quotation", number), ("Total", total | money), ("Valid until", valid_until | long_date)]) }}
+{{ blocks.paragraph("The quotation is attached as a PDF." ~ (" Reply to this email to reach " ~ rep ~ "." if rep else "")) }}
 {% endblock %}

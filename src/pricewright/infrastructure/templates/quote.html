@@ -3,131 +3,159 @@
 <head>
   <meta charset="utf-8">
   <title>{{ tenant.name }} quotation {{ quote.display_number }}</title>
+  {#- The quotation of pricewright-design's docs/brand/documents.md, on the tokens of the release
+      pinned in brand/ (ADR-0027). Every color and size is a custom property from tokens.css; the
+      tenant's accent is the tokens' default until tenants have their own (M7). #}
+  <link rel="stylesheet" href="brand/tokens.css">
   <style>
-    /* Semantic tokens (handbook §14.1); the brand (M12) sets their values. */
-    :root {
-      --color-text: #1f2937;
-      --color-text-muted: #4b5563;
-      --color-border: #d1d5db;
-      --color-surface-muted: #f3f4f6;
-      --color-accent: #1e40af;
-      --color-notice: #92400e;
-      --color-notice-surface: #fef3c7;
+    /* The OFL TrueType files as their projects publish them; WeasyPrint embeds the glyphs used. */
+    @font-face {
+      font-family: "Public Sans";
+      font-weight: 400;
+      src: url("brand/fonts/PublicSans-Regular.ttf") format("truetype");
+    }
+    @font-face {
+      font-family: "Public Sans";
+      font-weight: 600;
+      src: url("brand/fonts/PublicSans-SemiBold.ttf") format("truetype");
+    }
+    @font-face {
+      font-family: "Source Serif 4";
+      font-weight: 600;
+      src: url("brand/fonts/SourceSerif4-Semibold.ttf") format("truetype");
     }
     @page {
       size: A4;
       margin: 18mm 16mm 20mm;
       @bottom-left {
         content: "{{ quote.display_number }}";
-        font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif;
-        font-size: 8pt;
-        color: #4b5563;
+        font-family: var(--font-family-body);
+        font-size: var(--font-size-xs);
+        color: var(--color-text-muted);
       }
       @bottom-right {
         content: "Page " counter(page) " of " counter(pages);
-        font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif;
-        font-size: 8pt;
-        color: #4b5563;
+        font-family: var(--font-family-body);
+        font-size: var(--font-size-xs);
+        color: var(--color-text-muted);
       }
     }
+    /* Print sizes: every rem token scales from a 10 pt root (md 10 pt, sm 8.75 pt, xs 7.5 pt). */
+    html { font-size: 10pt; }
     body {
-      font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif;
-      font-size: 9pt;
-      color: var(--color-text);
-      line-height: 1.4;
-    }
-    header { display: flex; justify-content: space-between; align-items: flex-start; }
-    .tenant { font-size: 16pt; font-weight: bold; color: var(--color-accent); margin: 0; }
-    h1 { font-size: 13pt; margin: 0 0 2mm; }
-    dl.facts {
-      display: grid;
-      grid-template-columns: auto auto;
-      gap: 1mm 4mm;
       margin: 0;
-      min-width: 70mm;
+      color: var(--color-text-default);
+      font-family: var(--font-family-body);
+      font-size: var(--font-size-md);
+      line-height: var(--font-leading-snug);
     }
-    dl.facts dt { color: var(--color-text-muted); white-space: nowrap; }
-    dl.facts dd { margin: 0; text-align: right; white-space: nowrap; }
-    .notice {
-      margin: 6mm 0 0;
-      padding: 2mm 3mm;
-      color: var(--color-notice);
-      background: var(--color-notice-surface);
-      font-weight: bold;
+    .masthead { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-8); }
+    .issuer .name { margin: 0 0 var(--space-3); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+    h1 {
+      margin: 0;
+      font-family: var(--font-family-heading);
+      font-size: var(--font-size-3xl);
+      font-weight: var(--font-weight-semibold);
+      line-height: var(--font-leading-tight);
     }
-    .customer { margin: 8mm 0 6mm; }
-    .customer h2, .notes h2 {
-      font-size: 8pt;
+    /* The design's two-column grid, as a table: WeasyPrint sizes a grid inside a flex box too
+       narrow, and the facts ran past the right margin. */
+    .facts { display: table; flex: none; margin: 0; font-size: var(--font-size-sm); }
+    .facts div { display: table-row; }
+    .facts dt, .facts dd { display: table-cell; padding: 0 0 var(--space-1); white-space: nowrap; }
+    .facts dt { padding-right: var(--space-4); color: var(--color-text-muted); }
+    .facts dd { margin: 0; text-align: right; }
+    /* The tenant's rule: the one place the tenant's accent appears on the page. */
+    .tenant-rule { border: 0; border-top: 2pt solid var(--color-tenant-accent); margin: var(--space-4) 0 0; }
+    .notice { margin: var(--space-4) 0 0; padding: var(--space-2) var(--space-3); font-weight: var(--font-weight-semibold); }
+    .notice.warning { color: var(--color-status-warning-text); background: var(--color-status-warning-surface); }
+    .notice.danger { color: var(--color-status-danger-text); background: var(--color-status-danger-surface); }
+    .notice.info { color: var(--color-status-info-text); background: var(--color-status-info-surface); }
+    .label {
+      margin: 0 0 var(--space-1);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold);
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
       color: var(--color-text-muted);
-      margin: 0 0 1mm;
     }
-    .customer .name { font-size: 11pt; font-weight: bold; }
-    table { width: 100%; border-collapse: collapse; }
-    table.lines th {
+    .party { margin: var(--space-8) 0 var(--space-6); }
+    .party .name { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+    .party p { margin: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+    .lines th {
       text-align: left;
-      font-weight: bold;
+      font-weight: var(--font-weight-semibold);
       background: var(--color-surface-muted);
-      border-bottom: 1px solid var(--color-border);
-      padding: 1.5mm 2mm;
+      border-bottom: var(--border-width-default) solid var(--color-border-strong);
+      padding: var(--space-2);
     }
-    table.lines td { border-bottom: 1px solid var(--color-border); padding: 1.5mm 2mm; }
+    .lines td { border-bottom: var(--border-width-default) solid var(--color-border-default); padding: var(--space-2); vertical-align: top; }
+    .lines thead { display: table-header-group; }
+    .lines tr { break-inside: avoid; }
     .number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    table.lines th.number { text-align: right; }
+    .lines th.number { text-align: right; }
     .sku { color: var(--color-text-muted); white-space: nowrap; }
-    table.totals { width: 45%; margin: 4mm 0 0 auto; }
-    table.totals td { padding: 1mm 2mm; }
-    table.totals tr.total td {
-      font-size: 11pt;
-      font-weight: bold;
-      border-top: 1px solid var(--color-text);
+    .totals { width: 50%; margin: var(--space-4) 0 0 auto; font-size: var(--font-size-md); break-inside: avoid; }
+    .totals th { text-align: left; font-weight: var(--font-weight-regular); padding: var(--space-1) var(--space-2); }
+    .totals td { padding: var(--space-1) var(--space-2); }
+    /* The accountant's double rule closes the grand total, as it closes the logo's sheet. */
+    .totals .grand th, .totals .grand td {
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-semibold);
+      border-top: var(--border-width-default) solid var(--color-border-strong);
+      border-bottom: 3pt double var(--color-text-default);
+      padding-top: var(--space-2);
+      padding-bottom: var(--space-2);
     }
-    .notes { margin-top: 8mm; }
-    .notes p { white-space: pre-line; margin: 0; }
-    footer { margin-top: 10mm; color: var(--color-text-muted); font-size: 8pt; }
+    .notes { margin-top: var(--space-8); break-inside: avoid; }
+    .notes p { margin: 0; white-space: pre-line; max-width: 68ch; }
+    .closing { margin-top: var(--space-12); font-size: var(--font-size-xs); color: var(--color-text-muted); }
+    .closing p { margin: 0 0 var(--space-1); }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <p class="tenant">{{ tenant.name }}</p>
-      <h1>Quotation {{ quote.display_number }}</h1>
+  <header class="masthead">
+    <div class="issuer">
+      <p class="name">{{ tenant.name }}</p>
+      <h1>Quotation</h1>
     </div>
     <dl class="facts">
-      <dt>Date</dt><dd>{{ (quote.submitted_at or quote.created_at) | long_date }}</dd>
-      <dt>Valid until</dt><dd>{{ quote.valid_until | long_date }}</dd>
-      {% if document.prepared_by %}<dt>Prepared by</dt><dd>{{ document.prepared_by }}</dd>{% endif %}
+      <div><dt>Number</dt><dd>{{ quote.display_number }}</dd></div>
+      <div><dt>Date</dt><dd>{{ (quote.submitted_at or quote.created_at) | long_date }}</dd></div>
+      <div><dt>Valid until</dt><dd>{{ quote.valid_until | long_date }}</dd></div>
+      {% if document.prepared_by %}<div><dt>Prepared by</dt><dd>{{ document.prepared_by }}</dd></div>{% endif %}
     </dl>
   </header>
+  <hr class="tenant-rule">
 
   {% set status = document.status.value %}
   {% if status in ("draft", "pending_approval", "rejected") %}
-  <p class="notice">Draft, not an offer: prices may change until the quote is approved.</p>
+  <p class="notice warning">Draft, not an offer: prices may change until the quote is approved.</p>
   {% elif status == "expired" %}
-  <p class="notice">This offer has expired: it was valid until {{ quote.valid_until | long_date }}.</p>
+  <p class="notice danger">This offer has expired: it was valid until {{ quote.valid_until | long_date }}.</p>
   {% elif status == "cancelled" %}
-  <p class="notice">Cancelled: this quote is no longer an offer.</p>
+  <p class="notice danger">Cancelled: this quote is no longer an offer.</p>
   {% elif status == "superseded" %}
-  <p class="notice">Replaced by a later revision: this quote is no longer an offer.</p>
+  <p class="notice info">Replaced by a later revision: this quote is no longer an offer.</p>
   {% endif %}
 
-  <section class="customer">
-    <h2>Prepared for</h2>
-    <div class="name">{{ customer.name }}</div>
-    <div>Account {{ customer.account_number }}{% if customer.tax_id %}, tax ID {{ customer.tax_id }}{% endif %}</div>
+  <section class="party">
+    <h2 class="label">Prepared for</h2>
+    <p class="name">{{ customer.name }}</p>
+    <p>Account {{ customer.account_number }}{% if customer.tax_id %}, tax ID {{ customer.tax_id }}{% endif %}</p>
   </section>
 
   <table class="lines">
     <thead>
       <tr>
-        <th>Item</th>
-        <th>Description</th>
-        <th class="number">Quantity</th>
-        <th class="number">List price</th>
-        <th class="number">Discount</th>
-        <th class="number">Net price</th>
-        <th class="number">Amount ({{ quote.currency }})</th>
+        <th scope="col">Item</th>
+        <th scope="col">Description</th>
+        <th scope="col" class="number">Quantity</th>
+        <th scope="col" class="number">List price</th>
+        <th scope="col" class="number">Discount</th>
+        <th scope="col" class="number">Net price</th>
+        <th scope="col" class="number">Amount</th>
       </tr>
     </thead>
     <tbody>
@@ -139,7 +167,7 @@
         <td class="number">{{ line.quantity | quantity(line.unit) }}</td>
         <td class="number">{{ line.pricing.breakdown.list_unit_price | unit_price }}</td>
         <td class="number">{% if off %}{{ off | percent }}{% endif %}</td>
-        <td class="number">{{ line.pricing.breakdown.net_unit_price | unit_price }}</td>
+        <td class="number">{{ line.pricing.breakdown.net_unit_price | net_price }}</td>
         <td class="number">{{ line.pricing.net_total | amount }}</td>
       </tr>
       {% endfor %}
@@ -147,27 +175,21 @@
   </table>
 
   <table class="totals">
-    <tr><td>Subtotal</td><td class="number">{{ quote.totals.net_subtotal | amount }}</td></tr>
-    <tr>
-      <td>Tax ({{ quote.totals.tax_rate | percent }})</td>
-      <td class="number">{{ quote.totals.tax | amount }}</td>
-    </tr>
-    <tr class="total">
-      <td>Total {{ quote.currency }}</td>
-      <td class="number">{{ quote.totals.total | amount }}</td>
-    </tr>
+    <tr><th scope="row">Subtotal</th><td class="number">{{ quote.totals.net_subtotal | amount }}</td></tr>
+    <tr><th scope="row">Tax ({{ quote.totals.tax_rate | percent }})</th><td class="number">{{ quote.totals.tax | amount }}</td></tr>
+    <tr class="grand"><th scope="row">Total</th><td class="number">{{ quote.totals.total | money }}</td></tr>
   </table>
 
   {% if quote.notes %}
   <section class="notes">
-    <h2>Notes</h2>
+    <h2 class="label">Notes</h2>
     <p>{{ quote.notes }}</p>
   </section>
   {% endif %}
 
-  <footer>
-    Prices in {{ quote.currency }}, before tax unless stated. {{ tenant.name }}, quotation
-    {{ quote.display_number }}, issued with Pricewright.
+  <footer class="closing">
+    <p>Prices in {{ quote.currency }}, before tax unless stated. Valid until {{ quote.valid_until | long_date }}.</p>
+    <p>{{ tenant.name }}, quotation {{ quote.display_number }}, issued with Pricewright.</p>
   </footer>
 </body>
 </html>

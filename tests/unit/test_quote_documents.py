@@ -1,13 +1,18 @@
 """Quote documents (ADR-0027): what the PDF shows, rendered for real with WeasyPrint and read back
-with pypdf, and the use case behind ``GET /quotes/{id}/pdf``."""
+with pypdf, the pinned design tokens it is styled with (D-61), and the use case behind
+``GET /quotes/{id}/pdf``."""
 
 import io
+import json
+import re
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import cast
 
 import pytest
 from pypdf import PdfReader
+from pypdf.generic import DictionaryObject
 
 from pricewright.application.documents import QuoteDocument, render_quote
 from pricewright.application.ports import UnitOfWork
@@ -21,12 +26,19 @@ from pricewright.domain.quotes import LineChange, Quote
 from pricewright.domain.tenants import Tenant
 from pricewright.domain.users import Role, User
 from pricewright.infrastructure.documents import (
+    BRAND,
+    DESIGN_RELEASE,
+    TEMPLATES,
     WeasyPrintQuoteDocuments,
     amount,
     discount,
+    first_name,
     long_date,
+    money,
+    net_price,
     percent,
     quantity,
+    sentence_end,
     unit_price,
 )
 from tests.fakes import FakeClock, FakeQuoteDocuments, FakeUnitOfWork, InMemoryDatabase
@@ -61,41 +73,74 @@ def text_of(pdf: bytes) -> str:
     return " ".join(" ".join(page.extract_text() for page in pages).split())
 
 
+def fonts_of(pdf: bytes) -> set[str]:
+    """The fonts embedded in the PDF, without their subset prefix (``ABCDEF+Public-Sans``)."""
+    names = set()
+    for page in PdfReader(io.BytesIO(pdf)).pages:
+        fonts = cast(DictionaryObject, cast(DictionaryObject, page["/Resources"])["/Font"])
+        for font in fonts.values():
+            name = cast(DictionaryObject, font.get_object())["/BaseFont"]
+            names.add(str(name).split("+", 1)[-1])
+    return names
+
+
 async def test_quote_pdf_shows_the_offer_and_never_its_costs() -> None:
     quote = quoted()
     quote.submit(by=REP, context=context())
 
     text = text_of(await WeasyPrintQuoteDocuments().render(document_of(quote)))
 
-    assert "Northfield Supply" in text
-    assert "Quotation NF-2026-000001" in text
+    assert "Northfield Supply Quotation" in text
+    assert "Number NF-2026-000001" in text
     assert "Acme" in text
     assert "Account C-1001" in text
     assert "Prepared by Jordan Rep" in text
     assert "FAS-M6-100" in text
     assert "PPE-GLV-L" in text
-    assert f"Total {quote.currency}" in text
-    assert amount(quote.totals.total) in text
+    assert f"Total {money(quote.totals.total)}" in text
     assert "Delivery within two weeks." in text
     assert "not an offer" not in text
     for line in quote.lines:  # what the lines cost Northfield never reaches the customer
         assert amount(line.pricing.cost_total) not in text
 
 
+async def test_quote_pdf_embeds_the_brand_s_fonts_and_nothing_else() -> None:
+    pdf = await WeasyPrintQuoteDocuments().render(document_of(quoted()))
+
+    # Public Sans for the text and the running footer, Source Serif 4 for "Quotation" alone.
+    assert fonts_of(pdf) == {"Public-Sans", "Public-Sans-Semi-Bold", "Source-Serif-4-Semi-Bold"}
+
+
 @pytest.mark.parametrize(
     ("status", "notice"),
     [
-        (QuoteStatus.DRAFT, "Draft, not an offer"),
-        (QuoteStatus.PENDING_APPROVAL, "Draft, not an offer"),
-        (QuoteStatus.EXPIRED, "This offer has expired"),
-        (QuoteStatus.CANCELLED, "Cancelled"),
-        (QuoteStatus.SUPERSEDED, "Replaced by a later revision"),
+        (QuoteStatus.DRAFT, 'warning">Draft, not an offer'),
+        (QuoteStatus.PENDING_APPROVAL, 'warning">Draft, not an offer'),
+        (QuoteStatus.REJECTED, 'warning">Draft, not an offer'),
+        (QuoteStatus.EXPIRED, 'danger">This offer has expired'),
+        (QuoteStatus.CANCELLED, 'danger">Cancelled'),
+        (QuoteStatus.SUPERSEDED, 'info">Replaced by a later revision'),
     ],
 )
 def test_quote_document_says_when_it_is_not_an_offer(status: QuoteStatus, notice: str) -> None:
     html = WeasyPrintQuoteDocuments().html(document_of(quoted(), status))
 
-    assert notice in html
+    assert f'<p class="notice {notice}' in html  # in its status color's text, on its surface
+
+
+def test_quote_document_takes_every_style_from_the_pinned_tokens() -> None:
+    """``just brand`` replaces the tokens; the template must use only properties they define."""
+    tokens_css = (BRAND / "tokens.css").read_text(encoding="utf-8")
+    defined = set(re.findall(r"^\s*(--[a-z0-9-]+):", tokens_css, flags=re.MULTILINE))
+    template = (TEMPLATES / "quote.html").read_text(encoding="utf-8")
+    used = set(re.findall(r"var\((--[a-z0-9-]+)\)", template))
+
+    assert used
+    assert used <= defined
+    assert re.search(r"#[0-9a-fA-F]{3,6}\b", template) is None  # no color of its own
+    assert f"pricewright-design {DESIGN_RELEASE}:" in tokens_css
+    built = json.loads((BRAND / "tokens.json").read_text(encoding="utf-8"))
+    assert (built["name"], built["version"]) == ("pricewright-design", DESIGN_RELEASE)
 
 
 def test_quote_document_escapes_what_people_typed() -> None:
@@ -113,12 +158,17 @@ def test_document_figures_read_as_people_write_them() -> None:
     assert unit_price(usd("12.5")) == "12.50"
     assert unit_price(usd("11.2375")) == "11.2375"
     assert unit_price(Money(Decimal(1500), "JPY")) == "1,500"
+    assert net_price(usd("1234.5")) == "1,234.5000"
+    assert money(usd("1833.29")) == "USD 1,833.29"
     assert percent(Decimal("0.145")) == "14.5%"
     assert percent(Decimal("0.0725")) == "7.25%"
     assert quantity(Decimal("12.500"), BOLTS.unit) == "12.5 each"
     assert long_date(date(2026, 10, 5)) == "October 5, 2026"
     assert discount(usd("100"), usd("85.5")) == Decimal("0.145")
     assert discount(usd("0"), usd("0")) == 0
+    assert sentence_end("Acme") == "Acme."
+    assert sentence_end("Larkspur Tool Co.") == "Larkspur Tool Co."
+    assert first_name("Jordan Patel") == "Jordan"
 
 
 async def render(
