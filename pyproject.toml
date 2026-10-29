@@ -97,7 +97,7 @@ plugins = ["pydantic.mypy"]
 
 # WeasyPrint ships no type hints; the one adapter that calls it types what it returns.
 [[tool.mypy.overrides]]
-module = ["weasyprint"]
+module = ["weasyprint", "weasyprint.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]

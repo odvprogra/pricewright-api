@@ -1,0 +1,16 @@
+{#- What an email says, block by block; each email's .txt template writes the same blocks. -#}
+{%- macro paragraph(text) -%}
+<p style="margin:0 0 16px;font-family:{{ style.sans }};font-size:{{ style.md }}px;line-height:1.5;color:{{ style.text }};">{{ text }}</p>
+{%- endmacro -%}
+
+{#- A manager's comment, set apart as a quotation. -#}
+{%- macro comment(text) -%}
+<blockquote style="margin:0 0 16px;padding:8px 16px;border-left:3px solid {{ style.quote }};background:{{ style.canvas }};font-family:{{ style.sans }};font-size:{{ style.md }}px;line-height:1.5;color:{{ style.text }};">{{ text }}</blockquote>
+{%- endmacro -%}
+
+{#- A real data table: row headers, so screen readers pair each label with its value. -#}
+{%- macro facts(rows) -%}
+<table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;border-collapse:collapse;">
+{%- for label, value in rows %}<tr><th scope="row" align="left" style="padding:4px 16px 4px 0;font-family:{{ style.sans }};font-size:{{ style.md }}px;font-weight:400;color:{{ style.muted }};">{{ label }}</th><td style="padding:4px 0;font-family:{{ style.sans }};font-size:{{ style.md }}px;font-weight:600;color:{{ style.text }};font-variant-numeric:tabular-nums;">{{ value }}</td></tr>{% endfor -%}
+</table>
+{%- endmacro -%}

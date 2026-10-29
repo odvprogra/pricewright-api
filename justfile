@@ -61,6 +61,13 @@ seed *args:
 migration message:
     uv run alembic revision --autogenerate -m "{{ message }}"
 
+# Pin a pricewright-design release's tokens for the PDF and the emails (D-61), checked against the
+# release's attestation: just brand 0.2.0 (then set DESIGN_RELEASE; a test fails until it matches)
+brand version:
+    gh release download v{{ version }} --repo odvprogra/pricewright-design --pattern tokens.css --pattern tokens.json --dir src/pricewright/infrastructure/templates/brand --clobber
+    gh release verify-asset v{{ version }} src/pricewright/infrastructure/templates/brand/tokens.css --repo odvprogra/pricewright-design
+    gh release verify-asset v{{ version }} src/pricewright/infrastructure/templates/brand/tokens.json --repo odvprogra/pricewright-design
+
 # Regenerate the committed OpenAPI spec (a test fails when it is stale)
 openapi:
     uv run python -c "from pricewright.main import write_openapi; write_openapi()"

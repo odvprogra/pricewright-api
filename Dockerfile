@@ -27,7 +27,8 @@ FROM python:3.14-slim AS runtime
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 
-# WeasyPrint lays text out with Pango and HarfBuzz; DejaVu is the quote PDFs' font (ADR-0027).
+# WeasyPrint lays text out with Pango and HarfBuzz. Quote PDFs embed the brand's fonts (ADR-0027);
+# DejaVu is the fallback for any glyph they lack.
 # fontconfig builds the system font cache here, at build time.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \

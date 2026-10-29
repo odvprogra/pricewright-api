@@ -1,9 +1,13 @@
-Hi {{ rep }},
+Hi {{ rep | first_name }},
 
-{{ decider }} did not approve quote {{ number }} for {{ customer }}, and asks:
+{{ decider }} asked for changes to your quote for {{ customer }}:
+{% if comment %}
+> {{ comment }}
+{% endif %}
+Quote: {{ number }}
+Customer: {{ customer }}
+Total: {{ total | money }}
 
-"{{ comment }}"
+Revise the quote and submit it again, or cancel it, in Pricewright.
 
-Revise the quote, or cancel it, in Pricewright.
-
-{{ tenant }}, sent with Pricewright
+{{ tenant }}, sent with Pricewright. You get this email because you submitted the quote.

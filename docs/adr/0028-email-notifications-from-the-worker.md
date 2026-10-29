@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-14
+- **Amended:** 2026-10-29 — the brand's emails, with values copied from the pinned tokens (D-61)
 
 ## Context
 
@@ -46,6 +47,17 @@ Practice:
   server's permanent refusals (5xx) make the event dead at once; anything else is retried
   (ADR-0008). Each email's `Message-ID` is derived from its event.
 - **Templates** are Jinja2, HTML and plain text, sharing the PDF's tokens (ADR-0027).
+- **The brand (amendment, M12).** The three emails follow pricewright-design's
+  [`docs/brand/documents.md`](https://github.com/odvprogra/pricewright-design/blob/v0.1.0/docs/brand/documents.md)
+  (reference: `src/documents/emails.ts`): one column of at most 600 px on presentation tables with
+  `lang` and `dir`, the facts as a data table with row headers, the tenant's rule and name, a serif
+  heading without numbers (Georgia, the stack's fallback, sets old-style figures), a hidden preview
+  line, a manager's comment as a quotation, light only, and a plain-text part with the same blocks.
+  Mail clients drop `<style>` and do not resolve `var()`, so every style is inline and every value
+  comes from the pinned release's `tokens.json` (`EmailStyle`, sizes in pixels); no web fonts, since
+  Gmail and Outlook for Windows ignore `@font-face`
+  ([caniemail](https://www.caniemail.com/features/css-at-font-face/)). Customers read formal
+  sentences, reps the app's voice; the decisions' subjects are unchanged.
 - **Locally, Mailpit** runs in docker compose; it lives in this repository, the only one that sends
   email.
 

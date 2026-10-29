@@ -347,3 +347,9 @@ docs/                # product brief, architecture and ADRs
 ## License
 
 [MIT](LICENSE)
+
+The quote PDFs' fonts in `src/pricewright/infrastructure/templates/brand/fonts/` (Source Serif 4,
+Public Sans) are under the SIL Open Font License 1.1, with their license files beside them. The
+design tokens next to them come from
+[pricewright-design v0.1.0](https://github.com/odvprogra/pricewright-design/releases/tag/v0.1.0)
+(`just brand <version>` pins another release).

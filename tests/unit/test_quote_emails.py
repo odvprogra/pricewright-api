@@ -92,7 +92,8 @@ async def test_an_approval_emails_the_rep_who_submitted_it_with_the_pdf(office: 
     assert pdf.content == b"%PDF-fake NF-2026-000001 approved"
     text = RENDERER.message(email).get_body(("plain",))
     assert text is not None
-    assert "Morgan Manager approved quote NF-2026-000001 for Acme" in text.get_content()
+    assert "Morgan Manager approved your quote for Acme." in text.get_content()
+    assert "Quote: NF-2026-000001" in text.get_content()
 
 
 async def test_a_rejection_emails_the_rep_what_to_change_without_a_pdf(office: Office) -> None:
@@ -146,7 +147,8 @@ async def test_a_sent_quote_reaches_the_customer_with_replies_to_the_rep(office:
     assert pdf.content == b"%PDF-fake NF-2026-000001 sent"
     text = RENDERER.message(email).get_body(("plain",))
     assert text is not None
-    assert f"Jordan Rep at Northfield sends you quotation {number} for Acme" in text.get_content()
+    assert "Jordan Rep at Northfield sends you a quotation for Acme." in text.get_content()
+    assert f"Quotation: {number}" in text.get_content()
 
 
 async def test_a_customer_without_an_email_gets_nothing_and_the_event_is_done(
