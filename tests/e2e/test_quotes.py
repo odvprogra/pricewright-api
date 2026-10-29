@@ -16,7 +16,7 @@ from pricewright.domain.money import Money
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
 from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.tenants import Tenant, TenantSettings
-from pricewright.domain.users import Role
+from pricewright.domain.users import Role, User
 from tests.fakes import FakeAccessTokens, FakeClock, InMemoryDatabase, fake_services
 
 NORTHFIELD = Tenant.register(
@@ -73,6 +73,21 @@ async def client(database: InMemoryDatabase) -> AsyncIterator[httpx.AsyncClient]
 def bearer(role: Role = Role.SALES_REP, user_id: uuid.UUID | None = None) -> dict[str, str]:
     principal = Principal(NORTHFIELD.id, user_id or uuid.uuid7(), role)
     return {"Authorization": f"Bearer {FakeAccessTokens().issue(principal).token}"}
+
+
+def person(
+    database: InMemoryDatabase, role: Role = Role.SALES_REP, full_name: str = "Taylor Brooks"
+) -> uuid.UUID:
+    """A user stored in ``database``, for responses that name who did something (ADR-0029)."""
+    user = User.create(
+        tenant_id=NORTHFIELD.id,
+        email=f"{uuid.uuid7()}@northfield.example",
+        full_name=full_name,
+        role=role,
+        password_hash="hash",
+    )
+    database.users[user.id] = user
+    return user.id
 
 
 async def api_key(client: httpx.AsyncClient, *scopes: str) -> dict[str, str]:
@@ -171,9 +186,11 @@ async def test_an_integration_drafts_quotes_without_seeing_margins(
 
     created = await client.post(PATH, json=new_quote(), headers=key)
     read = await client.get(f"{PATH}/{created.json()['id']}", headers=key)
+    listed = await client.get(PATH, headers=key)
 
     assert created.status_code == 201
     assert created.json()["created_by"]["type"] == "service_account"
+    assert listed.json()["items"][0]["created_by"]["name"].startswith("integration ")
     assert "margin" not in read.json()["lines"][0]
     assert read.json()["lines"][0]["below_margin_floor"] is True
 
@@ -234,9 +251,9 @@ def with_key(key: str, user_id: uuid.UUID) -> dict[str, str]:
 
 
 async def test_a_draft_retried_with_its_idempotency_key_is_created_once(
-    client: httpx.AsyncClient,
+    client: httpx.AsyncClient, database: InMemoryDatabase
 ) -> None:
-    rep = uuid.uuid7()
+    rep = person(database)
 
     first = await client.post(PATH, json=new_quote(), headers=with_key(f'"{KEY}"', rep))
     retry = await client.post(PATH, json=new_quote(), headers=with_key(f'"{KEY}"', rep))
@@ -314,26 +331,28 @@ async def test_numbers_keep_counting_and_skip_nothing(client: httpx.AsyncClient)
 
 
 async def test_quotes_are_listed_newest_first_without_their_lines(
-    client: httpx.AsyncClient,
+    client: httpx.AsyncClient, database: InMemoryDatabase
 ) -> None:
-    first = await client.post(PATH, json=new_quote(), headers=bearer())
-    second = await client.post(PATH, json=new_quote(), headers=bearer())
+    rep = person(database)
+    first = await client.post(PATH, json=new_quote(), headers=bearer(user_id=rep))
+    second = await client.post(PATH, json=new_quote(), headers=bearer(user_id=rep))
 
     response = await client.get(PATH, headers=bearer())
 
     assert response.status_code == 200
     items = response.json()["items"]
     assert [item["id"] for item in items] == [second.json()["id"], first.json()["id"]]
-    assert items[0] | {"id": None, "created_by": None} == {
+    assert items[0] | {"id": None} == {
         "id": None,
         "number": "NF-2026-000002",
         "revision": 1,
         "customer_id": str(ACME.id),
+        "customer": {"id": str(ACME.id), "name": "Acme", "account_number": "C-1001"},
         "status": "draft",
         "valid_until": "2026-11-02",
         "net_subtotal": usd("900.0000"),
         "total": usd("965.2500"),
-        "created_by": None,
+        "created_by": {"type": "user", "id": str(rep), "name": "Taylor Brooks"},
         "created_at": "2026-10-03T12:00:00Z",
         "status_changed_at": "2026-10-03T12:00:00Z",
         "version": 1,
@@ -341,9 +360,12 @@ async def test_quotes_are_listed_newest_first_without_their_lines(
     assert response.json()["next_cursor"] is None
 
 
-async def test_quotes_are_filtered_sorted_and_paged(client: httpx.AsyncClient) -> None:
-    late = await client.post(PATH, json=new_quote(valid_until="2026-12-31"), headers=bearer())
-    soon = await client.post(PATH, json=new_quote(valid_until="2026-10-10"), headers=bearer())
+async def test_quotes_are_filtered_sorted_and_paged(
+    client: httpx.AsyncClient, database: InMemoryDatabase
+) -> None:
+    rep = bearer(user_id=person(database))
+    late = await client.post(PATH, json=new_quote(valid_until="2026-12-31"), headers=rep)
+    soon = await client.post(PATH, json=new_quote(valid_until="2026-10-10"), headers=rep)
     params = {"sort": "valid_until", "limit": "1", "status": "draft"}
 
     page = await client.get(PATH, params=params, headers=bearer())
@@ -357,9 +379,12 @@ async def test_quotes_are_filtered_sorted_and_paged(client: httpx.AsyncClient) -
     assert [item["id"] for item in by_number.json()["items"]] == [late.json()["id"]]
 
 
-async def test_a_cursor_from_another_list_is_a_422(client: httpx.AsyncClient) -> None:
-    await client.post(PATH, json=new_quote(), headers=bearer())
-    await client.post(PATH, json=new_quote(), headers=bearer())
+async def test_a_cursor_from_another_list_is_a_422(
+    client: httpx.AsyncClient, database: InMemoryDatabase
+) -> None:
+    rep = bearer(user_id=person(database))
+    await client.post(PATH, json=new_quote(), headers=rep)
+    await client.post(PATH, json=new_quote(), headers=rep)
     page = await client.get(PATH, params={"limit": "1"}, headers=bearer())
 
     response = await client.get(

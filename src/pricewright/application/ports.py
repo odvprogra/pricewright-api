@@ -51,6 +51,10 @@ class UserRepository(Protocol):
 
     async def get(self, user_id: UUID) -> User | None: ...
 
+    async def with_ids(self, user_ids: Collection[UUID]) -> list[User]:
+        """The users with these ids, in no particular order; unknown ids are left out."""
+        ...
+
     async def page(self, *, after: UUID | None, limit: int) -> list[User]:
         """Up to ``limit`` users ordered by id, starting after ``after`` (keyset pagination)."""
         ...
@@ -99,6 +103,10 @@ class ServiceAccountRepository(Protocol):
 
     async def get(self, account_id: UUID, *, lock: bool = False) -> ServiceAccount | None:
         """With ``lock``, the account stays locked until commit (serializes key issuance)."""
+        ...
+
+    async def with_ids(self, account_ids: Collection[UUID]) -> list[ServiceAccount]:
+        """The accounts with these ids, in no particular order; unknown ids are left out."""
         ...
 
     async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
@@ -221,6 +229,10 @@ class CustomerRepository(Protocol):
     async def add(self, customer: Customer) -> None: ...
 
     async def get(self, customer_id: UUID) -> Customer | None: ...
+
+    async def with_ids(self, customer_ids: Collection[UUID]) -> list[Customer]:
+        """The customers with these ids, in no particular order; unknown ids are left out."""
+        ...
 
     async def with_account_number(self, account_number: str) -> Customer | None:
         """The customer with this account number, ignoring case."""

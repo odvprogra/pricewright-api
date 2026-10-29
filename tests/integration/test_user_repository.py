@@ -228,3 +228,17 @@ async def test_login_state_of_a_user_that_was_never_saved_is_an_error(
 
         with pytest.raises(RuntimeError, match="existing user"):
             await uow.users.save_login_state(ghost)
+
+
+async def test_users_are_found_by_ids_within_the_tenant(session_factory: Sessions) -> None:
+    northfield, [avery, _] = await register(
+        session_factory, "Northfield", "avery@northfield.example", "blake@northfield.example"
+    )
+    _, [robin] = await register(session_factory, "Larkspur", "robin@larkspur.example")
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+        found = await uow.users.with_ids({avery.id, robin.id, uuid.uuid7()})
+        none = await uow.users.with_ids(set())
+
+    assert (found, none) == ([avery], [])

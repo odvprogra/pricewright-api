@@ -24,6 +24,7 @@ from pricewright.api.money import MoneyJson
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
 from pricewright.api.pricing import MarginFloorJson, MarginJson, StepJson, ratio
 from pricewright.application.documents import render_quote
+from pricewright.application.names import Names
 from pricewright.application.ports import QuoteQuery, QuoteSort, QuoteSummary
 from pricewright.application.quotes import (
     LineEdit,
@@ -49,6 +50,7 @@ from pricewright.domain.actors import Actor
 from pricewright.domain.audit import ActorType
 from pricewright.domain.auth import Permission, Principal
 from pricewright.domain.catalog import UnitOfMeasure
+from pricewright.domain.customers import Customer
 from pricewright.domain.orders import OrderLine
 from pricewright.domain.pricing import (
     MAX_REASON_LENGTH,
@@ -119,6 +121,32 @@ class ActorJson(BaseModel):
     @classmethod
     def of(cls, actor: Actor) -> ActorJson:
         return cls(type=CallerType(actor.type.value), id=actor.id)
+
+
+class NamedActorJson(ActorJson):
+    """An actor with the name to show for it (ADR-0029)."""
+
+    name: str = Field(
+        description="The user's full name or the service account's name, as it is today."
+    )
+
+    @classmethod
+    def named(cls, actor: Actor, names: Names) -> NamedActorJson:
+        return cls(type=CallerType(actor.type.value), id=actor.id, name=names.of(actor))
+
+
+class CustomerRefJson(BaseModel):
+    """The customer a record is for, as it is named today (ADR-0029)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+    account_number: str
+
+    @classmethod
+    def of(cls, customer: Customer) -> CustomerRefJson:
+        return cls(id=customer.id, name=customer.name, account_number=customer.account_number)
 
 
 class OverrideJson(BaseModel):
@@ -485,27 +513,29 @@ class QuoteSummaryJson(BaseModel):
     number: str = Field(examples=["NF-2026-000123-R2"])
     revision: int
     customer_id: UUID
+    customer: CustomerRefJson
     status: QuoteStatus
     valid_until: date
     net_subtotal: MoneyJson
     total: MoneyJson
-    created_by: ActorJson
+    created_by: NamedActorJson
     created_at: datetime
     status_changed_at: datetime | None
     version: int
 
     @classmethod
-    def of(cls, quote: QuoteSummary) -> QuoteSummaryJson:
+    def of(cls, quote: QuoteSummary, names: Names) -> QuoteSummaryJson:
         return cls(
             id=quote.id,
             number=quote.display_number,
             revision=quote.revision,
             customer_id=quote.customer_id,
+            customer=CustomerRefJson.of(names.customer(quote.customer_id)),
             status=quote.status,
             valid_until=quote.valid_until,
             net_subtotal=MoneyJson.of(quote.net_subtotal),
             total=MoneyJson.of(quote.total),
-            created_by=ActorJson.of(quote.created_by),
+            created_by=NamedActorJson.named(quote.created_by, names),
             created_at=quote.created_at,
             status_changed_at=quote.status_changed_at,
             version=quote.version,
@@ -563,7 +593,7 @@ async def read_quotes(
         "created_by": None if created_by is None else str(created_by),
         "sort": sort,
     }
-    page = await list_quotes(
+    page, names = await list_quotes(
         principal,
         query,
         after=decode_cursor(cursor, fingerprint),
@@ -571,7 +601,7 @@ async def read_quotes(
         unit_of_work=services.unit_of_work,
     )
     return QuotePage(
-        items=[QuoteSummaryJson.of(quote) for quote in page.items],
+        items=[QuoteSummaryJson.of(quote, names) for quote in page.items],
         next_cursor=encode_cursor(page.next_after, fingerprint),
     )
 

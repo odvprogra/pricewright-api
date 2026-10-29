@@ -164,3 +164,19 @@ async def test_another_tenants_customers_are_invisible(session_factory: Sessions
 
     assert (hidden, by_number) == (None, None)
     assert await accounts(session_factory, larkspur, CustomerQuery()) == []
+
+
+async def test_customers_are_found_by_ids_within_the_tenant(session_factory: Sessions) -> None:
+    northfield, _ = await register(session_factory, "Northfield")
+    larkspur, _ = await register(session_factory, "Larkspur")
+    acme, globex = customer(northfield, "C-1001", "Acme"), customer(northfield, "C-1002", "Globex")
+    theirs = customer(larkspur, "C-1001", "Acme")
+    await store(session_factory, northfield, acme, globex)
+    await store(session_factory, larkspur, theirs)
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+        found = await uow.customers.with_ids({acme.id, theirs.id})
+        none = await uow.customers.with_ids(set())
+
+    assert (found, none) == ([acme], [])

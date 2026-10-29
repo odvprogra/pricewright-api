@@ -18,6 +18,7 @@ from pricewright.application.idempotency import (
     remember_creation,
     replay,
 )
+from pricewright.application.names import Names, look_up_names
 from pricewright.application.orders import order_of
 from pricewright.application.pagination import Keyset, Page, page_of
 from pricewright.application.ports import (
@@ -151,12 +152,19 @@ async def list_quotes(
     after: Keyset | None,
     limit: int,
     unit_of_work: UnitOfWorkFactory,
-) -> Page[QuoteSummary]:
+) -> tuple[Page[QuoteSummary], Names]:
+    """A page of quotes, and the names of their customers and creators (ADR-0029)."""
     principal.require(Permission.QUOTES_READ)
     async with unit_of_work() as uow:
         uow.bind_tenant(principal.tenant_id)
         quotes = await uow.quotes.page(query, after=after, limit=limit + 1)
-    return page_of(quotes, limit, lambda quote: _position(quote, query.sort))
+        page = page_of(quotes, limit, lambda quote: _position(quote, query.sort))
+        names = await look_up_names(
+            uow,
+            {quote.created_by for quote in page.items},
+            {quote.customer_id for quote in page.items},
+        )
+    return page, names
 
 
 @dataclass(frozen=True, slots=True)
@@ -604,9 +612,10 @@ async def list_approval_requests(
     limit: int,
     unit_of_work: UnitOfWorkFactory,
     clock: Clock,
-) -> Page[ApprovalSummary]:
+) -> tuple[Page[ApprovalSummary], Names]:
     """The approval inbox: requests with ``status``, oldest first; pending ones of expired offers
-    are left out, since they can only be revised."""
+    are left out, since they can only be revised. With the names of who asked, who built each
+    quote and its customer (ADR-0029)."""
     principal.require(Permission.QUOTES_READ)
     today = clock().astimezone(UTC).date()
     async with unit_of_work() as uow:
@@ -614,4 +623,8 @@ async def list_approval_requests(
         found = await uow.quotes.approval_page(
             status, today=today, after=None if after is None else after.id, limit=limit + 1
         )
-    return page_of(found, limit, lambda item: Keyset(item.request.id))
+        page = page_of(found, limit, lambda item: Keyset(item.request.id))
+        actors = {item.request.requested_by for item in page.items}
+        actors |= {item.quote.created_by for item in page.items}
+        names = await look_up_names(uow, actors, {item.quote.customer_id for item in page.items})
+    return page, names

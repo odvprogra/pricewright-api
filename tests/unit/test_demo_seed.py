@@ -221,7 +221,7 @@ def test_seed_demo_fills_the_approval_inbox_for_the_as_of_date(seeded: Seeded) -
     northfield = report.tenants[0]
     manager = next(u for u in database.users.values() if u.role is Role.SALES_MANAGER)
 
-    inbox = asyncio.run(
+    inbox, _ = asyncio.run(
         list_approval_requests(
             Principal(northfield.tenant_id, manager.id, Role.SALES_MANAGER),
             ApprovalStatus.PENDING,

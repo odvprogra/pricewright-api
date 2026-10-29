@@ -85,6 +85,8 @@ Rules the code relies on:
   an event to `uow.outbox` there (`domain/events.py`, ADR-0008).
 - Lists take whitelisted filters and `sort`; cursors are bound to the query (`api/pagination.py`,
   ADR-0014). Response values from a growing set are strings with `examples` (ADR-0015).
+- Responses that show people, service accounts or customers carry their current names, looked up
+  once per response after the read (`application/names.py`, ADR-0029).
 - Prices come only from the pricing engine (`domain/pricing.py`, ADR-0004); responses leave out
   costs and margins for callers without `costs:read` (ADR-0017).
 - Creations (every `POST` that answers 201, except API keys) take an optional `Idempotency-Key`:
@@ -126,5 +128,9 @@ expected ADRs and their milestones are listed in the brief (§9).
 - Presentable checkpoint — Northfield's catalog from the demand dataset (ADR-0025), demo data
   through the use cases with a history of quotes and orders (ADR-0024), the README's demo and
   walkthrough
-- In progress: —
-- Next: M5
+- M5 — the worker and its jobs (ADR-0026), offers expired by the clock, the transactional outbox
+  (ADR-0008), quote PDFs (ADR-0027) and emails (ADR-0028) (v0.8.0). The quote PDF and the emails in
+  pricewright-design's brand (M12, v0.9.0)
+- In progress: what `pricewright-web` (M7) needs from the API, first the names beside ids in the
+  quotes list and the approval inbox (ADR-0029)
+- Next: M7 in `pricewright-web`, then M8

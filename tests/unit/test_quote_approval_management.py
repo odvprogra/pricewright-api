@@ -55,7 +55,7 @@ async def approve(f: Fixture, quote: Quote, caller: Principal, comment: str | No
 async def inbox(
     f: Fixture, status: ApprovalStatus = ApprovalStatus.PENDING, caller: Principal | None = None
 ) -> list[uuid.UUID]:
-    page = await list_approval_requests(
+    page, _ = await list_approval_requests(
         caller or f.rep,
         status,
         after=None,
@@ -160,7 +160,7 @@ async def test_expired_offers_leave_the_inbox(f: Fixture) -> None:
 async def test_the_inbox_pages_by_request(f: Fixture) -> None:
     first, second = await pending(f), await pending(f)
 
-    page = await list_approval_requests(
+    page, _ = await list_approval_requests(
         f.rep,
         ApprovalStatus.PENDING,
         after=None,
@@ -168,7 +168,7 @@ async def test_the_inbox_pages_by_request(f: Fixture) -> None:
         unit_of_work=f.unit_of_work,
         clock=f.clock,
     )
-    rest = await list_approval_requests(
+    rest, _ = await list_approval_requests(
         f.rep,
         ApprovalStatus.PENDING,
         after=page.next_after,
