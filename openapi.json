@@ -201,7 +201,7 @@
             "type": "string"
           },
           "requested_by": {
-            "$ref": "#/components/schemas/ActorJson"
+            "$ref": "#/components/schemas/NamedActorJson"
           },
           "status": {
             "description": "New statuses may appear; handle unknown ones.",
@@ -1291,6 +1291,31 @@
         "title": "CustomerPatch",
         "type": "object"
       },
+      "CustomerRefJson": {
+        "description": "The customer a record is for, as it is named today (ADR-0029).",
+        "properties": {
+          "account_number": {
+            "title": "Account Number",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "account_number"
+        ],
+        "title": "CustomerRefJson",
+        "type": "object"
+      },
       "CustomerResponse": {
         "properties": {
           "account_number": {
@@ -1589,6 +1614,31 @@
           "currency"
         ],
         "title": "MoneyJson",
+        "type": "object"
+      },
+      "NamedActorJson": {
+        "description": "An actor with the name to show for it (ADR-0029).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "The user's full name or the service account's name, as it is today.",
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CallerType"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "name"
+        ],
+        "title": "NamedActorJson",
         "type": "object"
       },
       "NewLineJson": {
@@ -3413,7 +3463,10 @@
             "type": "string"
           },
           "created_by": {
-            "$ref": "#/components/schemas/ActorJson"
+            "$ref": "#/components/schemas/NamedActorJson"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerRefJson"
           },
           "customer_id": {
             "format": "uuid",
@@ -3472,6 +3525,7 @@
           "number",
           "revision",
           "customer_id",
+          "customer",
           "status",
           "valid_until",
           "net_subtotal",

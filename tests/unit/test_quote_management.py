@@ -20,7 +20,7 @@ from pricewright.application.quotes import (
     list_quotes,
 )
 from pricewright.domain.actors import Actor
-from pricewright.domain.audit import AuditAction
+from pricewright.domain.audit import ActorType, AuditAction
 from pricewright.domain.auth import Permission, PermissionDeniedError, Principal
 from pricewright.domain.catalog import Product, UnitOfMeasure, UnknownProductError
 from pricewright.domain.customers import Customer, CustomerTier, UnknownCustomerError
@@ -42,8 +42,9 @@ from pricewright.domain.quotes import (
     Quote,
     QuoteNotEditableError,
 )
+from pricewright.domain.service_accounts import ServiceAccount
 from pricewright.domain.tenants import Tenant, TenantSettings
-from pricewright.domain.users import Role
+from pricewright.domain.users import Role, User
 from tests.fakes import FakeClock, FakeUnitOfWork, InMemoryDatabase
 
 
@@ -339,8 +340,10 @@ async def test_get_quote_needs_quotes_read(f: Fixture) -> None:
 async def test_list_quotes_shows_the_newest_first_across_pages(f: Fixture) -> None:
     created = [await f.create() for _ in range(3)]
 
-    first = await list_quotes(f.rep, QuoteQuery(), after=None, limit=2, unit_of_work=f.unit_of_work)
-    second = await list_quotes(
+    first, _ = await list_quotes(
+        f.rep, QuoteQuery(), after=None, limit=2, unit_of_work=f.unit_of_work
+    )
+    second, _ = await list_quotes(
         f.rep, QuoteQuery(), after=first.next_after, limit=2, unit_of_work=f.unit_of_work
     )
 
@@ -354,11 +357,11 @@ async def test_list_quotes_sorts_by_validity_with_its_date_in_the_cursor(f: Fixt
     soon = await f.create(NewQuote(f.acme.id, valid_until=date(2026, 10, 10)))
     query = QuoteQuery(sort=QuoteSort.VALID_UNTIL, descending=False)
 
-    page = await list_quotes(f.rep, query, after=None, limit=1, unit_of_work=f.unit_of_work)
+    page, _ = await list_quotes(f.rep, query, after=None, limit=1, unit_of_work=f.unit_of_work)
 
     assert [q.id for q in page.items] == [soon.id]
     assert page.next_after == Keyset(soon.id, "2026-10-10")
-    rest = await list_quotes(
+    rest, _ = await list_quotes(
         f.rep, query, after=page.next_after, limit=5, unit_of_work=f.unit_of_work
     )
     assert [q.id for q in rest.items] == [late.id]
@@ -371,7 +374,7 @@ async def test_list_quotes_filters_by_status_customer_number_and_creator(f: Fixt
     f.database.quotes[theirs.id].status = QuoteStatus.CANCELLED
 
     async def ids(query: QuoteQuery) -> list[uuid.UUID]:
-        page = await list_quotes(f.rep, query, after=None, limit=10, unit_of_work=f.unit_of_work)
+        page, _ = await list_quotes(f.rep, query, after=None, limit=10, unit_of_work=f.unit_of_work)
         return [quote.id for quote in page.items]
 
     assert await ids(QuoteQuery(status=QuoteStatus.DRAFT)) == [mine.id]
@@ -380,15 +383,42 @@ async def test_list_quotes_filters_by_status_customer_number_and_creator(f: Fixt
     assert await ids(QuoteQuery(customer_id=uuid.uuid7())) == []
 
 
+async def test_list_quotes_names_the_customers_and_the_creators(f: Fixture) -> None:
+    taylor = User.create(
+        tenant_id=f.northfield.id,
+        email="taylor@northfield.example",
+        full_name="Taylor Brooks",
+        role=Role.SALES_REP,
+        password_hash="hash",
+    )
+    scopes = frozenset({Permission.QUOTES_MANAGE})
+    mcp = ServiceAccount.create(tenant_id=f.northfield.id, name="erp-mcp-server", scopes=scopes)
+    f.database.users[taylor.id], f.database.service_accounts[mcp.id] = taylor, mcp
+    await f.create(caller=Principal(f.northfield.id, taylor.id, Role.SALES_REP))
+    await f.create(caller=Principal(f.northfield.id, mcp.id, scopes=scopes))
+
+    _, names = await list_quotes(
+        f.rep, QuoteQuery(), after=None, limit=10, unit_of_work=f.unit_of_work
+    )
+
+    assert names.actors == {
+        Actor.person(taylor.id): "Taylor Brooks",
+        Actor(ActorType.SERVICE_ACCOUNT, mcp.id): "erp-mcp-server",
+    }
+    assert names.customer(f.acme.id) == f.acme
+    assert list(names.customers) == [f.acme.id]
+
+
 async def test_list_quotes_never_shows_another_tenant(f: Fixture) -> None:
     await f.create()
     stranger = Principal(f.larkspur.id, uuid.uuid7(), Role.ADMIN)
 
-    page = await list_quotes(
+    page, names = await list_quotes(
         stranger, QuoteQuery(), after=None, limit=10, unit_of_work=f.unit_of_work
     )
 
     assert page.items == []
+    assert (names.actors, names.customers) == ({}, {})
 
 
 async def test_list_quotes_needs_quotes_read(f: Fixture) -> None:

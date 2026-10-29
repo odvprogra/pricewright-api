@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict
 
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
-from pricewright.api.quotes import ApprovalRequestJson, QuoteSummaryJson
+from pricewright.api.quotes import ApprovalRequestJson, NamedActorJson, QuoteSummaryJson
+from pricewright.application.names import Names
 from pricewright.application.ports import ApprovalSummary
 from pricewright.application.quotes import list_approval_requests
 from pricewright.domain.quote_approvals import ApprovalStatus
@@ -17,12 +18,17 @@ router = APIRouter(prefix="/api/v1/approval-requests", tags=["quotes"])
 
 
 class ApprovalInboxItem(ApprovalRequestJson):
+    requested_by: NamedActorJson
     quote: QuoteSummaryJson
 
     @classmethod
-    def from_summary(cls, item: ApprovalSummary) -> ApprovalInboxItem:
-        request = ApprovalRequestJson.of(item.request)
-        return cls(**request.model_dump(), quote=QuoteSummaryJson.of(item.quote))
+    def from_summary(cls, item: ApprovalSummary, names: Names) -> ApprovalInboxItem:
+        request = ApprovalRequestJson.of(item.request).model_dump(exclude={"requested_by"})
+        return cls(
+            **request,
+            requested_by=NamedActorJson.named(item.request.requested_by, names),
+            quote=QuoteSummaryJson.of(item.quote, names),
+        )
 
 
 class ApprovalPage(BaseModel):
@@ -54,7 +60,7 @@ async def read_approval_requests(
     cursor: Cursor = None,
 ) -> ApprovalPage:
     fingerprint = {"status": status}
-    page = await list_approval_requests(
+    page, names = await list_approval_requests(
         principal,
         status,
         after=decode_cursor(cursor, fingerprint),
@@ -63,6 +69,6 @@ async def read_approval_requests(
         clock=services.clock,
     )
     return ApprovalPage(
-        items=[ApprovalInboxItem.from_summary(item) for item in page.items],
+        items=[ApprovalInboxItem.from_summary(item, names) for item in page.items],
         next_cursor=encode_cursor(page.next_after, fingerprint),
     )

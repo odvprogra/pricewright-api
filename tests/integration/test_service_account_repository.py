@@ -127,3 +127,20 @@ async def test_database_rejects_a_key_whose_account_belongs_to_another_tenant(
             IntegrityError, match="fk_api_keys_tenant_id_service_account_id_service_accounts"
         ):
             await uow.commit()
+
+
+async def test_service_accounts_are_found_by_ids_within_the_tenant(
+    session_factory: Sessions,
+) -> None:
+    northfield, _ = await register(session_factory, "Northfield")
+    larkspur, _ = await register(session_factory, "Larkspur")
+    mcp = await add_account(session_factory, northfield, "erp-mcp-server")
+    await add_account(session_factory, northfield, "ops-copilot")
+    theirs = await add_account(session_factory, larkspur, "erp-mcp-server")
+
+    async with SqlAlchemyUnitOfWork(session_factory) as uow:
+        uow.bind_tenant(northfield.id)
+        found = await uow.service_accounts.with_ids({mcp.id, theirs.id})
+        none = await uow.service_accounts.with_ids(set())
+
+    assert (found, none) == ([mcp], [])

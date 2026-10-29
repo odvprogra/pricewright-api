@@ -10,7 +10,17 @@ import pytest
 from pricewright.api.app import create_app
 from pricewright.domain.pricing_rules import Bracket, PricingRule, RuleKind
 from pricewright.domain.users import Role
-from tests.e2e.test_quotes import ACME, BOLTS, NORTHFIELD, PATH, SINCE, api_key, bearer, new_quote
+from tests.e2e.test_quotes import (
+    ACME,
+    BOLTS,
+    NORTHFIELD,
+    PATH,
+    SINCE,
+    api_key,
+    bearer,
+    new_quote,
+    person,
+)
 from tests.fakes import FakeClock, InMemoryDatabase, fake_services
 
 INBOX = "/api/v1/approval-requests"
@@ -25,13 +35,17 @@ GENEROUS_VOLUME = PricingRule.create(
 
 
 @pytest.fixture
-async def client() -> AsyncIterator[httpx.AsyncClient]:
-    database = InMemoryDatabase(
+def database() -> InMemoryDatabase:
+    return InMemoryDatabase(
         tenants={NORTHFIELD.id: NORTHFIELD},
         products={BOLTS.id: BOLTS},
         customers={ACME.id: ACME},
         pricing_rules={GENEROUS_VOLUME.id: GENEROUS_VOLUME},
     )
+
+
+@pytest.fixture
+async def client(database: InMemoryDatabase) -> AsyncIterator[httpx.AsyncClient]:
     app = create_app(title="test", services=fake_services(database, FakeClock()))
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -58,9 +72,10 @@ async def pending(client: httpx.AsyncClient, headers: dict[str, str]) -> httpx.R
 
 
 async def test_a_20_percent_discount_is_approved_from_the_managers_inbox(
-    client: httpx.AsyncClient,
+    client: httpx.AsyncClient, database: InMemoryDatabase
 ) -> None:
-    rep, manager_id = bearer(Role.SALES_REP), uuid.uuid7()
+    rep_id, manager_id = person(database), uuid.uuid7()
+    rep = bearer(Role.SALES_REP, rep_id)
     manager = bearer(Role.SALES_MANAGER, manager_id)
     submitted = await pending(client, rep)
     assert submitted.json()["discount"] == "0.2000"
@@ -74,6 +89,9 @@ async def test_a_20_percent_discount_is_approved_from_the_managers_inbox(
 
     assert (item["status"], item["reasons"]) == ("pending", ["discount_above_threshold"])
     assert item["quote"]["number"] == "NF-2026-000001"
+    named = {"type": "user", "id": str(rep_id), "name": "Taylor Brooks"}
+    assert item["requested_by"] == item["quote"]["created_by"] == named
+    assert item["quote"]["customer"]["name"] == "Acme"
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
     decision = approved.json()["approvals"][0]
@@ -134,12 +152,14 @@ async def test_a_draft_has_nothing_to_approve(client: httpx.AsyncClient) -> None
     assert response.json()["code"] == "invalid_transition"
 
 
-async def test_the_inbox_lists_decided_requests_and_pages(client: httpx.AsyncClient) -> None:
-    manager = bearer(Role.SALES_MANAGER)
-    first = await pending(client, bearer())
-    await pending(client, bearer())
+async def test_the_inbox_lists_decided_requests_and_pages(
+    client: httpx.AsyncClient, database: InMemoryDatabase
+) -> None:
+    manager, rep = bearer(Role.SALES_MANAGER), bearer(user_id=person(database))
+    first = await pending(client, rep)
+    await pending(client, rep)
     await act(client, first, "approve", manager)
-    await pending(client, bearer())
+    await pending(client, rep)
 
     approved = await client.get(INBOX, params={"status": "approved"}, headers=manager)
     page = await client.get(INBOX, params={"limit": "1"}, headers=manager)
@@ -155,8 +175,10 @@ async def test_the_inbox_lists_decided_requests_and_pages(client: httpx.AsyncCli
     assert wrong.status_code == 422
 
 
-async def test_an_integration_reads_the_inbox_with_quotes_read(client: httpx.AsyncClient) -> None:
-    await pending(client, bearer())
+async def test_an_integration_reads_the_inbox_with_quotes_read(
+    client: httpx.AsyncClient, database: InMemoryDatabase
+) -> None:
+    await pending(client, bearer(user_id=person(database)))
     key = await api_key(client, "quotes:read")
     no_scope = await api_key(client, "catalog:read")
 

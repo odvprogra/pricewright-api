@@ -169,6 +169,11 @@ class FakeUserRepository:
             return None
         return copy.deepcopy(user)  # like the adapter: changes need save()
 
+    async def with_ids(self, user_ids: Collection[UUID]) -> list[User]:
+        tenant_id = self._uow.tenant_id
+        found = [u for u in self._users.values() if u.tenant_id == tenant_id and u.id in user_ids]
+        return copy.deepcopy(found)
+
     async def page(self, *, after: UUID | None, limit: int) -> list[User]:
         owned = sorted(
             (user for user in self._users.values() if user.tenant_id == self._uow.tenant_id),
@@ -251,6 +256,13 @@ class FakeServiceAccountRepository:
         if account is None or account.tenant_id != self._uow.tenant_id:
             return None
         return copy.deepcopy(account)
+
+    async def with_ids(self, account_ids: Collection[UUID]) -> list[ServiceAccount]:
+        tenant_id = self._uow.tenant_id
+        accounts = self._accounts.values()
+        return copy.deepcopy(
+            [a for a in accounts if a.tenant_id == tenant_id and a.id in account_ids]
+        )
 
     async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
         owned = sorted(
@@ -514,6 +526,9 @@ class FakeCustomerRepository:
 
     async def get(self, customer_id: UUID) -> Customer | None:
         return copy.deepcopy(next((c for c in self._owned() if c.id == customer_id), None))
+
+    async def with_ids(self, customer_ids: Collection[UUID]) -> list[Customer]:
+        return copy.deepcopy([c for c in self._owned() if c.id in customer_ids])
 
     async def with_account_number(self, account_number: str) -> Customer | None:
         wanted = account_number.lower()

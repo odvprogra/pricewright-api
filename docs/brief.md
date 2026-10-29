@@ -238,6 +238,7 @@ Agreed for the presentable checkpoint:
 | 0026 | [Worker jobs: persist what the clock decided, as the system](adr/0026-worker-jobs-persist-what-the-clock-decided.md)                    | M5        |
 | 0027 | [Quote PDFs: an HTML template printed with WeasyPrint, on request](adr/0027-quote-pdfs-rendered-on-request.md)                          | M5        |
 | 0028 | [Emails: decisions to the rep, sent quotes to the customer](adr/0028-email-notifications-from-the-worker.md)                            | M5        |
+| 0029 | [Names beside ids in responses, looked up once per response](adr/0029-names-beside-ids-in-responses.md)                                 | M7        |
 
 The business rules in §4 are the agreed inputs for ADR-0003, 0004 and 0005.
 

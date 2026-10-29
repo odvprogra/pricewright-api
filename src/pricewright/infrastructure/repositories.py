@@ -180,6 +180,16 @@ class SqlAlchemyUserRepository:
         )
         return None if record is None else _to_user(record)
 
+    async def with_ids(self, user_ids: Collection[UUID]) -> list[User]:
+        if not user_ids:
+            return []
+        records = await self._session.scalars(
+            select(UserRecord).where(
+                UserRecord.tenant_id == self._scope.tenant_id, UserRecord.id.in_(user_ids)
+            )
+        )
+        return [_to_user(record) for record in records]
+
     async def page(self, *, after: UUID | None, limit: int) -> list[User]:
         query = select(UserRecord).where(UserRecord.tenant_id == self._scope.tenant_id)
         if after is not None:
@@ -345,6 +355,17 @@ class SqlAlchemyServiceAccountRepository:
         )
         record = await self._session.scalar(query.with_for_update() if lock else query)
         return None if record is None else _to_service_account(record)
+
+    async def with_ids(self, account_ids: Collection[UUID]) -> list[ServiceAccount]:
+        if not account_ids:
+            return []
+        records = await self._session.scalars(
+            select(ServiceAccountRecord).where(
+                ServiceAccountRecord.tenant_id == self._scope.tenant_id,
+                ServiceAccountRecord.id.in_(account_ids),
+            )
+        )
+        return [_to_service_account(record) for record in records]
 
     async def page(self, *, after: UUID | None, limit: int) -> list[ServiceAccount]:
         query = select(ServiceAccountRecord).where(
@@ -739,6 +760,17 @@ class SqlAlchemyCustomerRepository:
 
     async def get(self, customer_id: UUID) -> Customer | None:
         return await self._one(CustomerRecord.id == customer_id)
+
+    async def with_ids(self, customer_ids: Collection[UUID]) -> list[Customer]:
+        if not customer_ids:
+            return []
+        records = await self._session.scalars(
+            select(CustomerRecord).where(
+                CustomerRecord.tenant_id == self._scope.tenant_id,
+                CustomerRecord.id.in_(customer_ids),
+            )
+        )
+        return [_to_customer(record) for record in records]
 
     async def with_account_number(self, account_number: str) -> Customer | None:
         return await self._one(func.lower(CustomerRecord.account_number) == account_number.lower())
