@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-02
 - **Amended:** 2026-10-03 — the breaking-change check compares each pull request with `main`
+- **Amended:** 2026-10-29 — every release also publishes an attested container image
 
 ## Context
 
@@ -37,8 +38,18 @@ through the API's OpenAPI document:
   ([GitHub docs](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)),
   so its release PRs could never pass the checks that `main` requires. The release PR also bumps the
   version in `uv.lock` and in `openapi.json`, so it passes `uv sync --locked` and the drift test.
+- **Container image:** every release pushes `ghcr.io/odvprogra/pricewright-api:<version>`, built
+  from the tag without a layer cache, with a SLSA build provenance attestation signed through
+  Sigstore and pushed to the registry
+  ([artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations),
+  [`actions/attest`](https://github.com/actions/attest)). The digest goes into the release notes,
+  and the release stays a draft until the image is pushed, so a published release always has its
+  image. GHCR authenticates with the workflow's `GITHUB_TOKEN`
+  ([publishing Docker images](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)).
 - **Consumers** (`pricewright-web`, `erp-mcp-server`, `ops-copilot`) pin a release and generate
-  their client from its `openapi.json`. Upgrading is a reviewed version bump in the consumer.
+  their client from its `openapi.json`. Upgrading is a reviewed version bump in the consumer. The
+  web app's browser journeys run against the same release's image, pinned by digest, so the spec and
+  the server they test move together; the deployment (M8) uses that image too.
 - **Breaking changes:** from M2, when the first business endpoints exist, CI compares each pull
   request's spec with `main`'s using [oasdiff](https://github.com/oasdiff/oasdiff). A breaking
   change fails the check unless the pull request title marks it with `!` (`feat!:`), which makes
@@ -54,6 +65,10 @@ through the API's OpenAPI document:
   with the same contract bypass.
 - **Spec served only at `/openapi.json`:** no versioned artifact; consumers would track a moving
   target.
+- **Images only in the deploy pipeline:** the web app's journeys would build the API from the tag's
+  source, which is slower and tests an artifact nobody publishes.
+- **Docker Hub:** one more account and secret; GHCR uses the workflow's own token and links the
+  package to this repository.
 - **Fine-grained personal access token for release-please:** quicker to create, but it expires, has
   to be rotated, and makes automated PRs look like the maintainer's own work.
 
@@ -62,6 +77,7 @@ through the API's OpenAPI document:
 - **Positive:** every consumer follows the same rule, contract changes are explicit and reviewable,
   and the two repositories deploy and release independently.
 - **Negative:** a change that spans API and web needs two PRs (an API release, then a web bump). The
-  GitHub App's private key is one more secret to manage. The release workflow lives in this
-  repository until a second service releases the same way; then it moves to `engineering-standards`
-  as a reusable workflow.
+  GitHub App's private key is one more secret to manage. A release takes a few minutes longer (the
+  image build), and the package's visibility on GHCR is set once by hand. The release workflow lives
+  in this repository until a second service releases the same way; then it moves to
+  `engineering-standards` as a reusable workflow.
