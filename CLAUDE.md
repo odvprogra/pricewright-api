@@ -104,7 +104,9 @@ expected ADRs and their milestones are listed in the brief (§9).
 ## Releases
 
 - release-please keeps a release PR open on `main`; merging it tags the version and publishes an
-  immutable GitHub release with `openapi.json` attached (`.github/workflows/release.yml`).
+  immutable GitHub release with `openapi.json` attached, after pushing the attested image
+  `ghcr.io/odvprogra/pricewright-api:<version>` and writing its digest into the notes
+  (`.github/workflows/release.yml`, ADR-0002).
 - Never bump versions or edit `CHANGELOG.md` by hand: the release PR updates `pyproject.toml`,
   `uv.lock`, `openapi.json` and the changelog together.
 - A breaking API change needs a `!` in its Conventional Commit (`feat!:`) so the version reflects

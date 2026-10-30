@@ -160,16 +160,18 @@ flowchart LR
 
 Hexagonal-lite: dependencies point inward, the domain is pure Python, and an architecture test
 enforces both. Clients never read the code or the database: each one pins a release of this API and
-generates its client from the `openapi.json` attached to it. The demo seed is one more driver of the
-use cases, like the HTTP API. A worker, from the same image, relays the transactional outbox to the
-emails and runs the periodic jobs. Details in [docs/architecture.md](docs/architecture.md).
+generates its client from the `openapi.json` attached to it. Each release also publishes the
+container image to GHCR, attested and pinned by digest in its notes. The demo seed is one more
+driver of the use cases, like the HTTP API. A worker, from the same image, relays the transactional
+outbox to the emails and runs the periodic jobs. Details in
+[docs/architecture.md](docs/architecture.md).
 
 ## Key decisions
 
 | Decision                                                                                                                     | Why                                                                                                 |
 | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | [ADR-0001](docs/adr/0001-record-architecture-decisions.md) Hexagonal-lite, decisions recorded as ADRs                        | Business rules testable without infrastructure; reasons survive the people who made them            |
-| [ADR-0002](docs/adr/0002-separate-repos-with-a-versioned-openapi-contract.md) Versioned OpenAPI contract                     | Every client, the web app included, depends on a released, immutable spec                           |
+| [ADR-0002](docs/adr/0002-separate-repos-with-a-versioned-openapi-contract.md) Versioned OpenAPI contract                     | Every client depends on a released, immutable spec; every release ships an attested image           |
 | [ADR-0003](docs/adr/0003-money-as-an-exact-decimal-with-its-currency.md) Money as an exact decimal, rounded half up          | Sub-cent unit prices, no float drift, and rounding that matches invoices, tax and SQL               |
 | [ADR-0004](docs/adr/0004-pricing-waterfall-breakdown-and-approval-metric.md) Staged price waterfall, explained per line      | Discounts cascade as in ERPs and CPQs; every price explains itself                                  |
 | [ADR-0005](docs/adr/0005-quote-lifecycle-as-a-transition-table.md) Quote lifecycle as a transition table                     | One readable table; revisions supersede; an expired offer acts expired before any job runs          |
