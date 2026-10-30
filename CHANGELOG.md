@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/odvprogra/pricewright-api/compare/v0.9.0...v0.10.0) (2026-10-30)
+
+
+### Features
+
+* name the customers and people in quote lists and the approval inbox ([#98](https://github.com/odvprogra/pricewright-api/issues/98)) ([503364a](https://github.com/odvprogra/pricewright-api/commit/503364a212523aa7ac7c3837b6835b584f452bc0))
+
 ## [0.9.0](https://github.com/odvprogra/pricewright-api/compare/v0.8.0...v0.9.0) (2026-10-29)
 
 
