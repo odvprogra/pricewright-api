@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/odvprogra/pricewright-api/compare/v0.10.0...v0.11.0) (2026-11-03)
+
+
+### Features
+
+* name a quote's customer and the people who built, submitted and decided it ([#101](https://github.com/odvprogra/pricewright-api/issues/101)) ([288997f](https://github.com/odvprogra/pricewright-api/commit/288997fd2aded1c23f49220016ccb52f2123111f))
+
 ## [0.10.0](https://github.com/odvprogra/pricewright-api/compare/v0.9.0...v0.10.0) (2026-10-30)
 
 
