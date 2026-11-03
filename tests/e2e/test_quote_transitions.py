@@ -36,7 +36,7 @@ async def client(clock: FakeClock) -> AsyncIterator[httpx.AsyncClient]:
         customers={ACME.id: ACME},
         pricing_rules={VOLUME.id: VOLUME},  # no floor: 10 bolts need no approval
     )
-    app = create_app(title="test", services=fake_services(database, clock))
+    app = create_app(title="test", services=fake_services(database, clock, store_callers=True))
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -100,6 +100,7 @@ async def test_a_generous_quote_waits_for_approval_with_its_request(
         "list_subtotal": usd("1000.0000"),
         "net_subtotal": usd("630.0000"),
         "decided_by": None,
+        "decider": None,
         "decided_at": None,
         "comment": None,
     }

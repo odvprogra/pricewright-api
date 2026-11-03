@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from pricewright.api.dependencies import PrincipalDep, ServicesDep
 from pricewright.api.pagination import DEFAULT_LIMIT, Cursor, Limit, decode_cursor, encode_cursor
-from pricewright.api.quotes import ApprovalRequestJson, NamedActorJson, QuoteSummaryJson
+from pricewright.api.quotes import ApprovalRequestJson, QuoteSummaryJson
 from pricewright.application.names import Names
 from pricewright.application.ports import ApprovalSummary
 from pricewright.application.quotes import list_approval_requests
@@ -18,17 +18,12 @@ router = APIRouter(prefix="/api/v1/approval-requests", tags=["quotes"])
 
 
 class ApprovalInboxItem(ApprovalRequestJson):
-    requested_by: NamedActorJson
     quote: QuoteSummaryJson
 
     @classmethod
     def from_summary(cls, item: ApprovalSummary, names: Names) -> ApprovalInboxItem:
-        request = ApprovalRequestJson.of(item.request).model_dump(exclude={"requested_by"})
-        return cls(
-            **request,
-            requested_by=NamedActorJson.named(item.request.requested_by, names),
-            quote=QuoteSummaryJson.of(item.quote, names),
-        )
+        request = ApprovalRequestJson.of(item.request, names).model_dump()
+        return cls(**request, quote=QuoteSummaryJson.of(item.quote, names))
 
 
 class ApprovalPage(BaseModel):

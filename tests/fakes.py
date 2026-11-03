@@ -1114,6 +1114,29 @@ class FakeAccessTokens:
             raise AuthenticationError("invalid access token") from error
 
 
+class StoredCallerTokens(FakeAccessTokens):
+    """Fake tokens whose callers are stored users, as a real access token's subject always is,
+    so responses that name people (ADR-0029) find them: a caller not yet stored is added."""
+
+    def __init__(self, database: InMemoryDatabase) -> None:
+        # The database, not its users table: a commit writes new tables back.
+        self._database = database
+
+    def read(self, token: str) -> Principal:
+        principal = super().read(token)
+        users = self._database.users
+        if principal.subject_id not in users and principal.role is not None:
+            users[principal.subject_id] = User(
+                id=principal.subject_id,
+                tenant_id=principal.tenant_id,
+                email=f"{principal.subject_id}@callers.example",
+                full_name=f"Caller {principal.subject_id.hex[-6:]}",
+                role=principal.role,
+                password_hash="hash",
+            )
+        return principal
+
+
 class FakeMailer:
     """Keeps the emails instead of sending them."""
 
@@ -1137,9 +1160,13 @@ class FakeQuoteDocuments:
 
 
 def fake_services(
-    database: InMemoryDatabase | None = None, clock: FakeClock | None = None
+    database: InMemoryDatabase | None = None,
+    clock: FakeClock | None = None,
+    *,
+    store_callers: bool = False,
 ) -> Services:
-    """API services backed by the fakes: an app that runs without infrastructure."""
+    """API services backed by the fakes: an app that runs without infrastructure.
+    ``store_callers`` stores every caller of a fake token as a user (``StoredCallerTokens``)."""
     shared = database if database is not None else InMemoryDatabase()
 
     def unit_of_work() -> UnitOfWork:
@@ -1148,7 +1175,7 @@ def fake_services(
     return Services(
         unit_of_work=unit_of_work,
         hasher=FakePasswordHasher(),
-        access_tokens=FakeAccessTokens(),
+        access_tokens=StoredCallerTokens(shared) if store_callers else FakeAccessTokens(),
         clock=clock if clock is not None else FakeClock(),
         documents=FakeQuoteDocuments(),
     )

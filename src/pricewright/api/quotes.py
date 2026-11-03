@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from pricewright.api.concurrency import etag, expected_version
-from pricewright.api.dependencies import PrincipalDep, ServicesDep
+from pricewright.api.dependencies import PrincipalDep, Services, ServicesDep
 from pricewright.api.idempotency import (
     IdempotencyKey,
     idempotency_errors,
@@ -39,6 +39,7 @@ from pricewright.application.quotes import (
     create_quote,
     get_quote,
     list_quotes,
+    name_quote,
     recall_quote,
     reject_quote,
     remove_quote_line,
@@ -250,7 +251,7 @@ class ApprovalRequestJson(BaseModel):
     status: str = Field(
         description="New statuses may appear; handle unknown ones.", examples=list(ApprovalStatus)
     )
-    requested_by: ActorJson
+    requested_by: NamedActorJson
     requested_at: datetime
     reasons: list[str] = Field(
         description="New reasons may appear; handle unknown ones.", examples=[list(ApprovalReason)]
@@ -260,22 +261,31 @@ class ApprovalRequestJson(BaseModel):
     list_subtotal: MoneyJson
     net_subtotal: MoneyJson
     decided_by: UUID | None = Field(description="The person who approved or rejected it.")
+    # A bare id cannot gain a name without changing its type (ADR-0002): the named actor sits
+    # beside it (ADR-0029).
+    decider: NamedActorJson | None = Field(
+        description="Who approved or rejected it, with their name; `decided_by` is their id."
+    )
     decided_at: datetime | None = Field(description="When it was decided or withdrawn.")
     comment: str | None
 
     @classmethod
-    def of(cls, request: ApprovalRequest) -> ApprovalRequestJson:
+    def of(cls, request: ApprovalRequest, names: Names) -> ApprovalRequestJson:
+        decided_by = request.decided_by
         return cls(
             id=request.id,
             status=request.status.value,
-            requested_by=ActorJson.of(request.requested_by),
+            requested_by=NamedActorJson.named(request.requested_by, names),
             requested_at=request.requested_at,
             reasons=[reason.value for reason in request.reasons],
             discount=ratio(request.discount),
             approval_threshold=ratio(request.approval_threshold),
             list_subtotal=MoneyJson.of(request.list_subtotal),
             net_subtotal=MoneyJson.of(request.net_subtotal),
-            decided_by=request.decided_by,
+            decided_by=decided_by,
+            decider=None
+            if decided_by is None
+            else NamedActorJson.named(Actor.person(decided_by), names),
             decided_at=request.decided_at,
             comment=request.comment,
         )
@@ -291,6 +301,7 @@ class QuoteResponse(BaseModel):
     )
     revision: int
     customer_id: UUID
+    customer: CustomerRefJson
     status: QuoteStatus
     valid_until: date = Field(description="Valid through the end of this day, UTC.")
     notes: str | None
@@ -316,10 +327,15 @@ class QuoteResponse(BaseModel):
         description="What can be done with the quote now. New actions may appear.",
         examples=[_CLIENT_ACTIONS],
     )
-    created_by: ActorJson
+    created_by: NamedActorJson
     created_at: datetime
     status_changed_at: datetime | None
     submitted_by: ActorJson | None
+    # Swapping a nullable reference's schema reads as a breaking change to the contract check
+    # (ADR-0002): the named actor sits beside it, as an approval's `decider` does (ADR-0029).
+    submitter: NamedActorJson | None = Field(
+        description="Who submitted it, with their name; `submitted_by` is the same actor."
+    )
     submitted_at: datetime | None
     cancel_reason: str | None
     supersedes_id: UUID | None = Field(description="The revision this one replaced.")
@@ -331,13 +347,14 @@ class QuoteResponse(BaseModel):
     version: int = Field(description="Also sent as the ETag; send it back in If-Match to change.")
 
     @classmethod
-    def of(cls, quote: Quote, caller: Principal, now: datetime) -> QuoteResponse:
+    def of(cls, quote: Quote, caller: Principal, now: datetime, names: Names) -> QuoteResponse:
         totals, submitted_by = quote.totals, quote.submitted_by
         return cls(
             id=quote.id,
             number=quote.display_number,
             revision=quote.revision,
             customer_id=quote.customer_id,
+            customer=CustomerRefJson.of(names.customer(quote.customer_id)),
             status=quote.status,
             valid_until=quote.valid_until,
             notes=quote.notes,
@@ -355,16 +372,17 @@ class QuoteResponse(BaseModel):
             allowed_actions=sorted(
                 action.value for action in quote.allowed_actions(now) if action in _CLIENT_ACTIONS
             ),
-            created_by=ActorJson.of(quote.created_by),
+            created_by=NamedActorJson.named(quote.created_by, names),
             created_at=quote.created_at,
             status_changed_at=quote.status_changed_at,
             submitted_by=None if submitted_by is None else ActorJson.of(submitted_by),
+            submitter=None if submitted_by is None else NamedActorJson.named(submitted_by, names),
             submitted_at=quote.submitted_at,
             cancel_reason=quote.cancel_reason,
             supersedes_id=quote.supersedes_id,
             superseded_by_id=quote.superseded_by_id,
             order_id=quote.order_id,
-            approvals=[ApprovalRequestJson.of(request) for request in quote.approvals],
+            approvals=[ApprovalRequestJson.of(request, names) for request in quote.approvals],
             version=quote.version,
         )
 
@@ -420,9 +438,12 @@ class CreateQuoteRequest(BaseModel):
     lines: list[NewLineJson] = Field(default_factory=list, max_length=MAX_QUOTE_LINES)
 
 
-def _respond(response: Response, quote: Quote, caller: Principal, now: datetime) -> QuoteResponse:
+async def _respond(
+    response: Response, quote: Quote, caller: Principal, services: Services
+) -> QuoteResponse:
     response.headers["ETag"] = etag(quote.version)
-    return QuoteResponse.of(quote, caller, now)
+    names = await name_quote(caller, quote, unit_of_work=services.unit_of_work)
+    return QuoteResponse.of(quote, caller, services.clock(), names)
 
 
 @router.post(
@@ -461,7 +482,7 @@ async def add_quote(
     quote = created.value
     response.headers["Location"] = f"{router.prefix}/{quote.id}"
     mark_replayed(response, created.replayed)
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.get(
@@ -501,7 +522,7 @@ async def read_quote(
     quote_id: UUID, principal: PrincipalDep, services: ServicesDep, response: Response
 ) -> QuoteResponse:
     quote = await get_quote(principal, quote_id, unit_of_work=services.unit_of_work)
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 class QuoteSummaryJson(BaseModel):
@@ -651,7 +672,7 @@ async def update_quote(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.post(
@@ -676,7 +697,7 @@ async def add_line(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 class LinePatch(BaseModel):
@@ -723,7 +744,7 @@ async def update_line(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.delete(
@@ -748,7 +769,7 @@ async def delete_line(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 _TRANSITION_ERRORS: dict[int | str, dict[str, object]] = {
@@ -781,7 +802,7 @@ async def submit(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.post(
@@ -803,7 +824,7 @@ async def recall(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.post(
@@ -825,7 +846,7 @@ async def send(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.post(
@@ -847,7 +868,7 @@ async def accept(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 class CancelRequest(BaseModel):
@@ -879,7 +900,7 @@ async def cancel(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.post(
@@ -912,7 +933,7 @@ async def revise(
     successor = created.value
     mark_replayed(response, created.replayed)
     response.headers["Location"] = f"{router.prefix}/{successor.id}"
-    return _respond(response, successor, principal, services.clock())
+    return await _respond(response, successor, principal, services)
 
 
 class ApproveRequest(BaseModel):
@@ -963,7 +984,7 @@ async def approve(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)
 
 
 @router.post(
@@ -987,4 +1008,4 @@ async def reject(
         unit_of_work=services.unit_of_work,
         clock=services.clock,
     )
-    return _respond(response, quote, principal, services.clock())
+    return await _respond(response, quote, principal, services)

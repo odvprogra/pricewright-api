@@ -1,6 +1,5 @@
 """Approvals over HTTP, with in-memory adapters: the inbox, four eyes and decisions (ADR-0020)."""
 
-import uuid
 from collections.abc import AsyncIterator
 from decimal import Decimal
 
@@ -46,7 +45,9 @@ def database() -> InMemoryDatabase:
 
 @pytest.fixture
 async def client(database: InMemoryDatabase) -> AsyncIterator[httpx.AsyncClient]:
-    app = create_app(title="test", services=fake_services(database, FakeClock()))
+    app = create_app(
+        title="test", services=fake_services(database, FakeClock(), store_callers=True)
+    )
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -74,7 +75,8 @@ async def pending(client: httpx.AsyncClient, headers: dict[str, str]) -> httpx.R
 async def test_a_20_percent_discount_is_approved_from_the_managers_inbox(
     client: httpx.AsyncClient, database: InMemoryDatabase
 ) -> None:
-    rep_id, manager_id = person(database), uuid.uuid7()
+    rep_id = person(database)
+    manager_id = person(database, Role.SALES_MANAGER, "Morgan Reyes")
     rep = bearer(Role.SALES_REP, rep_id)
     manager = bearer(Role.SALES_MANAGER, manager_id)
     submitted = await pending(client, rep)
@@ -100,6 +102,10 @@ async def test_a_20_percent_discount_is_approved_from_the_managers_inbox(
         str(manager_id),
         "Strategic account",
     )
+    # The quote names its people, as the screens show them (ADR-0029).
+    assert decision["requested_by"] == approved.json()["submitter"] == named
+    assert decision["decider"] == {"type": "user", "id": str(manager_id), "name": "Morgan Reyes"}
+    assert approved.json()["created_by"] == named
     assert after.json()["items"] == []
 
 
@@ -155,7 +161,9 @@ async def test_a_draft_has_nothing_to_approve(client: httpx.AsyncClient) -> None
 async def test_the_inbox_lists_decided_requests_and_pages(
     client: httpx.AsyncClient, database: InMemoryDatabase
 ) -> None:
-    manager, rep = bearer(Role.SALES_MANAGER), bearer(user_id=person(database))
+    manager_id = person(database, Role.SALES_MANAGER, "Morgan Reyes")
+    manager = bearer(Role.SALES_MANAGER, manager_id)
+    rep = bearer(user_id=person(database))
     first = await pending(client, rep)
     await pending(client, rep)
     await act(client, first, "approve", manager)
@@ -169,7 +177,9 @@ async def test_the_inbox_lists_decided_requests_and_pages(
     wrong = await client.get(INBOX, params={"status": "maybe"}, headers=manager)
 
     assert [item["quote"]["number"] for item in approved.json()["items"]] == ["NF-2026-000001"]
+    assert [item["decider"]["name"] for item in approved.json()["items"]] == ["Morgan Reyes"]
     assert [item["quote"]["number"] for item in page.json()["items"]] == ["NF-2026-000002"]
+    assert page.json()["items"][0]["decider"] is None
     assert [item["quote"]["number"] for item in rest.json()["items"]] == ["NF-2026-000003"]
     assert rest.json()["next_cursor"] is None
     assert wrong.status_code == 422

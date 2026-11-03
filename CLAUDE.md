@@ -133,6 +133,6 @@ expected ADRs and their milestones are listed in the brief (§9).
 - M5 — the worker and its jobs (ADR-0026), offers expired by the clock, the transactional outbox
   (ADR-0008), quote PDFs (ADR-0027) and emails (ADR-0028) (v0.8.0). The quote PDF and the emails in
   pricewright-design's brand (M12, v0.9.0)
-- In progress: what `pricewright-web` (M7) needs from the API, first the names beside ids in the
-  quotes list and the approval inbox (ADR-0029)
+- In progress: what `pricewright-web` (M7) needs from the API: the names beside ids in the quotes
+  list and the approval inbox (v0.10.0), then on a quote's detail (ADR-0029)
 - Next: M7 in `pricewright-web`, then M8

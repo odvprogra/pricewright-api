@@ -161,6 +161,17 @@
             "description": "The person who approved or rejected it.",
             "title": "Decided By"
           },
+          "decider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedActorJson"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who approved or rejected it, with their name; `decided_by` is their id."
+          },
           "discount": {
             "description": "1 - net / list subtotal when submitted (D-06).",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -226,6 +237,7 @@
           "list_subtotal",
           "net_subtotal",
           "decided_by",
+          "decider",
           "decided_at",
           "comment",
           "quote"
@@ -306,6 +318,17 @@
             "description": "The person who approved or rejected it.",
             "title": "Decided By"
           },
+          "decider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedActorJson"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who approved or rejected it, with their name; `decided_by` is their id."
+          },
           "discount": {
             "description": "1 - net / list subtotal when submitted (D-06).",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -343,7 +366,7 @@
             "type": "string"
           },
           "requested_by": {
-            "$ref": "#/components/schemas/ActorJson"
+            "$ref": "#/components/schemas/NamedActorJson"
           },
           "status": {
             "description": "New statuses may appear; handle unknown ones.",
@@ -368,6 +391,7 @@
           "list_subtotal",
           "net_subtotal",
           "decided_by",
+          "decider",
           "decided_at",
           "comment"
         ],
@@ -3238,7 +3262,10 @@
             "type": "string"
           },
           "created_by": {
-            "$ref": "#/components/schemas/ActorJson"
+            "$ref": "#/components/schemas/NamedActorJson"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerRefJson"
           },
           "customer_id": {
             "format": "uuid",
@@ -3353,6 +3380,17 @@
               }
             ]
           },
+          "submitter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NamedActorJson"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who submitted it, with their name; `submitted_by` is the same actor."
+          },
           "superseded_by_id": {
             "anyOf": [
               {
@@ -3408,6 +3446,7 @@
           "number",
           "revision",
           "customer_id",
+          "customer",
           "status",
           "valid_until",
           "notes",
@@ -3427,6 +3466,7 @@
           "created_at",
           "status_changed_at",
           "submitted_by",
+          "submitter",
           "submitted_at",
           "cancel_reason",
           "supersedes_id",

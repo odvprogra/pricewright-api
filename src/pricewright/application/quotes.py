@@ -123,6 +123,24 @@ async def get_quote(
         return await _quote(uow, quote_id)
 
 
+async def name_quote(
+    principal: Principal, quote: Quote, *, unit_of_work: UnitOfWorkFactory
+) -> Names:
+    """Today's names for a quote's customer and the people on it (ADR-0029): who built and
+    submitted it, and who asked for and decided each approval. Read after the use case that
+    returned the quote, so every use case keeps returning the domain's quote."""
+    actors = {quote.created_by}
+    if quote.submitted_by is not None:
+        actors.add(quote.submitted_by)
+    for request in quote.approvals:
+        actors.add(request.requested_by)
+        if request.decided_by is not None:
+            actors.add(Actor.person(request.decided_by))
+    async with unit_of_work() as uow:
+        uow.bind_tenant(principal.tenant_id)
+        return await look_up_names(uow, actors, {quote.customer_id})
+
+
 async def _quote_at(uow: UnitOfWork, quote_id: UUID, expected_version: int) -> Quote:
     """The quote, if it is still at the version the caller read (ADR-0012)."""
     quote = await _quote(uow, quote_id)
@@ -614,8 +632,8 @@ async def list_approval_requests(
     clock: Clock,
 ) -> tuple[Page[ApprovalSummary], Names]:
     """The approval inbox: requests with ``status``, oldest first; pending ones of expired offers
-    are left out, since they can only be revised. With the names of who asked, who built each
-    quote and its customer (ADR-0029)."""
+    are left out, since they can only be revised. With the names of who asked, who decided, who
+    built each quote and its customer (ADR-0029)."""
     principal.require(Permission.QUOTES_READ)
     today = clock().astimezone(UTC).date()
     async with unit_of_work() as uow:
@@ -626,5 +644,10 @@ async def list_approval_requests(
         page = page_of(found, limit, lambda item: Keyset(item.request.id))
         actors = {item.request.requested_by for item in page.items}
         actors |= {item.quote.created_by for item in page.items}
+        actors |= {
+            Actor.person(item.request.decided_by)
+            for item in page.items
+            if item.request.decided_by is not None
+        }
         names = await look_up_names(uow, actors, {item.quote.customer_id for item in page.items})
     return page, names
