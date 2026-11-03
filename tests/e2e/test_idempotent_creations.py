@@ -83,7 +83,9 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
         products={BOLTS.id: BOLTS},
         customers={ACME.id: ACME},
     )
-    app = create_app(title="test", services=fake_services(database, FakeClock()))
+    app = create_app(
+        title="test", services=fake_services(database, FakeClock(), store_callers=True)
+    )
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client

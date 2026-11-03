@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-29
+- **Amended:** 2026-11-03 — a quote's detail names its customer and the people on it
 
 ## Context
 
@@ -42,6 +43,15 @@ Practice:
 - First the quotes list and the approval inbox (`QuoteSummaryJson.customer`, `created_by.name`,
   `requested_by.name`); a quote's detail, its approvals' deciders and orders follow when their
   screens are built.
+- **A quote's detail (2026-11-03),** for the web app's builder and detail screens: every response
+  that returns a quote carries `customer`, `created_by.name`, and its approvals'
+  `requested_by.name`. A reference whose type cannot grow a field gets a named actor beside it
+  instead: an approval's bare `decided_by` id gains `decider`, and the nullable `submitted_by` gains
+  `submitter`, since the contract check (oasdiff's `response-property-any-of-added`) reads a
+  nullable object's new schema as breaking. The inbox names deciders too. These names are read after
+  the use case that returned the quote (`name_quote`), in a read of their own: the fourteen use
+  cases that return a quote, and the demo that drives them (ADR-0024), keep returning the domain's
+  quote. Orders follow with their screen.
 
 ## Alternatives considered
 

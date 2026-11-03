@@ -8,8 +8,10 @@ import pytest
 from pricewright.application.quotes import (
     approve_quote,
     list_approval_requests,
+    name_quote,
     reject_quote,
 )
+from pricewright.domain.actors import Actor
 from pricewright.domain.audit import AuditAction, AuditEvent
 from pricewright.domain.auth import GRANTABLE_SCOPES, PermissionDeniedError, Principal
 from pricewright.domain.quote_approvals import (
@@ -19,7 +21,7 @@ from pricewright.domain.quote_approvals import (
 )
 from pricewright.domain.quote_lifecycle import QuoteStatus
 from pricewright.domain.quotes import Quote
-from pricewright.domain.users import Role
+from pricewright.domain.users import Role, User
 from tests.unit.test_quote_management import Fixture
 from tests.unit.test_quote_transition_management import generous, submit
 
@@ -31,6 +33,20 @@ def f() -> Fixture:
 
 def manager(f: Fixture) -> Principal:
     return Principal(f.northfield.id, uuid.uuid7(), Role.SALES_MANAGER)
+
+
+def named(f: Fixture, caller: Principal, full_name: str) -> Principal:
+    """``caller`` stored as a user, so responses can name them (ADR-0029)."""
+    user = User.create(
+        tenant_id=f.northfield.id,
+        email=f"{caller.subject_id}@northfield.example",
+        full_name=full_name,
+        role=caller.role or Role.SALES_REP,
+        password_hash="hash",
+    )
+    user.id = caller.subject_id
+    f.database.users[user.id] = user
+    return caller
 
 
 def events(f: Fixture, action: AuditAction) -> list[AuditEvent]:
@@ -187,3 +203,34 @@ async def test_the_inbox_never_shows_another_tenant(f: Fixture) -> None:
     stranger = Principal(f.larkspur.id, uuid.uuid7(), Role.ADMIN)
 
     assert await inbox(f, caller=stranger) == []
+
+
+async def test_a_quote_names_its_customer_and_everyone_who_acted_on_it(f: Fixture) -> None:
+    rep, boss = named(f, f.rep, "Taylor Brooks"), named(f, manager(f), "Morgan Reyes")
+    approved = await approve(f, await pending(f), boss)
+
+    names = await name_quote(rep, approved, unit_of_work=f.unit_of_work)
+
+    # Who built, submitted and asked (the rep) and who decided (the manager), looked up once.
+    assert names.actors == {
+        Actor.person(rep.subject_id): "Taylor Brooks",
+        Actor.person(boss.subject_id): "Morgan Reyes",
+    }
+    assert list(names.customers) == [f.acme.id]
+
+
+async def test_the_inbox_names_who_decided_a_decided_request(f: Fixture) -> None:
+    named(f, f.rep, "Taylor Brooks")
+    boss = named(f, manager(f), "Morgan Reyes")
+    await approve(f, await pending(f), boss)
+
+    _, names = await list_approval_requests(
+        f.rep,
+        ApprovalStatus.APPROVED,
+        after=None,
+        limit=10,
+        unit_of_work=f.unit_of_work,
+        clock=f.clock,
+    )
+
+    assert names.of(Actor.person(boss.subject_id)) == "Morgan Reyes"

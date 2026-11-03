@@ -44,7 +44,7 @@ async def test_the_rep_receives_the_approved_quote_s_pdf_by_email() -> None:
         pricing_rules={GENEROUS_VOLUME.id: GENEROUS_VOLUME},
     )
     clock = FakeClock()
-    app = create_app(title="test", services=fake_services(database, clock))
+    app = create_app(title="test", services=fake_services(database, clock, store_callers=True))
     rep, manager = bearer(Role.SALES_REP, jordan.id), bearer(Role.SALES_MANAGER, morgan.id)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

@@ -64,7 +64,9 @@ def database() -> InMemoryDatabase:
 
 @pytest.fixture
 async def client(database: InMemoryDatabase) -> AsyncIterator[httpx.AsyncClient]:
-    app = create_app(title="test", services=fake_services(database, FakeClock()))
+    app = create_app(
+        title="test", services=fake_services(database, FakeClock(), store_callers=True)
+    )
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -114,8 +116,10 @@ def usd(amount: str) -> dict[str, str]:
     return {"amount": amount, "currency": "USD"}
 
 
-async def test_a_rep_starts_a_draft_priced_line_by_line(client: httpx.AsyncClient) -> None:
-    rep_id = uuid.uuid7()
+async def test_a_rep_starts_a_draft_priced_line_by_line(
+    client: httpx.AsyncClient, database: InMemoryDatabase
+) -> None:
+    rep_id = person(database)
 
     response = await client.post(
         PATH, json=new_quote(notes="Rush order"), headers=bearer(user_id=rep_id)
@@ -130,6 +134,7 @@ async def test_a_rep_starts_a_draft_priced_line_by_line(client: httpx.AsyncClien
         "number": "NF-2026-000001",
         "revision": 1,
         "customer_id": str(ACME.id),
+        "customer": {"id": str(ACME.id), "name": "Acme", "account_number": "C-1001"},
         "status": "draft",
         "valid_until": "2026-11-02",
         "notes": "Rush order",
@@ -145,10 +150,11 @@ async def test_a_rep_starts_a_draft_priced_line_by_line(client: httpx.AsyncClien
         "approval_reasons": ["line_below_margin_floor"],
         "priced_at": "2026-10-03T12:00:00Z",
         "allowed_actions": ["cancel", "submit"],
-        "created_by": {"type": "user", "id": str(rep_id)},
+        "created_by": {"type": "user", "id": str(rep_id), "name": "Taylor Brooks"},
         "created_at": "2026-10-03T12:00:00Z",
         "status_changed_at": "2026-10-03T12:00:00Z",
         "submitted_by": None,
+        "submitter": None,
         "submitted_at": None,
         "cancel_reason": None,
         "supersedes_id": None,
