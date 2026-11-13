@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Build: resolve the locked dependencies, then install the project (not editable) -------------
-FROM python:3.14-slim AS build
+FROM python:3.15-slim AS build
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.22 /uv /bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
 
 # --- Runtime: only the virtual environment, run as an unprivileged user ---------------------------
-FROM python:3.14-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
